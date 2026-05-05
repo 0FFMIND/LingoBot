@@ -15,7 +15,7 @@
         由其通过 SSE 连接推送到前端。
         pattern 仅作为备用格式，实际格式由 LogPushService 拼装。
     -->
-    <appender name="SSE" class="com.lingobot.log.appender.SseLogAppender">
+    <appender name="SSE" class="com.lingobot.infrastructure.log.appender.SseLogAppender">
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>

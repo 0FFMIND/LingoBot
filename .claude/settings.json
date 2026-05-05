@@ -19,7 +19,11 @@
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\" -Recurse -File | Where-Object { $_.Name -match \"chatbot\" -or $_.Name -match \"CHATBOT\" } | Select-Object -ExpandProperty FullName)",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-backend\\\\src\\\\main\\\\java\\\\com\\\\chatbot\" -Recurse -Filter \"*.java\")",
       "Bash(Measure-Object)",
-      "Bash(Select-Object -ExpandProperty Count)"
+      "Bash(Select-Object -ExpandProperty Count)",
+      "Bash(mvn clean *)",
+      "Bash(grep -v \"^\\\\[ERROR\\\\] $\")",
+      "Bash(grep -v \"^\\\\\\\\[ERROR\\\\\\\\] $\")",
+      "Bash(python -c ' *)"
     ],
     "additionalDirectories": [
       "c:\\Users\\ALIENWARE\\Downloads\\�½��ļ��� (2)\\lingobot-backend\\src\\main\\java\\com"

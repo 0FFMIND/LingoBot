@@ -46,7 +46,7 @@ public class MeaningCheckService {
             messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
 
             String userMessage = String.format(
-                "[intent:check_meaning][current_word:%s][user_meaning:%s]\n正确释义�?s",
+                "[intent:check_meaning][current_word:%s][user_meaning:%s]\n正确释义：%",
                 word, userMeaning, correctMeaning != null ? correctMeaning : "未知"
             );
             messages.add(OpenAiChatMessage.createTextMessage("user", userMessage));

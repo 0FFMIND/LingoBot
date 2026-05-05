@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 /**
  * 词汇卡服务实现类
  * 实现词汇卡的核心业务逻辑，包括AI生成单词、导航、状态管理等
- * 使用 Redis 缓存减少数据库访�? */
+ * 使用 Redis 缓存减少数据库访问 */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -50,20 +50,20 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
     /** 默认使用的AI模型 */
     private static final String DEFAULT_MODEL = "qwen";
-    /** 默认词汇标准（CEFR�?*/
+    /** 默认词汇标准（CEFR）*/
     private static final String DEFAULT_VOCABULARY_CATEGORY = "cefr";
     
-    /** Redis 缓存键前缀 - 单个单词�?*/
+    /** Redis 缓存键前缀 - 单个单词卡*/
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
-    /** Redis 缓存键前缀 - 对话的所有有效卡片列�?*/
+    /** Redis 缓存键前缀 - 对话的所有有效卡片列表*/
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
-    /** Redis 缓存键前缀 - 对话的有效卡片数�?*/
+    /** Redis 缓存键前缀 - 对话的有效卡片数量*/
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
     /** 缓存过期时间（小时） */
     private static final long CACHE_EXPIRE_HOURS = 1;
     
     /**
-     * 获取单个单词卡的缓存�?     */
+     * 获取单个单词卡的缓存键     */
     private String getCardCacheKey(Long cardId) {
         return CACHE_KEY_CARD + cardId;
     }
@@ -102,7 +102,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
     
     /**
-     * 从缓存获取对话的所有有效卡片列�?     */
+     * 从缓存获取对话的所有有效卡片列表     */
     private Optional<List<VocabularyCardDTO>> getCardsListFromCache(Long conversationId) {
         try {
             String key = getCardsListCacheKey(conversationId);
@@ -140,7 +140,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
     
     /**
-     * 缓存单个单词�?     */
+     * 缓存单个单词卡     */
     private void cacheCard(Long cardId, VocabularyCardDTO dto) {
         try {
             String key = getCardCacheKey(cardId);
@@ -153,7 +153,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
     
     /**
-     * 缓存对话的所有有效卡片列�?     */
+     * 缓存对话的所有有效卡片列表     */
     private void cacheCardsList(Long conversationId, List<VocabularyCardDTO> cards) {
         try {
             String key = getCardsListCacheKey(conversationId);
@@ -166,7 +166,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
     
     /**
-     * 缓存对话的有效卡片数�?     */
+     * 缓存对话的有效卡片数量     */
     private void cacheCardsCount(Long conversationId, long count) {
         try {
             String key = getCardsCountCacheKey(conversationId);
@@ -278,7 +278,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
         
         // 缓存未命中，从数据库查询
-        // 只返回有效卡片（isRegenerated=false�?        List<VocabularyCard> cards = vocabularyCardRepository.findActiveCardsByConversationId(conversationId);
+        // 只返回有效卡片（isRegenerated=false）
+                List<VocabularyCard> cards = vocabularyCardRepository.findActiveCardsByConversationId(conversationId);
         List<VocabularyCardDTO> dtoList = cards.stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
@@ -468,7 +469,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         WordCardData generated = generateRandomWord(conversationId, level, "next_word");
 
         // 双重检查：AI调用完成后，再次验证对话是否仍然存在
-        // 防止在AI调用期间对话被删除导致外键约束错�?        conversation = getConversation(conversationId);
+        // 防止在AI调用期间对话被删除导致外键约束错误
+                conversation = getConversation(conversationId);
 
         VocabularyCard card = VocabularyCard.builder()
                 .conversation(conversation)
@@ -503,7 +505,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     public VocabularyCardDTO regenerateCard(Long conversationId, String level) {
         Conversation conversation = getConversation(conversationId);
 
-        // 获取所有有效卡�?        List<VocabularyCard> activeCards = vocabularyCardRepository.findActiveCardsByConversationId(conversationId);
+        // 获取所有有效卡片
+                List<VocabularyCard> activeCards = vocabularyCardRepository.findActiveCardsByConversationId(conversationId);
         
         if (activeCards.isEmpty()) {
             // 没有卡片，直接生成第一张
@@ -511,7 +514,9 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             return generateNextCard(conversationId, level);
         }
 
-        // 检查当前是否是最后一张卡�?        // 找到当前应该重新生成的卡片：第一个未完成的，或者最后一�?        VocabularyCard currentCard = null;
+        // 检查当前是否是最后一张卡片
+                // 找到当前应该重新生成的卡片：第一个未完成的，或者最后一个
+                VocabularyCard currentCard = null;
         for (VocabularyCard card : activeCards) {
             if (!card.getIsCompleted()) {
                 currentCard = card;
@@ -522,7 +527,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             currentCard = activeCards.get(activeCards.size() - 1);
         }
 
-        // 检查是否是最后一张卡�?        Integer maxPosition = vocabularyCardRepository.findMaxActivePositionByConversationId(conversationId)
+        // 检查是否是最后一张卡片
+        Integer maxPosition = vocabularyCardRepository.findMaxActivePositionByConversationId(conversationId)
                 .orElse(0);
         
         if (!currentCard.getPosition().equals(maxPosition)) {
@@ -538,10 +544,12 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         currentCard.setIsRegenerated(true);
         vocabularyCardRepository.save(currentCard);
 
-        // 生成新词汇卡（使用相同的position，regenerationIndex递增�?        WordCardData generated = generateRandomWord(conversationId, level, "regenerate");
+        // 生成新词汇卡（使用相同的position，regenerationIndex递增）
+                WordCardData generated = generateRandomWord(conversationId, level, "regenerate");
 
         // 双重检查：AI调用完成后，再次验证对话是否仍然存在
-        // 防止在AI调用期间对话被删除导致外键约束错�?        conversation = getConversation(conversationId);
+        // 防止在AI调用期间对话被删除导致外键约束错误
+                conversation = getConversation(conversationId);
 
         VocabularyCard newCard = VocabularyCard.builder()
                 .conversation(conversation)
@@ -593,7 +601,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
         
         // 缓存未命中，从数据库查询
-        // 返回有效卡片的数�?        long count = vocabularyCardRepository.countActiveCardsByConversationId(conversationId);
+        // 返回有效卡片的数量
+                long count = vocabularyCardRepository.countActiveCardsByConversationId(conversationId);
         
         // 写入缓存
         cacheCardsCount(conversationId, count);
@@ -748,7 +757,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
      * @param conversationId 对话ID
      * @return 格式化的历史记录字符�?     */
     private String buildVocabularyHistoryForPrompt(Long conversationId) {
-        // 获取所有卡片（包括已重新生成的）用于构建历�?        List<VocabularyCard> allCards = vocabularyCardRepository.findByConversationIdOrderByPositionAsc(conversationId);
+        // 获取所有卡片（包括已重新生成的）用于构建历史
+                List<VocabularyCard> allCards = vocabularyCardRepository.findByConversationIdOrderByPositionAsc(conversationId);
         if (allCards == null || allCards.isEmpty()) {
             return "";
         }
@@ -874,9 +884,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         VocabularyCardDTO dto = toDTO(card);
         
         Long conversationId = card.getConversation().getId();
-        // 使用 getAllCards 获取卡片列表（会利用缓存�?        List<VocabularyCardDTO> cardDTOs = getAllCards(conversationId);
+        // 使用 getAllCards 获取卡片列表（会利用缓存）
+                List<VocabularyCardDTO> cardDTOs = getAllCards(conversationId);
         
-        // 找到当前卡片在列表中的索�?        int currentIndex = -1;
+        // 找到当前卡片在列表中的索引
+                int currentIndex = -1;
         for (int i = 0; i < cardDTOs.size(); i++) {
             if (cardDTOs.get(i).getId().equals(card.getId())) {
                 currentIndex = i;

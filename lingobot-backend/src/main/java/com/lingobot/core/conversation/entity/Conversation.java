@@ -36,7 +36,7 @@ public class Conversation {
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = true)
-    private com.lingobot.auth.entity.User user;
+    private com.lingobot.core.user.auth.entity.User user;
     
     @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("timestamp ASC")

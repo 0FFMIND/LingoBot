@@ -30,7 +30,7 @@ public class TtsController {
         try {
             type = TextToSpeechService.VoiceType.valueOf(voiceType.toUpperCase());
         } catch (IllegalArgumentException e) {
-            log.warn("无效的语音类�? {}, 使用默认: US", voiceType);
+            log.warn("无效的语音类型 {}, 使用默认: US", voiceType);
             type = TextToSpeechService.VoiceType.US;
         }
         

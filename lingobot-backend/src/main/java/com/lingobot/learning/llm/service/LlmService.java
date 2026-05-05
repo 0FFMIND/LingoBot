@@ -441,7 +441,7 @@ public class LlmService {
                                 }
                             }
                         } catch (Exception e) {
-                            log.debug("跳过非JSON�? {}", data);
+                            log.debug("跳过非JSON格式: {}", data);
                         }
                     }
                 }
@@ -466,8 +466,11 @@ public class LlmService {
     }
 
     /**
-     * 将消息转换为模型理解的格�?     * 使用原生 OpenAI 格式，不再做文本格式转换
-     * 1. tool 角色消息保持原生格式（不转换�?user 角色�?     * 2. assistant �?toolCalls 保持原生格式（不转换�?TOOL_CALL: 文本�?     * 3. 不再通过系统提示中添加工具调用格式说明，因为使用原生 tools 参数
+     * 将消息转换为模型理解的格式
+     * 使用原生 OpenAI 格式，不再做文本格式转换
+     * 1. tool 角色消息保持原生格式（不转换为 user 角色）
+     * 2. assistant 的 toolCalls 保持原生格式（不转换为 TOOL_CALL: 文本格式）
+     * 3. 不再通过系统提示中添加工具调用格式说明，因为使用原生 tools 参数
      */
     private List<OpenAiChatMessage> translateForModel(List<OpenAiChatMessage> messages,
                                                        List<OpenAiTool> tools) {
@@ -597,7 +600,7 @@ public class LlmService {
             } else {
                 JsonNode actionNode = node.path("action");
                 if (actionNode.isMissingNode() || actionNode.asText().isEmpty()) {
-                    log.warn("无法确定工具调用格式，既没有 name 字段也没�?action 字段");
+                    log.warn("无法确定工具调用格式，既没有 name 字段也没有 action 字段");
                     return response;
                 }
 
@@ -693,7 +696,7 @@ public class LlmService {
         java.net.http.HttpResponse<String> response =
                 httpClient.send(httpRequest, java.net.http.HttpResponse.BodyHandlers.ofString());
 
-        log.info("HTTP 响应状�? {}", response.statusCode());
+        log.info("HTTP 响应状态: {}", response.statusCode());
 
         if (response.statusCode() >= 400) {
             log.error("API 错误 {}: {}", response.statusCode(), response.body());
@@ -776,7 +779,7 @@ public class LlmService {
                                 }
                             }
                         } catch (Exception e) {
-                            log.debug("跳过非JSON�? {}", data);
+                            log.debug("跳过非JSON格式: {}", data);
                         }
                     }
                 }
@@ -804,7 +807,7 @@ public class LlmService {
         try {
             log.info("请求 JSON: {}", JsonLogUtils.toLogString(objectMapper, request));
         } catch (Exception e) {
-            log.error("序列化请求失�? {}", e.getMessage());
+            log.error("序列化请求失败: {}", e.getMessage());
         }
     }
 }

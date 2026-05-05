@@ -69,7 +69,7 @@ public class User {
     private LocalDateTime updatedAt;
     
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<com.lingobot.conversation.entity.Conversation> conversations = new ArrayList<>();
+    private List<com.lingobot.core.conversation.entity.Conversation> conversations = new ArrayList<>();
     
     @PrePersist
     protected void onCreate() {

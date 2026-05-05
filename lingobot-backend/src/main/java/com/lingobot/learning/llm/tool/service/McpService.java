@@ -43,9 +43,9 @@ public class McpService {
 
     /**
      * 获取 OpenAI 格式的工具列表     * 用于与OpenAI API 兼容的工具调用     */
-    public List<com.lingobot.llm.dto.openai.OpenAiTool> getOpenAiTools() {
+    public List<com.lingobot.learning.llm.dto.openai.OpenAiTool> getOpenAiTools() {
         List<McpTool> mcpTools = toolRegistry.getAllTools();
-        List<com.lingobot.llm.dto.openai.OpenAiTool> openAiTools = new ArrayList<>();
+        List<com.lingobot.learning.llm.dto.openai.OpenAiTool> openAiTools = new ArrayList<>();
         
         for (McpTool mcpTool : mcpTools) {
             openAiTools.add(convertToOpenAiTool(mcpTool));
@@ -57,9 +57,9 @@ public class McpService {
 
     /**
      * 根据模式获取 OpenAI 格式的工具列表     */
-    public List<com.lingobot.llm.dto.openai.OpenAiTool> getOpenAiToolsForMode(String mode) {
+    public List<com.lingobot.learning.llm.dto.openai.OpenAiTool> getOpenAiToolsForMode(String mode) {
         List<McpTool> mcpTools = toolRegistry.getToolsForMode(mode);
-        List<com.lingobot.llm.dto.openai.OpenAiTool> openAiTools = new ArrayList<>();
+        List<com.lingobot.learning.llm.dto.openai.OpenAiTool> openAiTools = new ArrayList<>();
         
         for (McpTool mcpTool : mcpTools) {
             openAiTools.add(convertToOpenAiTool(mcpTool));
@@ -80,17 +80,17 @@ public class McpService {
     /**
      * 将 MCP 工具定义转换为OpenAI 格式
      */
-    private com.lingobot.llm.dto.openai.OpenAiTool convertToOpenAiTool(McpTool mcpTool) {
-        com.lingobot.llm.dto.openai.OpenAiTool.Function.FunctionBuilder functionBuilder = com.lingobot.llm.dto.openai.OpenAiTool.Function.builder()
+    private com.lingobot.learning.llm.dto.openai.OpenAiTool convertToOpenAiTool(McpTool mcpTool) {
+        com.lingobot.learning.llm.dto.openai.OpenAiTool.Function.FunctionBuilder functionBuilder = com.lingobot.learning.llm.dto.openai.OpenAiTool.Function.builder()
                 .name(mcpTool.getName())
                 .description(mcpTool.getDescription());
 
         if (mcpTool.getArguments() != null) {
-            com.lingobot.llm.dto.openai.OpenAiTool.Parameters.ParametersBuilder paramsBuilder = com.lingobot.llm.dto.openai.OpenAiTool.Parameters.builder()
+            com.lingobot.learning.llm.dto.openai.OpenAiTool.Parameters.ParametersBuilder paramsBuilder = com.lingobot.learning.llm.dto.openai.OpenAiTool.Parameters.builder()
                     .type(mcpTool.getArguments().getType());
 
             if (mcpTool.getArguments().getProperties() != null) {
-                Map<String, com.lingobot.llm.dto.openai.OpenAiTool.Property> properties = new HashMap<>();
+                Map<String, com.lingobot.learning.llm.dto.openai.OpenAiTool.Property> properties = new HashMap<>();
                 for (Map.Entry<String, McpTool.Property> entry : mcpTool.getArguments().getProperties().entrySet()) {
                     properties.put(entry.getKey(), convertProperty(entry.getValue()));
                 }
@@ -104,7 +104,7 @@ public class McpService {
             functionBuilder.parameters(paramsBuilder.build());
         }
 
-        return com.lingobot.llm.dto.openai.OpenAiTool.builder()
+        return com.lingobot.learning.llm.dto.openai.OpenAiTool.builder()
                 .type("function")
                 .function(functionBuilder.build())
                 .build();
@@ -113,8 +113,8 @@ public class McpService {
     /**
      * 将 MCP 属性定义转换为 OpenAI 格式
      */
-    private com.lingobot.llm.dto.openai.OpenAiTool.Property convertProperty(McpTool.Property mcpProp) {
-        com.lingobot.llm.dto.openai.OpenAiTool.Property.PropertyBuilder builder = com.lingobot.llm.dto.openai.OpenAiTool.Property.builder()
+    private com.lingobot.learning.llm.dto.openai.OpenAiTool.Property convertProperty(McpTool.Property mcpProp) {
+        com.lingobot.learning.llm.dto.openai.OpenAiTool.Property.PropertyBuilder builder = com.lingobot.learning.llm.dto.openai.OpenAiTool.Property.builder()
                 .type(mcpProp.getType())
                 .description(mcpProp.getDescription());
 
@@ -123,7 +123,7 @@ public class McpService {
         }
 
         if (mcpProp.getItems() != null) {
-            com.lingobot.llm.dto.openai.OpenAiTool.Items items = com.lingobot.llm.dto.openai.OpenAiTool.Items.builder()
+            com.lingobot.learning.llm.dto.openai.OpenAiTool.Items items = com.lingobot.learning.llm.dto.openai.OpenAiTool.Items.builder()
                     .type(mcpProp.getItems().getType())
                     .enums(mcpProp.getItems().getEnums() != null ? new ArrayList<>(mcpProp.getItems().getEnums()) : null)
                     .build();

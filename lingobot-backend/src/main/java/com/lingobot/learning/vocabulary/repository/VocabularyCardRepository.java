@@ -21,7 +21,7 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
     /** 按位置和重新生成索引获取对话的所有词汇卡（包括已重新生成的） */
     List<VocabularyCard> findByConversationIdAndPositionOrderByRegenerationIndexAsc(Long conversationId, Integer position);
 
-    /** 获取对话中所有有效词汇卡（未被重新生成的，isRegenerated=false），按位置排�?*/
+    /** 获取对话中所有有效词汇卡（未被重新生成的，isRegenerated=false），按位置排序*/
     @Query("SELECT v FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false ORDER BY v.position ASC")
     List<VocabularyCard> findActiveCardsByConversationId(@Param("conversationId") Long conversationId);
 
@@ -29,7 +29,7 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
     @Query("SELECT MAX(v.position) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false")
     Optional<Integer> findMaxActivePositionByConversationId(@Param("conversationId") Long conversationId);
 
-    /** 获取对话中某个位置的当前有效词汇卡（isRegenerated=false�?*/
+    /** 获取对话中某个位置的当前有效词汇卡（isRegenerated=false）*/
     @Query("SELECT v FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.position = :position AND v.isRegenerated = false")
     Optional<VocabularyCard> findActiveCardByConversationIdAndPosition(@Param("conversationId") Long conversationId, @Param("position") Integer position);
 
@@ -41,7 +41,7 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
     @Query("SELECT COUNT(v) FROM VocabularyCard v WHERE v.conversation.id = :conversationId")
     long countByConversationId(@Param("conversationId") Long conversationId);
 
-    /** 统计对话中有效词汇卡的数�?*/
+    /** 统计对话中有效词汇卡的数量*/
     @Query("SELECT COUNT(v) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false")
     long countActiveCardsByConversationId(@Param("conversationId") Long conversationId);
 

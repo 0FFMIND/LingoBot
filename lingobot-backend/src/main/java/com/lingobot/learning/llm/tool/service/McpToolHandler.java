@@ -6,7 +6,7 @@ import com.lingobot.learning.llm.tool.dto.McpToolResult;
 
 import java.util.List;
 
-import static com.lingobot.mcp.service.ToolMode.GENERAL_MODES;
+import static com.lingobot.learning.llm.tool.service.ToolMode.GENERAL_MODES;
 
 /**
  * MCP 工具处理器接口
