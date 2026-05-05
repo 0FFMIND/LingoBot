@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(psql --version)",
+      "Bash(where psql *)",
+      "Read(//c/Program Files/PostgreSQL/**)",
+      "PowerShell(Get-Process -Id 7936)",
+      "PowerShell(Get-WmiObject Win32_Process -Filter \"ProcessId=7936\")",
+      "Read(//c/ProgramData/Microsoft/Windows/Start Menu/Programs/**)",
+      "PowerShell($env:PGPASSWORD = \"chatbot_password\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\15\\\\bin\\\\psql.exe\" -U chatbot_user -d chatbotdb -h localhost -c \"\\\\d vocabulary_cards\" 2>&1)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\" -Recurse -Directory | Select-Object -First 20 | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\chatbot-backend\\\\src\\\\main\\\\java\\\\com\\\\chatbot\" -Recurse | Where-Object { $_.Extension -eq '.java' } | Select-Object -ExpandProperty Name | Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\chatbot-frontend\\\\src\\\\api\" -Recurse | ForEach-Object { $_.FullName })",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\chatbot-frontend\\\\src\\\\services\" -Recurse | ForEach-Object { $_.FullName })",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\chatbot-backend\" -Directory -Force)",
+      "Bash(Select-Object Name)",
+      "PowerShell(ls \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\chatbot-backend\\\\src\\\\main\\\\java\\\\com\\\\chatbot\" -Force -Recurse | Where-Object {$_.Extension -eq \".java\"} | Select-Object -First 20 FullName)",
+      "PowerShell(ls \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\chatbot-backend\\\\src\\\\main\\\\resources\" -Recurse | Where-Object {$_.Extension -in @\\('.yml', '.yaml', '.properties'\\)} | Select-Object FullName)"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+1. 接入Qdrant或者什么向量数据库做知识库BM25，HyDE，Reranker
+2. agent状态机
+3. 近期窗口+历史摘要+长期画像
+4. 动态fetch，当前只是limit了conversation前十个，然后message前十个，当user滑动的时候
+前端应该动态继续拿数据库的东西
+5. 加速搜索，搜索能搜到当前的
+6. 记忆功能，记忆当前学了多少单词，然后还能track

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Logback 日志配置文件（Spring Boot 会自动加载此文件）
+
+    作用：在不修改任何业务代码的前提下，将 com.lingobot 包产生的所有日志
+    同时输出到控制台和前端（通过 SSE 长连接实时推送）。
+-->
+<configuration>
+    <!-- 引入 Spring Boot 默认的日志格式和控制台输出配置 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!--
+        自定义 SSE Appender：将日志事件转交给 LogPushService，
+        由其通过 SSE 连接推送到前端。
+        pattern 仅作为备用格式，实际格式由 LogPushService 拼装。
+    -->
+    <appender name="SSE" class="com.lingobot.config.SseLogAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 全局默认：INFO 级别，只输出到控制台 -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+    <logger name="com.lingobot" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="SSE"/>
+    </logger>
+</configuration>

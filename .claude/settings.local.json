@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:PGPASSWORD = \"chatbot_password\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\15\\\\bin\\\\psql.exe\" -U chatbot_user -d chatbotdb -h localhost -c \"ALTER TABLE vocabulary_cards ADD COLUMN is_regenerated BOOLEAN NOT NULL DEFAULT FALSE; ALTER TABLE vocabulary_cards ADD COLUMN regeneration_index INTEGER NOT NULL DEFAULT 0;\" 2>&1)",
+      "PowerShell($env:PGPASSWORD = \"chatbot_password\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\15\\\\bin\\\\psql.exe\" -U chatbot_user -d chatbotdb -h localhost -c \"\\\\d vocabulary_cards\" 2>&1)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\" -Recurse -Force)",
+      "Bash(Select-Object -First 50)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\chatbot-frontend\\\\src\" -Recurse -Filter \"*vocab*\" -ErrorAction SilentlyContinue)",
+      "PowerShell(head -50)"
+    ]
+  }
+}
