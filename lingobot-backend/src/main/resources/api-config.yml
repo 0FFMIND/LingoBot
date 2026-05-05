@@ -1,0 +1,61 @@
+api:
+  default-cost: 0.1
+  
+  endpoints:
+    # 词汇相关API
+    vocabulary:
+      # 创建词汇卡
+      create-card:
+        path: /api/vocabulary/cards
+        method: POST
+        cost: 0.1
+        description: 创建新的词汇卡
+      
+      # 生成词汇卡（AI生成）
+      generate-card:
+        path: /api/vocabulary/conversations/{conversationId}/generate
+        method: POST
+        cost: 0.1
+        description: AI生成新词汇卡
+      
+      # 重新生成词汇卡
+      regenerate-card:
+        path: /api/vocabulary/conversations/{conversationId}/regenerate
+        method: POST
+        cost: 0.1
+        description: 重新生成词汇卡
+      
+      # 更新用户释义
+      update-meaning:
+        path: /api/vocabulary/cards/{cardId}/meaning
+        method: PUT
+        cost: 0.1
+        description: 更新用户对单词的释义猜测
+      
+      # 更新用户造句
+      update-sentence:
+        path: /api/vocabulary/cards/{cardId}/sentence
+        method: PUT
+        cost: 0.1
+        description: 更新用户用单词造的句子
+      
+      # 更新AI反馈
+      update-feedback:
+        path: /api/vocabulary/cards/{cardId}/feedback
+        method: PUT
+        cost: 0.1
+        description: 更新AI对用户造句的反馈
+      
+      # 标记词汇卡完成
+      complete-card:
+        path: /api/vocabulary/cards/{cardId}/complete
+        method: PUT
+        cost: 0.1
+        description: 标记词汇卡为已完成
+      
+      # 释义检查状态
+      meaning-check:
+        path: /api/vocabulary/cards/{cardId}/meaning-check
+        method: GET
+        cost: 0.1
+        description: 获取词汇卡的释义检查状态
