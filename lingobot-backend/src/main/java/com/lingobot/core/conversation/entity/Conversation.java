@@ -42,6 +42,20 @@ public class Conversation {
     @OrderBy("timestamp ASC")
     private List<Message> messages = new ArrayList<>();
     
+    @Column(name = "compacted_summary", columnDefinition = "TEXT")
+    private String compactedSummary;
+    
+    @Column(name = "compacted_count")
+    @Builder.Default
+    private Integer compactedCount = 0;
+    
+    @Column(name = "last_compacted_at")
+    private LocalDateTime lastCompactedAt;
+    
+    @Column(name = "total_tokens_estimate")
+    @Builder.Default
+    private Long totalTokensEstimate = 0L;
+    
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

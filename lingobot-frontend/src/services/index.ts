@@ -6,3 +6,4 @@ export { vocabularyService } from './vocabularyService';
 export { adminService } from './adminService';
 export { preferencesService } from './preferencesService';
 export { redemptionService } from './redemptionService';
+export { balanceService } from './balanceService';

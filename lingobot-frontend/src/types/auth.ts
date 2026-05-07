@@ -15,6 +15,7 @@ export interface AuthResponse {
   role?: string;
   email?: string;
   avatar?: string;
+  balance?: number;
 }
 
 export interface LoginRequest {

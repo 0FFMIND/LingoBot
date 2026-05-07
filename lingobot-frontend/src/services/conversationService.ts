@@ -1,5 +1,15 @@
 import { httpClient } from './httpClient';
-import { ConversationDTO, CreateConversationRequest, ConversationPageResponse } from '../types';
+import { ConversationDTO, CreateConversationRequest, ConversationPageResponse, ContextStatusDTO } from '../types';
+
+export interface CompactResult {
+  executed: boolean;
+  reason?: string;
+  beforeTokens?: number;
+  afterTokens?: number;
+  savedTokens?: number;
+  compactedCardCount?: number;
+  compactBatch?: number;
+}
 
 export const conversationService = {
   getAll: async (): Promise<ConversationDTO[]> => {
@@ -36,5 +46,13 @@ export const conversationService = {
 
   delete: async (id: number): Promise<void> => {
     return httpClient.delete<void>(`/conversations/${id}`);
+  },
+
+  getContextStatus: async (conversationId: number): Promise<ContextStatusDTO> => {
+    return httpClient.get<ContextStatusDTO>(`/context/status/${conversationId}`);
+  },
+
+  executeCompact: async (conversationId: number): Promise<CompactResult> => {
+    return httpClient.post<CompactResult>(`/context/compact/${conversationId}`);
   },
 };

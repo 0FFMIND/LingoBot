@@ -7,7 +7,7 @@ interface AdminLoginProps {
 }
 
 const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -16,8 +16,14 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     setError('');
 
-    if (!username.trim()) {
-      setError('请输入用户名');
+    if (!email.trim()) {
+      setError('请输入邮箱');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      setError('请输入有效的邮箱地址');
       return;
     }
 
@@ -29,7 +35,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await authApi.login({ username: username.trim(), password });
+      const response = await authApi.login({ email: email.trim(), password });
       
       if (response.role !== 'ROLE_ADMIN') {
         authUtils.clearAuth();
@@ -69,15 +75,15 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
           {error && <div className="admin-login-error">{error}</div>}
 
           <div className="admin-login-field">
-            <label htmlFor="admin-username">用户名</label>
+            <label htmlFor="admin-email">邮箱</label>
             <input
-              id="admin-username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="请输入用户名"
+              id="admin-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="请输入邮箱"
               disabled={loading}
-              autoComplete="username"
+              autoComplete="email"
             />
           </div>
 

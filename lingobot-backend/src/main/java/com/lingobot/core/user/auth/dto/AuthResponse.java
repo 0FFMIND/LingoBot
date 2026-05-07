@@ -16,4 +16,5 @@ public class AuthResponse {
     private Long userId;
     private String role;
     private String avatar;
+    private Double balance;
 }

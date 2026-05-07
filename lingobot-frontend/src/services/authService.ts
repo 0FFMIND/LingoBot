@@ -18,7 +18,8 @@ export const authService = {
       username: data.username,
       role: data.role,
       avatar: data.avatar,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      balance: data.balance ?? 0
     };
     
     authUtils.setAuth(data.token, user);
@@ -38,7 +39,8 @@ export const authService = {
       email: data.email,
       role: data.role,
       avatar: data.avatar,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      balance: data.balance ?? 0
     };
     
     authUtils.setAuth(data.token, user);
@@ -62,7 +64,8 @@ export const authService = {
       email: request.email,
       role: data.role,
       avatar: data.avatar,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      balance: data.balance ?? 0
     };
     
     authUtils.setAuth(data.token, user);
@@ -110,7 +113,8 @@ export const authService = {
       email: data.email,
       role: data.role,
       avatar: data.avatar,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      balance: data.balance ?? 0
     };
     
     authUtils.setAuth(data.token, updatedUser);

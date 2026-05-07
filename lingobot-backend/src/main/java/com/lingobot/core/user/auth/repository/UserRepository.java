@@ -1,8 +1,9 @@
 package com.lingobot.core.user.auth.repository;
 
 import com.lingobot.core.user.auth.entity.User;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -13,6 +14,10 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     
     Optional<User> findByUsername(String username);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.username = :username")
+    Optional<User> findByUsernameForUpdate(@Param("username") String username);
     
     boolean existsByUsername(String username);
     
@@ -20,7 +25,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
     
     boolean existsByEmail(String email);
     
-    @Modifying
-    @Query("UPDATE User u SET u.balance = COALESCE(u.balance, 0) + :amount WHERE u.id = :userId")
-    int incrementBalance(@Param("userId") Long userId, @Param("amount") int amount);
 }

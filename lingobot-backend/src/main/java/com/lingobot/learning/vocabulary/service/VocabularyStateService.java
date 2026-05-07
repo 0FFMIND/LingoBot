@@ -85,7 +85,8 @@ public class VocabularyStateService {
     }
     
     /**
-     * 清除Redis中的单词状态缓存     * @param conversationId 对话ID
+     * 清除Redis中的单词状态缓存     
+     * @param conversationId 对话ID
      */
     public void clearCurrentWord(Long conversationId) {
         String key = VOCABULARY_STATE_PREFIX + conversationId;
@@ -96,7 +97,8 @@ public class VocabularyStateService {
     /**
      * 生成用于AI提示词的当前单词信息
      * 当AI需要生成造句反馈时，将这些信息注入到System Prompt 中     * @param conversationId 对话ID
-     * @return 格式化的提示词文本     */
+     * @return 格式化的提示词文本     
+     */
     public String getCurrentWordInfoForPrompt(Long conversationId) {
         Map<String, Object> state = getCurrentWord(conversationId);
         if (state == null) {
@@ -110,11 +112,11 @@ public class VocabularyStateService {
         sb.append("- 音标: ").append(state.getOrDefault("phonetic", "")).append("\n");
         sb.append("- 词性 ").append(state.getOrDefault("partOfSpeech", "")).append("\n");
         sb.append("- 释义: ").append(state.getOrDefault("meaning", "")).append("\n");
-        sb.append("- 同义�? ").append(state.getOrDefault("synonyms", List.of())).append("\n");
+        sb.append("- 同义词: ").append(state.getOrDefault("synonyms", List.of())).append("\n");
         sb.append("- 词汇标准: ").append(state.getOrDefault("vocabularyCategory", "")).append("\n");
         sb.append("- 难度级别: ").append(state.getOrDefault("vocabularyDifficulty", "")).append("\n");
-        sb.append("\n**重要提示**：当调用 display_sentence_feedback 工具时，只需要传�?sentence、current_word、feedback、example、exampleTranslation 这几个参数，\n");
-        sb.append("**不需�?*重复传入 word、phonetic、partOfSpeech、meaning、synonyms、vocabularyCategory、vocabularyDifficulty。\n");
+        sb.append("\n**重要提示**：当调用 display_sentence_feedback 工具时，只需要传入 sentence、current_word、feedback、example、exampleTranslation 这几个参数，\n");
+        sb.append("**不需要**重复传入 word、phonetic、partOfSpeech、meaning、synonyms、vocabularyCategory、vocabularyDifficulty。\n");
         sb.append("系统会自动从会话状态中获取这些信息。\n");
         
         return sb.toString();

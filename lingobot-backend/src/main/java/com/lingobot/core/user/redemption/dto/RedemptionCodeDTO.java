@@ -25,6 +25,8 @@ public class RedemptionCodeDTO {
     private Long createdByUserId;
     private String createdByUsername;
     private LocalDateTime createdAt;
+    private LocalDateTime expiresAt;
+    private Boolean isExpired;
     
     public static RedemptionCodeDTO fromEntity(RedemptionCode entity) {
         return RedemptionCodeDTO.builder()
@@ -38,6 +40,8 @@ public class RedemptionCodeDTO {
                 .createdByUserId(entity.getCreatedBy() != null ? entity.getCreatedBy().getId() : null)
                 .createdByUsername(entity.getCreatedBy() != null ? entity.getCreatedBy().getUsername() : null)
                 .createdAt(entity.getCreatedAt())
+                .expiresAt(entity.getExpiresAt())
+                .isExpired(entity.isExpired())
                 .build();
     }
 }

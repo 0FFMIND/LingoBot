@@ -58,9 +58,9 @@ public class User {
     @Column(name = "avatar", columnDefinition = "TEXT")
     private String avatar;
     
-    @Column(columnDefinition = "INTEGER DEFAULT 0")
+    @Column(columnDefinition = "DECIMAL(10,2)")
     @Builder.Default
-    private Integer balance = 0;
+    private Double balance = 0.0;
     
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

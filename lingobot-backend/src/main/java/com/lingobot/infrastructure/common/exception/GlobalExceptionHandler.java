@@ -19,7 +19,7 @@ public class GlobalExceptionHandler {
     
     @ExceptionHandler(AsyncRequestTimeoutException.class)
     public void handleAsyncRequestTimeoutException(AsyncRequestTimeoutException ex) {
-        log.debug("异步请求超时（SSE 连接正常超时�? {}", ex.getMessage());
+        log.debug("异步请求超时（SSE 连接正常超时）: {}", ex.getMessage());
     }
     
     @ExceptionHandler(ChatException.class)

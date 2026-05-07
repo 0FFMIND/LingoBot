@@ -1,3 +1,15 @@
+export interface ContextStatusDTO {
+  currentTokens: number;
+  maxTokens: number;
+  tokenRatio: number;
+  wordCardsTotal: number;
+  wordCardsSinceCompact: number;
+  wordCardThreshold: number;
+  shouldCompact: boolean;
+  compactReason?: string;
+  compactedCount: number;
+}
+
 export interface ConversationDTO {
   id: number;
   title: string;
@@ -5,6 +17,7 @@ export interface ConversationDTO {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  contextStatus?: ContextStatusDTO;
 }
 
 export interface CreateConversationRequest {

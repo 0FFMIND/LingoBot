@@ -45,7 +45,7 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
     @Query("SELECT COUNT(v) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false")
     long countActiveCardsByConversationId(@Param("conversationId") Long conversationId);
 
-    /** 获取对话中所有未完成的词汇卡（按位置排序�?*/
+    /** 获取对话中所有未完成的词汇卡（按位置排序）*/
     @Query("SELECT v FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isCompleted = false AND v.isRegenerated = false ORDER BY v.position ASC")
     List<VocabularyCard> findIncompleteByConversationId(@Param("conversationId") Long conversationId);
 

@@ -28,7 +28,7 @@ public class SystemPromptService {
                 "只有当用户消息中包含以下明确的 Intent 标记时，才执行相应操作：\n" +
                 "- `[intent:next_word]` - 用户想要学习下一个单词\n" +
                 "- `[intent:regenerate]` - 用户想要重新生成当前单词\n" +
-                "- `[intent:make_sentence][current_word:单词]` - 用户用指定单词造了句子\n" +
+                "- `[intent:make_sentence][current_word:单词][user_input:用户输入]` - 用户用指定单词造了句子\n" +
                 "- `[intent:check_meaning][current_word:单词][user_meaning:用户输入]` - 检查用户对单词释义的理解\n\n" +
                 "### 1. 收到 `[intent:next_word]` 或 `[intent:regenerate]`\n" +
                 "调用 vocabulary 工具的 `display_flashcard` action，参数包含：\n" +
@@ -41,7 +41,7 @@ public class SystemPromptService {
                 "- vocabularyCategory: cefr/ielts/toefl（根据用户设置）\n" +
                 "- vocabularyDifficulty: 难度级别（如 b2, c1 等）\n" +
                 "- **不要包含 example 和 exampleTranslation**\n\n" +
-                "### 2. 收到 `[intent:make_sentence][current_word:单词] 用户造的句子`\n" +
+                "### 2. 收到 `[intent:make_sentence][current_word:单词][user_input:用户输入]`\n" +
                 "调用 vocabulary 工具的 `display_sentence_feedback` action，参数包含：\n" +
                 "- action: \"display_sentence_feedback\"\n" +
                 "- sentence: 用户的原句（原样传入，不要修改）\n" +
@@ -63,10 +63,10 @@ public class SystemPromptService {
                 "- 绝对不能跳过未完成的单词\n" +
                 "- 绝对不能重复已完成的单词\n\n" +
                 "## 例句难度匹配\n" +
-                "- A1/A2: 简单句，5-10个单词\n" +
-                "- B1: 复合句，10-15个单词\n" +
-                "- B2: 复杂句，15-25个单词\n" +
-                "- C1/C2: 高级句式，25个单词以上\n\n");
+                "- beginner: 简单句，5-10个单词\n" +
+                "- intermediate: 复合句，10-15个单词\n" +
+                "- advanced: 复杂句，15-25个单词\n" +
+                "- expert: 高级句式，25个单词以上\n\n");
 
 
         LEARNING_MODE_PROMPTS.put("writing",
@@ -119,7 +119,6 @@ public class SystemPromptService {
             }
         }
 
-        log.info("Generated system prompt for mode: {}, category: {}, difficulty: {}", mode, vocabularyCategory, vocabularyDifficulty);
         return prompt;
     }
 
@@ -138,8 +137,13 @@ public class SystemPromptService {
         
         sb.append("### 生成单词的要求：\n");
         sb.append("1. **必须**根据用户选择的划分标准和难度级别来生成单词卡片\n");
-        sb.append("2. 单词的 CEFR 等级（A1-C2）需要与用户选择的难度级别匹配\n");
-        sb.append("3. 例句的难度也需要与单词等级匹配\n\n");
+        sb.append("2. 例句的难度也需要与单词等级匹配\n\n");
+        
+        sb.append("### 例句难度匹配\n");
+        sb.append("- A1/A2: 简单句，5-10个单词\n");
+        sb.append("- B1: 复合句，10-15个单词\n");
+        sb.append("- B2: 复杂句，15-25个单词\n");
+        sb.append("- C1/C2: 高级句式，25个单词以上\n\n");
         
         if ("cefr".equals(category)) {
             sb.append("### CEFR 等级说明：\n");
@@ -159,10 +163,10 @@ public class SystemPromptService {
             sb.append("当前需要生成**").append(difficultyLabel).append("** 对应的单词。\n");
         } else if ("toefl".equals(category)) {
             sb.append("### TOEFL 分数对应说明：\n");
-            sb.append("- 60-80 分 (beginner): 对应 CEFR A2-B1 级别\n");
-            sb.append("- 81-100 分 (intermediate): 对应 CEFR B1-B2 级别\n");
-            sb.append("- 101-110 分 (advanced): 对应 CEFR B2-C1 级别\n");
-            sb.append("- 111-120 分 (expert): 对应 CEFR C1-C2 级别\n\n");
+            sb.append("- 60-80 分 (beginner): 初级词汇\n");
+            sb.append("- 81-100 分 (intermediate): 中级词汇\n");
+            sb.append("- 101-110 分 (advanced): 高级词汇\n");
+            sb.append("- 111-120 分 (expert): 专家级词汇\n\n");
             sb.append("当前需要生成**").append(difficultyLabel).append("** 对应的单词。\n");
         }
         

@@ -470,6 +470,7 @@ interface VocabularyFlashcardProps {
   cardId?: number;
   isStandalone?: boolean;
   hasPrev?: boolean;
+  hasNext?: boolean;
   isCompleted?: boolean;
   totalCount?: number;
   currentIndex?: number;
@@ -497,6 +498,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
   cardId,
   isStandalone = false,
   hasPrev = false,
+  hasNext = false,
   isCompleted = false,
   totalCount,
   currentIndex,
@@ -507,6 +509,9 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
   meaningIsCorrect,
   meaningCheckResult,
 }) => {
+  const isLastWord = !hasNext && totalCount !== undefined && currentIndex !== undefined 
+    ? currentIndex >= totalCount - 1 
+    : !hasNext;
   const hasMeaningCheckResultFromData = 
     data.action === 'check_meaning_accuracy' && 
     data.is_correct !== undefined;
@@ -809,7 +814,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
                 ← 上一个
               </button>
               {onRegenerate && (
-                <button className="generate-next-btn" onClick={onRegenerate} disabled={isLoading}>
+                <button className="generate-next-btn" onClick={onRegenerate} disabled={isLoading || !isLastWord}>
                   {isLoading ? '⏳ 生成中...' : '🔄 重新生成'}
                 </button>
               )}
@@ -888,7 +893,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
                 ← 上一个
               </button>
               {onRegenerate && (
-                <button className="generate-next-btn" onClick={onRegenerate} disabled={isLoading}>
+                <button className="generate-next-btn" onClick={onRegenerate} disabled={isLoading || !isLastWord}>
                   {isLoading ? '⏳ 生成中...' : '🔄 重新生成'}
                 </button>
               )}
@@ -1117,7 +1122,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
               ← 上一个
             </button>
             {onRegenerate && (
-              <button className="generate-next-btn" onClick={onRegenerate} disabled={isLoading || !canNavigate}>
+              <button className="generate-next-btn" onClick={onRegenerate} disabled={isLoading}>
                 🔄 重新生成
               </button>
             )}
@@ -1539,6 +1544,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             isStandalone={true}
             isLoading={vocabularyCardLoading || loading}
             hasPrev={currentVocabularyCard.hasPrev || false}
+            hasNext={currentVocabularyCard.hasNext || false}
             isCompleted={currentVocabularyCard.isCompleted || false}
             totalCount={currentVocabularyCard.totalCount ?? 1}
             currentIndex={currentVocabularyCard.currentIndex ?? 0}

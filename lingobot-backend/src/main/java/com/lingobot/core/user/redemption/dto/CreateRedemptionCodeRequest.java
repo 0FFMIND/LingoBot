@@ -16,4 +16,7 @@ public class CreateRedemptionCodeRequest {
     @NotNull(message = "点数不能为空")
     @Min(value = 1, message = "点数必须大于0")
     private Integer points;
+    
+    @Min(value = 1, message = "过期时间必须大于0秒")
+    private Long expiresInSeconds;
 }

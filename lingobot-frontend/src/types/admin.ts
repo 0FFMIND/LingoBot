@@ -24,5 +24,10 @@ export interface UserAdminDTO {
   email: string;
   role: string;
   createdAt: string;
+  balance: number;
   isCurrentAdmin: boolean;
+}
+
+export interface UpdateBalanceRequest {
+  newBalance: number;
 }

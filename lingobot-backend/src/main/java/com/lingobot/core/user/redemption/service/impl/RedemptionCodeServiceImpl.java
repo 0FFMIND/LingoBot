@@ -2,6 +2,7 @@ package com.lingobot.core.user.redemption.service.impl;
 
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
+import com.lingobot.core.user.auth.service.BalanceService;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.user.redemption.dto.RedemptionCodeDTO;
 import com.lingobot.core.user.redemption.entity.RedemptionCode;
@@ -15,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -28,6 +28,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
     private final RedemptionCodeRepository redemptionCodeRepository;
     private final UserRepository userRepository;
     private final StringRedisTemplate stringRedisTemplate;
+    private final BalanceService balanceService;
     
     private static final String LOCK_PREFIX = "redemption:lock:";
     private static final long LOCK_EXPIRE_SECONDS = 10;
@@ -47,7 +48,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
     
     @Override
     @Transactional
-    public RedemptionCodeDTO createCode(Integer points, Long creatorId) {
+    public RedemptionCodeDTO createCode(Integer points, Long creatorId, Long expiresInSeconds) {
         if (points == null || points <= 0) {
             throw new ChatException("兑换码点数必须大于0");
         }
@@ -57,15 +58,22 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         
         String code = generateUniqueCode();
         
-        RedemptionCode redemptionCode = RedemptionCode.builder()
+        RedemptionCode.RedemptionCodeBuilder builder = RedemptionCode.builder()
                 .code(code)
                 .points(points)
                 .isUsed(false)
-                .createdBy(creator)
-                .build();
+                .createdBy(creator);
+        
+        if (expiresInSeconds != null && expiresInSeconds > 0) {
+            builder.expiresAt(LocalDateTime.now().plusSeconds(expiresInSeconds));
+        }
+        
+        RedemptionCode redemptionCode = builder.build();
         
         RedemptionCode saved = redemptionCodeRepository.save(redemptionCode);
-        log.info("管理�? {} 生成了兑换码 {}, 点数: {}", creator.getUsername(), code, points);
+        log.info("管理员 {} 生成了兑换码 {}, 点数: {}, 过期时间: {}", 
+                creator.getUsername(), code, points, 
+                expiresInSeconds != null ? expiresInSeconds + "秒后" : "永不过期");
         
         return RedemptionCodeDTO.fromEntity(saved);
     }
@@ -92,13 +100,14 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
                 throw new IllegalArgumentException("兑换码已被使用");
             }
             
+            if (redemptionCode.isExpired()) {
+                throw new IllegalArgumentException("兑换码已过期");
+            }
+            
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
             
-            int updatedRows = userRepository.incrementBalance(userId, redemptionCode.getPoints());
-            if (updatedRows == 0) {
-                throw new RuntimeException("更新用户余额失败");
-            }
+            double newBalance = balanceService.addBalance(userId, redemptionCode.getPoints().doubleValue());
             
             redemptionCode.setIsUsed(true);
             redemptionCode.setUsedBy(user);
@@ -106,7 +115,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
             
             RedemptionCode saved = redemptionCodeRepository.save(redemptionCode);
             
-            log.info("用户 {} 使用兑换码 {}, 获得 {} 点", user.getUsername(), trimmedCode, redemptionCode.getPoints());
+            log.info("用户 {} 使用兑换码 {}, 获得 {} 点, 新余额: {}", user.getUsername(), trimmedCode, redemptionCode.getPoints(), newBalance);
             
             return RedemptionCodeDTO.fromEntity(saved);
         } finally {
@@ -131,10 +140,10 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
     }
     
     @Override
-    public Integer getUserBalance(Long userId) {
+    public Double getUserBalance(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
-        return user.getBalance() != null ? user.getBalance() : 0;
+        return user.getBalance() != null ? user.getBalance() : 0.0;
     }
     
     @Override

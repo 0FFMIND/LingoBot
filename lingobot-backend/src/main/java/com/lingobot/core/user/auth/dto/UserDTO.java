@@ -18,5 +18,5 @@ public class UserDTO {
     private String role;
     private String avatar;
     private LocalDateTime createdAt;
-    private Integer balance;
+    private Double balance;
 }

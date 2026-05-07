@@ -6,7 +6,7 @@ import java.util.List;
 
 public interface RedemptionCodeService {
     
-    RedemptionCodeDTO createCode(Integer points, Long creatorId);
+    RedemptionCodeDTO createCode(Integer points, Long creatorId, Long expiresInSeconds);
     
     RedemptionCodeDTO redeemCode(String code, Long userId);
     
@@ -14,7 +14,7 @@ public interface RedemptionCodeService {
     
     RedemptionCodeDTO getCodeById(Long id);
     
-    Integer getUserBalance(Long userId);
+    Double getUserBalance(Long userId);
     
     void deleteCode(Long id);
 }

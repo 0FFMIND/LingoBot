@@ -5,3 +5,4 @@ export * from './message';
 export * from './vocabulary';
 export * from './preferences';
 export * from './redemption';
+export * from './balance';

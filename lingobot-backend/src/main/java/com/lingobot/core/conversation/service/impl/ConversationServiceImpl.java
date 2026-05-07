@@ -1,5 +1,6 @@
 package com.lingobot.core.conversation.service.impl;
 
+import com.lingobot.core.conversation.dto.ContextStatusDTO;
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
@@ -13,6 +14,7 @@ import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.core.conversation.service.ConversationService;
+import com.lingobot.learning.chat.service.ContextManagerService;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +38,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final AuthService authService;
     private final UserRepository userRepository;
     private final VocabularyCardRepository vocabularyCardRepository;
+    private final ContextManagerService contextManagerService;
     
     @Override
     @Transactional
@@ -330,7 +333,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Transactional
     public void deleteMessage(Long messageId) {
         if (!messageRepository.existsById(messageId)) {
-            throw new ChatException("消息不存�? " + messageId);
+            throw new ChatException("消息不存在: " + messageId);
         }
         messageRepository.deleteMessageById(messageId);
     }
@@ -388,6 +391,14 @@ public class ConversationServiceImpl implements ConversationService {
     
     private ConversationDTO toDTO(Conversation conversation) {
         int messageCount = messageRepository.countByConversationId(conversation.getId());
+        
+        ContextStatusDTO contextStatus = null;
+        try {
+            contextStatus = contextManagerService.getContextStatus(conversation.getId());
+        } catch (Exception e) {
+            log.warn("获取上下文状态失败，conversationId: {}", conversation.getId(), e);
+        }
+        
         return ConversationDTO.builder()
                 .id(conversation.getId())
                 .title(conversation.getTitle())
@@ -395,6 +406,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .createdAt(conversation.getCreatedAt())
                 .updatedAt(conversation.getUpdatedAt())
                 .messageCount(messageCount)
+                .contextStatus(contextStatus)
                 .build();
     }
 }

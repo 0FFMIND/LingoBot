@@ -14,8 +14,12 @@ export const redemptionService = {
     return httpClient.post<RedemptionCodeDTO>('/redemption/redeem', { code } as RedeemCodeRequest);
   },
 
-  createCode: async (points: number): Promise<RedemptionCodeDTO> => {
-    return httpClient.post<RedemptionCodeDTO>('/redemption/codes', { points } as CreateRedemptionCodeRequest);
+  createCode: async (points: number, expiresInSeconds?: number): Promise<RedemptionCodeDTO> => {
+    const request: CreateRedemptionCodeRequest = { points };
+    if (expiresInSeconds !== undefined && expiresInSeconds > 0) {
+      request.expiresInSeconds = expiresInSeconds;
+    }
+    return httpClient.post<RedemptionCodeDTO>('/redemption/codes', request);
   },
 
   getAllCodes: async (): Promise<RedemptionCodeDTO[]> => {

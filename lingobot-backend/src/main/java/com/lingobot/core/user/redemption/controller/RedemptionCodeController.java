@@ -26,13 +26,13 @@ public class RedemptionCodeController {
     private final AuthService authService;
     
     @GetMapping("/balance")
-    public ResponseEntity<ApiResponse<Integer>> getBalance() {
+    public ResponseEntity<ApiResponse<Double>> getBalance() {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error("用户未登录", null));
         }
-        Integer balance = redemptionCodeService.getUserBalance(userId);
+        Double balance = redemptionCodeService.getUserBalance(userId);
         return ResponseEntity.ok(ApiResponse.success("获取余额成功", balance));
     }
     
@@ -64,7 +64,10 @@ public class RedemptionCodeController {
                     .body(ApiResponse.error("管理员未登录", null));
         }
         
-        RedemptionCodeDTO result = redemptionCodeService.createCode(request.getPoints(), creatorId);
+        RedemptionCodeDTO result = redemptionCodeService.createCode(
+                request.getPoints(), 
+                creatorId, 
+                request.getExpiresInSeconds());
         return ResponseEntity.ok(ApiResponse.success("兑换码创建成功", result));
     }
     

@@ -5,28 +5,28 @@ package com.lingobot.infrastructure.common.exception;
  * 当用户余额不足以支付API调用时抛出 */
 public class InsufficientBalanceException extends RuntimeException {
     
-    private final int currentBalance;
+    private final double currentBalance;
     private final double requiredCost;
     
     public InsufficientBalanceException(String message) {
         super(message);
-        this.currentBalance = 0;
+        this.currentBalance = 0.0;
         this.requiredCost = 0.0;
     }
     
-    public InsufficientBalanceException(int currentBalance, double requiredCost) {
+    public InsufficientBalanceException(double currentBalance, double requiredCost) {
         super("余额不足。当前余额: " + currentBalance + "，需要: " + requiredCost);
         this.currentBalance = currentBalance;
         this.requiredCost = requiredCost;
     }
     
-    public InsufficientBalanceException(String message, int currentBalance, double requiredCost) {
+    public InsufficientBalanceException(String message, double currentBalance, double requiredCost) {
         super(message);
         this.currentBalance = currentBalance;
         this.requiredCost = requiredCost;
     }
     
-    public int getCurrentBalance() {
+    public double getCurrentBalance() {
         return currentBalance;
     }
     

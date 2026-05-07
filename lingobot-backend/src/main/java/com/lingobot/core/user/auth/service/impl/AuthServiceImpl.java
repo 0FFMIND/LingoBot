@@ -100,6 +100,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
+                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : 0.0)
                 .build();
     }
     
@@ -176,6 +177,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(user.getId())
                 .role(user.getRole().name())
                 .avatar(user.getAvatar())
+                .balance(user.getBalance() != null ? user.getBalance() : 0.0)
                 .build();
     }
     
@@ -308,6 +310,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
+                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : 0.0)
                 .build();
     }
     
@@ -384,6 +387,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
+                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : 0.0)
                 .build();
     }
     
@@ -395,7 +399,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .role(user.getRole().name())
                 .avatar(user.getAvatar())
                 .createdAt(user.getCreatedAt())
-                .balance(user.getBalance() != null ? user.getBalance() : 0)
+                .balance(user.getBalance() != null ? user.getBalance() : 0.0)
                 .build();
     }
     

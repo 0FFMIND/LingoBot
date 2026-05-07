@@ -166,7 +166,7 @@ public class VocabularyCard {
         }
     }
 
-    /** 从JSON解析反义词列�?*/
+    /** 从JSON解析反义词列表*/
     public List<String> getAntonyms() {
         if (antonymsJson == null || antonymsJson.isEmpty()) {
             return new ArrayList<>();

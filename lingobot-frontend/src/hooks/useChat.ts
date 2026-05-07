@@ -264,7 +264,9 @@ export function useChat(
   const sendMessageWithIntent = useCallback(async (content: string, intent: string, currentWord: string) => {
     if (!isAuthenticated || !conversationId || loading) return;
 
-    const messageContent = `[intent:${intent}][current_word:${currentWord}] ${content}`;
+    const messageContent = content.trim()
+      ? `[intent:${intent}][current_word:${currentWord}][user_input:${content.trim()}]`
+      : `[intent:${intent}][current_word:${currentWord}]`;
 
     const request: ChatRequest = {
       conversationId,

@@ -124,6 +124,11 @@ function ChatApp() {
   const [vocabularyCardLoading, setVocabularyCardLoading] = useState(false);
   const [userMeaningInput, setUserMeaningInput] = useState('');
   const [userSentenceInput, setUserSentenceInput] = useState('');
+  
+  const [isCompacting, setIsCompacting] = useState(false);
+  const [compactingConversationId, setCompactingConversationId] = useState<number | null>(null);
+  const [lastCompactTime, setLastCompactTime] = useState<Record<number, number>>({});
+  const COMPACT_COOLDOWN_MS = 10000;
 
   const preferences = usePreferences(isAuthenticated);
   
@@ -806,7 +811,9 @@ function ChatApp() {
     setStreamingContent('');
     setAgentStatus({ thinking: '', toolCalls: [] });
 
-    const messageContent = `[intent:${intent}][current_word:${currentWord}] ${content}`;
+    const messageContent = content.trim()
+      ? `[intent:${intent}][current_word:${currentWord}][user_input:${content.trim()}]`
+      : `[intent:${intent}][current_word:${currentWord}]`;
 
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
@@ -1628,6 +1635,51 @@ function ChatApp() {
     setNewConversationId(null);
   };
 
+  const handleManualCompact = useCallback(async (conversationId: number) => {
+    if (!isAuthenticated) return;
+    
+    if (isCompacting) {
+      console.log('正在执行其他Compact操作，请稍候');
+      return;
+    }
+    
+    const now = Date.now();
+    const lastTime = lastCompactTime[conversationId] || 0;
+    if (now - lastTime < COMPACT_COOLDOWN_MS) {
+      const remainingSeconds = Math.ceil((COMPACT_COOLDOWN_MS - (now - lastTime)) / 1000);
+      alert(`操作过于频繁，请 ${remainingSeconds} 秒后再试`);
+      return;
+    }
+    
+    setIsCompacting(true);
+    setCompactingConversationId(conversationId);
+    
+    try {
+      console.log('手动执行Compact，conversationId:', conversationId);
+      const result = await conversationApi.executeCompact(conversationId);
+      
+      setLastCompactTime(prev => ({ ...prev, [conversationId]: Date.now() }));
+      
+      if (result.executed) {
+        console.log('Compact执行成功，节省了', result.savedTokens, 'tokens');
+        alert(`压缩成功！节省了 ${result.savedTokens || 0} tokens`);
+      } else {
+        console.log('Compact未执行，原因:', result.reason);
+        if (result.reason) {
+          alert(`压缩未执行: ${result.reason}`);
+        }
+      }
+      
+      loadConversations();
+    } catch (error) {
+      console.error('手动Compact失败:', error);
+      alert('压缩失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setIsCompacting(false);
+      setCompactingConversationId(null);
+    }
+  }, [isAuthenticated, loadConversations, isCompacting, lastCompactTime, COMPACT_COOLDOWN_MS]);
+
   if (initializing) {
     return (
       <div className="app">
@@ -1676,12 +1728,15 @@ function ChatApp() {
         onDeactivate={handleDeactivateClick}
         onOpenSettings={handleOpenSettings}
         onLoadMore={loadMoreConversations}
+        onManualCompact={handleManualCompact}
         disabled={!isAuthenticated}
         learningMode={currentLearningMode}
         onLearningModeChange={setGlobalLearningMode}
         conversationLearningModes={conversationLearningModes}
         loadingMore={loadingMoreConversations}
         hasMore={hasMoreConversations}
+        isCompacting={isCompacting}
+        compactingConversationId={compactingConversationId}
       />
       
       <div className="main-content-wrapper">

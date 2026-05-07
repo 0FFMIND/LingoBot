@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserDTO } from '../types';
 import { authUtils, authApi, redemptionApi } from '../api';
+import { balanceService } from '../services';
 import ChangePasswordModal from './ChangePasswordModal';
 import DeactivateModal from './DeactivateModal';
+import BalanceTransactionModal from './BalanceTransactionModal';
 
 interface AccountSettingsProps {
   onClose: () => void;
@@ -29,6 +31,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
   const [redemptionCode, setRedemptionCode] = useState('');
   const [redeemLoading, setRedeemLoading] = useState(false);
   const [redeemMessage, setRedeemMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showBalanceModal, setShowBalanceModal] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -36,14 +39,13 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
         const currentUser = await authApi.getCurrentUser();
         setUser(currentUser);
         setAvatar(currentUser.avatar || null);
-        if (currentUser.balance !== undefined) {
-          setBalance(currentUser.balance);
-        }
+        setBalance(currentUser.balance ?? 0);
       } catch (error) {
         console.error('获取用户信息失败:', error);
         const cachedUser = authUtils.getUser();
         setUser(cachedUser);
         setAvatar(cachedUser?.avatar || null);
+        setBalance(cachedUser?.balance ?? 0);
       }
     };
     
@@ -53,18 +55,17 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
   const fetchBalance = async () => {
     try {
       const fetchedUser = await authApi.getCurrentUser();
-      if (fetchedUser.balance !== undefined) {
-        setBalance(fetchedUser.balance);
-        setUser(fetchedUser);
-        
-        const existingUser = authUtils.getUser();
-        if (existingUser) {
-          const updatedUser = { ...existingUser, balance: fetchedUser.balance };
-          authUtils.setAuth(authUtils.getToken()!, updatedUser);
-          window.dispatchEvent(new CustomEvent('auth:balance-updated', { 
-            detail: { user: updatedUser } 
-          }));
-        }
+      const newBalance = fetchedUser.balance ?? 0;
+      setBalance(newBalance);
+      setUser(fetchedUser);
+      
+      const existingUser = authUtils.getUser();
+      if (existingUser) {
+        const updatedUser = { ...existingUser, balance: newBalance };
+        authUtils.setAuth(authUtils.getToken()!, updatedUser);
+        window.dispatchEvent(new CustomEvent('auth:balance-updated', { 
+          detail: { user: updatedUser } 
+        }));
       }
     } catch (error) {
       console.error('获取余额失败:', error);
@@ -350,9 +351,19 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
 
               <div className="balance-display-section">
                 <div className="balance-display">
-                  <p className="balance-label">当前余额</p>
-                  <p className="balance-value">{balance}</p>
-                  <p className="balance-unit">点</p>
+                  <div className="balance-info">
+                    <p className="balance-label">当前余额</p>
+                    <div className="balance-value-wrapper">
+                      <p className="balance-value">{balance}</p>
+                      <p className="balance-unit">点</p>
+                    </div>
+                  </div>
+                  <button
+                    className="balance-detail-btn"
+                    onClick={() => setShowBalanceModal(true)}
+                  >
+                    💰 余额明细
+                  </button>
                 </div>
               </div>
 
@@ -446,6 +457,12 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
         user={user}
         onClose={() => setShowDeactivateModal(false)}
         onSuccess={handleDeactivateSuccess}
+      />
+
+      <BalanceTransactionModal
+        isOpen={showBalanceModal}
+        onClose={() => setShowBalanceModal(false)}
+        currentBalance={balance}
       />
     </div>
   );

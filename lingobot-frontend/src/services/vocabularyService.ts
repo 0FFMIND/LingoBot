@@ -1,5 +1,17 @@
-import { httpClient } from './httpClient';
-import { VocabularyCardDTO, CreateVocabularyCardRequest } from '../types';
+import { authUtils, httpClient } from './httpClient';
+import { VocabularyCardDTO, CreateVocabularyCardRequest, UserDTO } from '../types';
+
+const refreshCurrentUserBalance = async (): Promise<void> => {
+  try {
+    const user = await httpClient.get<UserDTO>('/auth/me');
+    authUtils.setUser(user);
+    window.dispatchEvent(new CustomEvent('auth:balance-updated', {
+      detail: { user },
+    }));
+  } catch (error) {
+    console.warn('刷新账户余额失败:', error);
+  }
+};
 
 export const vocabularyService = {
   getCardById: async (cardId: number): Promise<VocabularyCardDTO> => {
@@ -29,17 +41,21 @@ export const vocabularyService = {
   },
 
   generateNextCard: async (conversationId: number, level?: string): Promise<VocabularyCardDTO> => {
-    return httpClient.post<VocabularyCardDTO>(
+    const card = await httpClient.post<VocabularyCardDTO>(
       `/vocabulary/conversations/${conversationId}/generate`,
       level ? { level } : {}
     );
+    await refreshCurrentUserBalance();
+    return card;
   },
 
   regenerateCard: async (conversationId: number, level?: string): Promise<VocabularyCardDTO> => {
-    return httpClient.post<VocabularyCardDTO>(
+    const card = await httpClient.post<VocabularyCardDTO>(
       `/vocabulary/conversations/${conversationId}/regenerate`,
       level ? { level } : {}
     );
+    await refreshCurrentUserBalance();
+    return card;
   },
 
   createCard: async (conversationId: number, request: CreateVocabularyCardRequest): Promise<VocabularyCardDTO> => {
@@ -50,10 +66,12 @@ export const vocabularyService = {
   },
 
   updateUserMeaning: async (cardId: number, userMeaning: string): Promise<VocabularyCardDTO> => {
-    return httpClient.put<VocabularyCardDTO>(
+    const card = await httpClient.put<VocabularyCardDTO>(
       `/vocabulary/cards/${cardId}/meaning`,
       { userMeaning }
     );
+    await refreshCurrentUserBalance();
+    return card;
   },
 
   updateUserSentence: async (cardId: number, userSentence: string): Promise<VocabularyCardDTO> => {

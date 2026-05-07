@@ -45,11 +45,18 @@ public class RedemptionCode {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
     
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+    
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         if (isUsed == null) {
             isUsed = false;
         }
+    }
+    
+    public boolean isExpired() {
+        return expiresAt != null && LocalDateTime.now().isAfter(expiresAt);
     }
 }

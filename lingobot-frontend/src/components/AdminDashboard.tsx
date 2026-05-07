@@ -25,6 +25,12 @@ interface EditUsernameModalProps {
   onSuccess: (userId: number) => void;
 }
 
+interface EditBalanceModalProps {
+  user: UserAdminDTO | null;
+  onClose: () => void;
+  onSuccess: (userId: number) => void;
+}
+
 interface CreateRedemptionCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -191,6 +197,123 @@ const EditUsernameModal: React.FC<EditUsernameModalProps> = ({ user, onClose, on
   );
 };
 
+const EditBalanceModal: React.FC<EditBalanceModalProps> = ({ user, onClose, onSuccess }) => {
+  const [newBalance, setNewBalance] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (user) {
+      setNewBalance(user.balance.toString());
+      setError('');
+    }
+  }, [user]);
+
+  if (!user) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    const balanceNum = parseFloat(newBalance);
+    if (newBalance === '' || isNaN(balanceNum)) {
+      setError('请输入有效的余额');
+      return;
+    }
+
+    if (balanceNum < 0) {
+      setError('余额不能为负数');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await adminApi.updateUserBalance(user.id, balanceNum);
+      alert(`用户 "${user.email}" 的余额已修改为 "${balanceNum}"！`);
+      onSuccess(user.id);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '修改失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="reset-password-modal-overlay" onClick={(e) => {
+      if (e.target === e.currentTarget) onClose();
+    }}>
+      <div className="reset-password-modal">
+        <div className="reset-password-header">
+          <h3>修改余额</h3>
+          <button 
+            type="button" 
+            className="reset-password-close"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="reset-password-form">
+          <div className="reset-password-user-info">
+            <span>邮箱: </span>
+            <strong>{user.email}</strong>
+            <span className="reset-password-role-badge">
+              {user.role === 'ROLE_ADMIN' ? '管理员' : '普通用户'}
+            </span>
+          </div>
+
+          {error && <div className="reset-password-error">{error}</div>}
+
+          <div className="reset-password-field">
+            <label htmlFor="current-balance">当前余额</label>
+            <input
+              type="text"
+              value={user.balance.toString() + ' 点'}
+              disabled
+              className="disabled-input"
+            />
+          </div>
+
+          <div className="reset-password-field">
+            <label htmlFor="new-balance">新余额</label>
+            <input
+              id="new-balance"
+              type="number"
+              min="0"
+              step="0.01"
+              value={newBalance}
+              onChange={(e) => setNewBalance(e.target.value)}
+              placeholder="请输入新余额"
+              disabled={loading}
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="reset-password-actions">
+            <button
+              type="button"
+              className="reset-password-cancel-btn"
+              onClick={onClose}
+              disabled={loading}
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className="reset-password-submit-btn"
+              disabled={loading}
+            >
+              {loading ? '处理中...' : '确认修改'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ user, onClose, onSuccess }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -307,8 +430,17 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ user, onClose, 
   );
 };
 
+const EXPIRE_OPTIONS = [
+  { label: '永不过期', value: null },
+  { label: '1秒（测试用）', value: 1 },
+  { label: '1小时', value: 3600 },
+  { label: '1天', value: 86400 },
+  { label: '7天', value: 604800 },
+] as const;
+
 const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [points, setPoints] = useState<string>('');
+  const [expireOption, setExpireOption] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [createdCode, setCreatedCode] = useState<RedemptionCodeDTO | null>(null);
@@ -316,6 +448,7 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
   useEffect(() => {
     if (isOpen) {
       setPoints('');
+      setExpireOption(null);
       setError('');
       setCreatedCode(null);
     }
@@ -336,21 +469,15 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
 
     setLoading(true);
     try {
-      const result = await redemptionApi.createCode(pointsNum);
+      const result = await redemptionApi.createCode(
+        pointsNum, 
+        expireOption !== null ? expireOption : undefined
+      );
       setCreatedCode(result);
-      alert('兑换码创建成功！');
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建失败');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const copyCode = () => {
-    if (createdCode) {
-      navigator.clipboard.writeText(createdCode.code).then(() => {
-        alert('兑换码已复制到剪贴板！');
-      });
     }
   };
 
@@ -386,9 +513,6 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
               <label>兑换码</label>
               <div className="redemption-code-box">
                 <code>{createdCode.code}</code>
-                <button type="button" className="copy-code-btn" onClick={copyCode}>
-                  复制
-                </button>
               </div>
             </div>
 
@@ -401,6 +525,18 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
                 <span>创建时间:</span>
                 <strong>{new Date(createdCode.createdAt).toLocaleString('zh-CN')}</strong>
               </div>
+              {createdCode.expiresAt && (
+                <div className="code-info-item">
+                  <span>到期时间:</span>
+                  <strong>{new Date(createdCode.expiresAt).toLocaleString('zh-CN')}</strong>
+                </div>
+              )}
+              {!createdCode.expiresAt && (
+                <div className="code-info-item">
+                  <span>到期时间:</span>
+                  <strong>永不过期</strong>
+                </div>
+              )}
             </div>
 
             <div className="reset-password-actions">
@@ -445,6 +581,25 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
               />
             </div>
 
+            <div className="reset-password-field">
+              <label htmlFor="expire-option">到期时间</label>
+              <select
+                id="expire-option"
+                value={expireOption ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setExpireOption(value === '' ? null : parseInt(value));
+                }}
+                disabled={loading}
+              >
+                {EXPIRE_OPTIONS.map((option) => (
+                  <option key={option.value ?? 'never'} value={option.value ?? ''}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="reset-password-actions">
               <button
                 type="button"
@@ -481,6 +636,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
   const [resetPasswordUser, setResetPasswordUser] = useState<UserAdminDTO | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserAdminDTO | null>(null);
   const [editUsernameUser, setEditUsernameUser] = useState<UserAdminDTO | null>(null);
+  const [editBalanceUser, setEditBalanceUser] = useState<UserAdminDTO | null>(null);
   const [showCreateRedemptionModal, setShowCreateRedemptionModal] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -578,6 +734,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
     setEditUsernameUser(user);
   };
 
+  const handleEditBalance = (user: UserAdminDTO) => {
+    setEditBalanceUser(user);
+  };
+
   const handleLogout = () => {
     authUtils.clearAuth();
     onLogout();
@@ -612,12 +772,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
 
   const getRoleBadgeClass = (role: string) => {
     return role === 'ROLE_ADMIN' ? 'role-badge-admin' : 'role-badge-user';
-  };
-
-  const copyRedemptionCode = (code: string) => {
-    navigator.clipboard.writeText(code).then(() => {
-      alert('兑换码已复制到剪贴板！');
-    });
   };
 
   const handleDeleteRedemptionCode = async (codeId: number, codeValue: string) => {
@@ -737,7 +891,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
                           </td>
                           <td>
                             <span className="balance-badge">
-                              {(user as any).balance !== undefined ? (user as any).balance : 0} 点
+                              {user.balance ?? 0} 点
                             </span>
                           </td>
                           <td>{user.createdAt ? formatTime(user.createdAt) : '-'}</td>
@@ -756,6 +910,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
                                 disabled={actionLoading === user.id}
                               >
                                 修改名称
+                              </button>
+                              <button
+                                className="admin-action-btn admin-edit-balance-btn"
+                                onClick={() => handleEditBalance(user)}
+                                disabled={actionLoading === user.id}
+                              >
+                                修改余额
                               </button>
                               <button
                                 className="admin-action-btn admin-reset-password-btn"
@@ -832,65 +993,69 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
                   <table className="admin-table">
                     <thead>
                       <tr>
-                        <th>ID</th>
                         <th>兑换码</th>
                         <th>点数</th>
                         <th>状态</th>
-                        <th>创建者</th>
                         <th>创建时间</th>
+                        <th>到期时间</th>
                         <th>使用者</th>
                         <th>使用时间</th>
                         <th>操作</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {redemptionCodes.map((code) => (
-                        <tr key={code.id}>
-                          <td>{code.id}</td>
-                          <td className="redemption-code-cell">
-                            <code className="code-text">{code.code}</code>
-                          </td>
-                          <td>
-                            <span className="points-badge">{code.points} 点</span>
-                          </td>
-                          <td>
-                            {code.isUsed ? (
-                              <span className="status-badge-used">已使用</span>
-                            ) : (
-                              <span className="status-badge-unused">未使用</span>
-                            )}
-                          </td>
-                          <td className="admin-username">{code.createdByUsername}</td>
-                          <td>{formatTime(code.createdAt)}</td>
-                          <td className="admin-username">
-                            {code.usedByUsername || '-'}
-                          </td>
-                          <td>
-                            {code.usedAt ? formatTime(code.usedAt) : '-'}
-                          </td>
-                          <td>
-                            <div className="redemption-actions">
-                              <button
-                                className="copy-code-btn-small"
-                                onClick={() => copyRedemptionCode(code.code)}
-                                title="复制兑换码"
-                              >
-                                复制
-                              </button>
-                              {!code.isUsed && (
-                                <button
-                                  className="delete-redemption-btn"
-                                  onClick={() => handleDeleteRedemptionCode(code.id, code.code)}
-                                  title="删除兑换码"
-                                  disabled={actionLoading === code.id}
-                                >
-                                  {actionLoading === code.id ? '删除中...' : '删除'}
-                                </button>
+                      {redemptionCodes.map((code) => {
+                        const isExpired = code.isExpired && !code.isUsed;
+                        return (
+                          <tr key={code.id} className={isExpired ? 'expired-code-row' : ''}>
+                            <td className="redemption-code-cell">
+                              <code className="code-text">{code.code}</code>
+                            </td>
+                            <td>
+                              <span className="points-badge">{code.points} 点</span>
+                            </td>
+                            <td>
+                              {code.isUsed ? (
+                                <span className="status-badge-used">已使用</span>
+                              ) : isExpired ? (
+                                <span className="status-badge-expired">已过期</span>
+                              ) : (
+                                <span className="status-badge-unused">未使用</span>
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td>{formatTime(code.createdAt)}</td>
+                            <td>
+                              {code.expiresAt ? (
+                                <span className={isExpired ? 'expired-time' : ''}>
+                                  {formatTime(code.expiresAt)}
+                                </span>
+                              ) : (
+                                <span>永不过期</span>
+                              )}
+                            </td>
+                            <td className="admin-username">
+                              {code.usedByUsername || '-'}
+                            </td>
+                            <td>
+                              {code.usedAt ? formatTime(code.usedAt) : '-'}
+                            </td>
+                            <td>
+                              <div className="redemption-actions">
+                                {!code.isUsed && !isExpired && (
+                                  <button
+                                    className="delete-redemption-btn"
+                                    onClick={() => handleDeleteRedemptionCode(code.id, code.code)}
+                                    title="删除兑换码"
+                                    disabled={actionLoading === code.id}
+                                  >
+                                    {actionLoading === code.id ? '删除中...' : '删除'}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -1026,6 +1191,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
           user={editUsernameUser}
           onClose={() => {
             setEditUsernameUser(null);
+          }}
+          onSuccess={() => loadData()}
+        />
+      )}
+
+      {editBalanceUser && (
+        <EditBalanceModal
+          user={editBalanceUser}
+          onClose={() => {
+            setEditBalanceUser(null);
           }}
           onSuccess={() => loadData()}
         />

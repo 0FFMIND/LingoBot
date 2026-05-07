@@ -20,7 +20,7 @@ import java.util.*;
 /**
  * 词汇学习 MCP 工具
  * 用于 AI 与前端交互，展示单词卡片和造句反馈
- * 支持两种操作：display_flashcard（展示单词卡）和 display_sentence_feedback（展示造句反馈�? */
+ * 支持两种操作：display_flashcard（展示单词卡）和 display_sentence_feedback（展示造句反馈） */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -33,11 +33,11 @@ public class VocabularyTool implements McpToolHandler {
             ToolMode.VOCABULARY
     );
     
-    /** Redis 缓存键前缀 - 单个单词�?*/
+    /** Redis 缓存键前缀 - 单个单词卡*/
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
-    /** Redis 缓存键前缀 - 对话的所有有效卡片列�?*/
+    /** Redis 缓存键前缀 - 对话的所有有效卡片列表*/
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
-    /** Redis 缓存键前缀 - 对话的有效卡片数�?*/
+    /** Redis 缓存键前缀 - 对话的有效卡片数量*/
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
     
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -61,7 +61,9 @@ public class VocabularyTool implements McpToolHandler {
     }
 
     /**
-     * 获取工具定义，描述工具的参数和功�?     * 这些信息会被传递给 AI 模型，让 AI 了解如何调用此工�?     */
+     * 获取工具定义，描述工具的参数和功能
+     * 这些信息会被传递给 AI 模型，让 AI 了解如何调用此工具
+     */
     @Override
     public McpTool getToolDefinition() {
         Map<String, McpTool.Property> properties = new HashMap<>();
@@ -368,7 +370,7 @@ public class VocabularyTool implements McpToolHandler {
         }
         result.put("synonyms", synonyms);
 
-        // 保存用户造句�?AI 反馈到数据库
+        // 保存用户造句和 AI 反馈到数据库
         if (conversationId != null && !feedback.isEmpty()) {
             try {
                 List<VocabularyCard> incompleteCards = vocabularyCardRepository
@@ -480,7 +482,8 @@ public class VocabularyTool implements McpToolHandler {
     }
     
     /**
-     * 清除单词卡及其所属对话的所有缓�?     * 用于更新/删除操作
+     * 清除单词卡及其所属对话的所有缓存
+     * 用于更新/删除操作
      */
     private void evictCardAndConversationCache(Long cardId, Long conversationId) {
         try {

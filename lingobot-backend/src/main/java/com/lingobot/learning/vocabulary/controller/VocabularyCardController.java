@@ -18,7 +18,7 @@ import java.util.Map;
 
 /**
  * 词汇卡管理控制器
- * 提供词汇卡的增删改查、导航、AI生成等功�? */
+ * 提供词汇卡的增删改查、导航、AI生成等功能 */
 @Slf4j
 @RestController
 @RequestMapping("/api/vocabulary")
@@ -30,8 +30,10 @@ public class VocabularyCardController {
     private final ApiConfigProperties apiConfigProperties;
 
     /**
-     * 创建新的词汇�?     * @param conversationId 对话ID
-     * @param request 词汇卡创建请�?     * @return 创建成功的词汇卡
+     * 创建新的词汇卡
+     * @param conversationId 对话ID
+     * @param request 词汇卡创建请求
+     * @return 创建成功的词汇卡
      */
     @PostMapping("/cards")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> createCard(
@@ -43,8 +45,10 @@ public class VocabularyCardController {
     }
 
     /**
-     * 根据ID获取词汇�?     * @param cardId 词汇卡ID
-     * @return 词汇卡详�?     */
+     * 根据ID获取词汇卡
+     * @param cardId 词汇卡ID
+     * @return 词汇卡详情
+     */
     @GetMapping("/cards/{cardId}")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> getCardById(@PathVariable Long cardId) {
         VocabularyCardDTO card = vocabularyCardService.getCardById(cardId);
@@ -54,7 +58,8 @@ public class VocabularyCardController {
     /**
      * 获取对话的所有词汇卡
      * @param conversationId 对话ID
-     * @return 词汇卡列�?     */
+     * @return 词汇卡列表
+     */
     @GetMapping("/conversations/{conversationId}/cards")
     public ResponseEntity<ApiResponse<List<VocabularyCardDTO>>> getAllCards(
             @PathVariable Long conversationId) {
@@ -65,7 +70,8 @@ public class VocabularyCardController {
     /**
      * 获取当前正在学习的词汇卡（第一个未完成的，或最后一个）
      * @param conversationId 对话ID
-     * @return 当前词汇�?     */
+     * @return 当前词汇卡
+     */
     @GetMapping("/conversations/{conversationId}/current")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> getCurrentCard(
             @PathVariable Long conversationId) {
@@ -123,7 +129,7 @@ public class VocabularyCardController {
             @PathVariable Long conversationId,
             @RequestBody(required = false) Map<String, String> request) {
         double cost = apiConfigProperties.getCost("vocabulary", "generate-card");
-        balanceService.deductBalance(cost);
+        balanceService.deductBalanceWithLog(cost, "vocabulary", "generate-card", "生成词汇卡", conversationId);
         log.info("扣除点数: {}，用于生成词汇卡", cost);
         
         String level = request != null ? request.get("level") : null;
@@ -143,7 +149,7 @@ public class VocabularyCardController {
             @PathVariable Long conversationId,
             @RequestBody(required = false) Map<String, String> request) {
         double cost = apiConfigProperties.getCost("vocabulary", "regenerate-card");
-        balanceService.deductBalance(cost);
+        balanceService.deductBalanceWithLog(cost, "vocabulary", "regenerate-card", "重新生成词汇卡", conversationId);
         log.info("扣除点数: {}，用于重新生成词汇卡", cost);
         
         String level = request != null ? request.get("level") : null;
@@ -156,13 +162,17 @@ public class VocabularyCardController {
      * 更新用户对单词的释义猜测
      * @param cardId 词汇卡ID
      * @param request 包含用户释义
-     * @return 更新后的词汇�?     */
+     * @return 更新后的词汇卡
+     */
     @PutMapping("/cards/{cardId}/meaning")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> updateUserMeaning(
             @PathVariable Long cardId,
             @RequestBody Map<String, String> request) {
+        VocabularyCardDTO card = vocabularyCardService.getCardById(cardId);
+        Long conversationId = card != null ? card.getConversationId() : null;
+        
         double cost = apiConfigProperties.getCost("vocabulary", "update-meaning");
-        balanceService.deductBalance(cost);
+        balanceService.deductBalanceWithLog(cost, "vocabulary", "update-meaning", "释义检查", conversationId);
         log.info("扣除点数: {}，用于释义检查", cost);
         
         String userMeaning = request.get("userMeaning");
@@ -174,7 +184,8 @@ public class VocabularyCardController {
      * 更新用户用单词造的句子
      * @param cardId 词汇卡ID
      * @param request 包含用户造句
-     * @return 更新后的词汇�?     */
+     * @return 更新后的词汇卡
+     */
     @PutMapping("/cards/{cardId}/sentence")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> updateUserSentence(
             @PathVariable Long cardId,
@@ -185,9 +196,11 @@ public class VocabularyCardController {
     }
 
     /**
-     * 更新AI对用户造句的反�?     * @param cardId 词汇卡ID
+     * 更新AI对用户造句的反馈
+     * @param cardId 词汇卡ID
      * @param request 包含AI反馈
-     * @return 更新后的词汇�?     */
+     * @return 更新后的词汇卡
+     */
     @PutMapping("/cards/{cardId}/feedback")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> updateAIFeedback(
             @PathVariable Long cardId,
@@ -198,8 +211,10 @@ public class VocabularyCardController {
     }
 
     /**
-     * 标记词汇卡为已完�?     * @param cardId 词汇卡ID
-     * @return 更新后的词汇�?     */
+     * 标记词汇卡为已完成
+     * @param cardId 词汇卡ID
+     * @return 更新后的词汇卡
+     */
     @PutMapping("/cards/{cardId}/complete")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> markAsCompleted(
             @PathVariable Long cardId) {
@@ -222,7 +237,8 @@ public class VocabularyCardController {
     /**
      * 获取对话的词汇卡数量
      * @param conversationId 对话ID
-     * @return 词汇卡数�?     */
+     * @return 词汇卡数量
+     */
     @GetMapping("/conversations/{conversationId}/count")
     public ResponseEntity<ApiResponse<Long>> getCardCount(
             @PathVariable Long conversationId) {
@@ -233,7 +249,8 @@ public class VocabularyCardController {
     /**
      * 获取词汇卡的释义检查状态（用于前端轮询异步检查结果）
      * @param cardId 词汇卡ID
-     * @return 释义检查状�?     */
+     * @return 释义检查状态
+     */
     @GetMapping("/cards/{cardId}/meaning-check")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMeaningCheckStatus(
             @PathVariable Long cardId) {

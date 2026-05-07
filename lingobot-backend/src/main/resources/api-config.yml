@@ -59,3 +59,12 @@ api:
         method: GET
         cost: 0.1
         description: 获取词汇卡的释义检查状态
+    
+    # 上下文相关API
+    context:
+      # 压缩上下文
+      compact:
+        path: /api/context/compact/{conversationId}
+        method: POST
+        cost: 0.1
+        description: 压缩对话上下文，节省token

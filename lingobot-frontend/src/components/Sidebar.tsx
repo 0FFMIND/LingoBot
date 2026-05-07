@@ -3,6 +3,8 @@ import { ConversationDTO, UserDTO, LearningMode, LEARNING_MODES } from '../types
 import { authUtils } from '../api';
 import ChangePasswordModal from './ChangePasswordModal';
 import DeleteConversationModal from './DeleteConversationModal';
+import CircularProgress from './CircularProgress';
+import ContextStatusTooltip from './ContextStatusTooltip';
 
 interface SidebarProps {
   conversations: ConversationDTO[];
@@ -15,12 +17,15 @@ interface SidebarProps {
   onDeactivate: () => void;
   onOpenSettings: () => void;
   onLoadMore?: () => void;
+  onManualCompact?: (conversationId: number) => void;
   disabled?: boolean;
   learningMode?: LearningMode;
   onLearningModeChange?: (mode: LearningMode) => void;
   conversationLearningModes?: Record<number, LearningMode>;
   loadingMore?: boolean;
   hasMore?: boolean;
+  isCompacting?: boolean;
+  compactingConversationId?: number | null;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -34,12 +39,15 @@ const Sidebar: React.FC<SidebarProps> = ({
   onDeactivate,
   onOpenSettings,
   onLoadMore,
+  onManualCompact,
   disabled = false,
   learningMode = 'chat',
   onLearningModeChange,
   conversationLearningModes = {},
   loadingMore = false,
   hasMore = false,
+  isCompacting = false,
+  compactingConversationId = null,
 }) => {
   const [user, setUser] = useState<UserDTO | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -90,16 +98,25 @@ const Sidebar: React.FC<SidebarProps> = ({
       setUser(customEvent.detail.user);
     };
 
+    const handleBalanceUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ user: UserDTO }>;
+      if (customEvent.detail?.user) {
+        setUser(customEvent.detail.user);
+      }
+    };
+
     window.addEventListener('auth:login', handleLogin);
     window.addEventListener('auth:logout', handleLogout);
     window.addEventListener('auth:avatar-updated', handleAvatarUpdated);
     window.addEventListener('auth:username-updated', handleUsernameUpdated);
+    window.addEventListener('auth:balance-updated', handleBalanceUpdated);
 
     return () => {
       window.removeEventListener('auth:login', handleLogin);
       window.removeEventListener('auth:logout', handleLogout);
       window.removeEventListener('auth:avatar-updated', handleAvatarUpdated);
       window.removeEventListener('auth:username-updated', handleUsernameUpdated);
+      window.removeEventListener('auth:balance-updated', handleBalanceUpdated);
     };
   }, []);
 
@@ -270,6 +287,8 @@ const Sidebar: React.FC<SidebarProps> = ({
             const convLearningMode = getConversationLearningMode(conversation);
             const modeConfig = LEARNING_MODES[convLearningMode];
             
+            const hasContextStatus = conversation.contextStatus !== undefined;
+            
             return (
               <div
                 key={conversation.id}
@@ -284,14 +303,40 @@ const Sidebar: React.FC<SidebarProps> = ({
                   </span>
                   <div className="conversation-text-wrapper">
                     <h3 className="conversation-title-english compact">{conversation.title}</h3>
-                    <p className="conversation-meta-english">
-                      <span className="mode-badge" style={{ fontSize: '10px', opacity: 0.7 }}>
-                        {modeConfig?.label || '普通聊天'}
-                      </span>
-                      <span style={{ marginLeft: '8px' }}>{formatDate(conversation.updatedAt)}</span>
-                    </p>
+                    <div className="conversation-meta-row">
+                      <p className="conversation-meta-english">
+                        <span className="mode-badge" style={{ fontSize: '10px', opacity: 0.7 }}>
+                          {modeConfig?.label || '普通聊天'}
+                        </span>
+                        <span style={{ marginLeft: '8px' }}>{formatDate(conversation.updatedAt)}</span>
+                      </p>
+                      {hasContextStatus && conversation.contextStatus && (
+                        <ContextStatusTooltip
+                          status={conversation.contextStatus}
+                          onManualCompact={onManualCompact}
+                          conversationId={conversation.id}
+                          isCompacting={isCompacting}
+                          compactingConversationId={compactingConversationId}
+                        >
+                          <div className="conversation-progress-inline">
+                            <CircularProgress
+                              percentage={conversation.contextStatus.tokenRatio * 100}
+                              size={12}
+                              strokeWidth={2}
+                              showPercentage={false}
+                              onDoubleClick={() => {
+                                if (onManualCompact && !isCompacting) {
+                                  onManualCompact(conversation.id);
+                                }
+                              }}
+                            />
+                          </div>
+                        </ContextStatusTooltip>
+                      )}
+                    </div>
                   </div>
                 </div>
+                
                 <button
                   className={`delete-btn-english compact ${disabled ? 'disabled' : ''}`}
                   onClick={(e) => handleDelete(e, conversation.id)}

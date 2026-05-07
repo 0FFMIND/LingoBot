@@ -82,7 +82,6 @@ public class AdminController {
                 .map(user -> UserAdminDTO.fromEntity(user, currentAdmin))
                 .collect(Collectors.toList());
         
-        log.info("管理员获取用户列表，共 {} 个用户", userDTOs.size());
         return ResponseEntity.ok(ApiResponse.success("获取用户列表成功", userDTOs));
     }
     
@@ -159,6 +158,7 @@ public class AdminController {
         private String email;
         private String role;
         private String createdAt;
+        private Double balance;
         private boolean isCurrentAdmin;
         
         public static UserAdminDTO fromEntity(User user, String currentAdminUsername) {
@@ -168,6 +168,7 @@ public class AdminController {
                     .email(user.getEmail())
                     .role(user.getRole() != null ? user.getRole().name() : User.Role.ROLE_USER.name())
                     .createdAt(user.getCreatedAt() != null ? user.getCreatedAt().toString() : null)
+                    .balance(user.getBalance() != null ? user.getBalance() : 0.0)
                     .isCurrentAdmin(user.getUsername().equals(currentAdminUsername))
                     .build();
         }
@@ -227,5 +228,48 @@ public class AdminController {
         @NotBlank(message = "新用户名不能为空")
         @Size(min = 2, max = 50, message = "用户名长度必须在2-50个字符之间")
         private String newUsername;
+    }
+    
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/users/{userId}/balance")
+    public ResponseEntity<ApiResponse<Void>> updateUserBalance(
+            @PathVariable Long userId,
+            @Valid @RequestBody UpdateBalanceRequest request) {
+        
+        String currentAdmin = SecurityContextHolder.getContext().getAuthentication().getName();
+        
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("用户不存在", null));
+        }
+
+        User user = userOpt.get();
+
+        Double newBalance = request.getNewBalance();
+        if (newBalance == null) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("余额不能为空", null));
+        }
+        
+        if (newBalance < 0) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("余额不能为负数", null));
+        }
+
+        user.setBalance(newBalance);
+        userRepository.save(user);
+
+        log.info("管理员修改用户余额: userId={}, username={}, 旧余额={}, 新余额={}, 操作管理员: {}",
+                userId, user.getUsername(), 
+                user.getBalance() != null ? user.getBalance() : 0.0, 
+                newBalance, currentAdmin);
+
+        return ResponseEntity.ok(ApiResponse.success("余额修改成功", null));
+    }
+    
+    @lombok.Data
+    public static class UpdateBalanceRequest {
+        private Double newBalance;
     }
 }

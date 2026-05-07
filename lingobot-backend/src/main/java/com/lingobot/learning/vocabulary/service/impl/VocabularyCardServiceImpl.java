@@ -4,6 +4,8 @@ import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.repository.ConversationRepository;
+import com.lingobot.core.user.preference.dto.UserPreferenceDTO;
+import com.lingobot.core.user.preference.service.UserPreferenceService;
 import com.lingobot.learning.mode.service.SystemPromptService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.dto.openai.OpenAiTool;
@@ -44,6 +46,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     private final ToolLoopService toolLoopService;
     private final McpService mcpService;
     private final SystemPromptService systemPromptService;
+    private final UserPreferenceService userPreferenceService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final MeaningCheckService meaningCheckService;
@@ -91,7 +94,6 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             String json = stringRedisTemplate.opsForValue().get(key);
             if (json != null && !json.isEmpty()) {
                 VocabularyCardDTO dto = objectMapper.readValue(json, VocabularyCardDTO.class);
-                log.debug("Cache hit: cardId={}", cardId);
                 return Optional.of(dto);
             }
         } catch (Exception e) {
@@ -110,7 +112,6 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             if (json != null && !json.isEmpty()) {
                 List<VocabularyCardDTO> list = objectMapper.readValue(
                     json, new TypeReference<List<VocabularyCardDTO>>() {});
-                log.debug("Cache hit: cards list for conversationId={}", conversationId);
                 return Optional.of(list);
             }
         } catch (Exception e) {
@@ -129,7 +130,6 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             String countStr = stringRedisTemplate.opsForValue().get(key);
             if (countStr != null && !countStr.isEmpty()) {
                 Long count = Long.parseLong(countStr);
-                log.debug("Cache hit: cards count for conversationId={}, count={}", conversationId, count);
                 return Optional.of(count);
             }
         } catch (Exception e) {
@@ -206,7 +206,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
     
     /**
-     * 清除单词卡及其所属对话的所有缓�?     * 用于更新/删除操作
+     * 清除单词卡及其所属对话的所有缓存
+     * 用于更新/删除操作
      */
     private void evictCardAndConversationCache(Long cardId, Long conversationId) {
         evictCardCache(cardId);
@@ -424,7 +425,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         
         card.setUserSentence(userSentence);
         VocabularyCard saved = vocabularyCardRepository.save(card);
-        // 更新后清除缓�?        evictCardAndConversationCache(cardId, card.getConversation().getId());
+        // 更新后清除缓存
+        evictCardAndConversationCache(cardId, card.getConversation().getId());
         log.info("Updated user sentence and evicted cache: cardId={}", cardId);
         return toDTOWithNavigation(saved);
     }
@@ -437,7 +439,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         
         card.setAiFeedback(feedback);
         VocabularyCard saved = vocabularyCardRepository.save(card);
-        // 更新后清除缓�?        evictCardAndConversationCache(cardId, card.getConversation().getId());
+        // 更新后清除缓存
+        evictCardAndConversationCache(cardId, card.getConversation().getId());
         log.info("Updated AI feedback and evicted cache: cardId={}", cardId);
         return toDTOWithNavigation(saved);
     }
@@ -450,7 +453,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         
         card.setIsCompleted(true);
         VocabularyCard saved = vocabularyCardRepository.save(card);
-        // 更新后清除缓�?        evictCardAndConversationCache(cardId, card.getConversation().getId());
+        // 更新后清除缓存
+        evictCardAndConversationCache(cardId, card.getConversation().getId());
         log.info("Marked card as completed and evicted cache: cardId={}", cardId);
         return toDTOWithNavigation(saved);
     }
@@ -514,35 +518,26 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             return generateNextCard(conversationId, level);
         }
 
-        // 检查当前是否是最后一张卡片
-                // 找到当前应该重新生成的卡片：第一个未完成的，或者最后一个
-                VocabularyCard currentCard = null;
-        for (VocabularyCard card : activeCards) {
-            if (!card.getIsCompleted()) {
-                currentCard = card;
-                break;
-            }
-        }
-        if (currentCard == null) {
-            currentCard = activeCards.get(activeCards.size() - 1);
-        }
-
-        // 检查是否是最后一张卡片
+        // 获取最后一张卡片（重新生成只能针对最后一张卡片）
+        VocabularyCard lastCard = activeCards.get(activeCards.size() - 1);
+        
+        // 验证最后一张卡片的位置
         Integer maxPosition = vocabularyCardRepository.findMaxActivePositionByConversationId(conversationId)
                 .orElse(0);
         
-        if (!currentCard.getPosition().equals(maxPosition)) {
-            throw new ChatException("只能在最后一张卡片时重新生成");
+        if (!lastCard.getPosition().equals(maxPosition)) {
+            log.warn("最后一张卡片的位置不一致: cardPosition={}, maxPosition={}", 
+                    lastCard.getPosition(), maxPosition);
         }
 
-        Integer replacePosition = currentCard.getPosition();
-        Integer currentRegenerationIndex = currentCard.getRegenerationIndex();
+        Integer replacePosition = lastCard.getPosition();
+        Integer currentRegenerationIndex = lastCard.getRegenerationIndex();
         
         // 标记旧卡片为已重新生成（不删除，数据库保留）
         log.info("标记词汇卡为已重新生成: id={}, word={}, position={}, regenerationIndex={}",
-                currentCard.getId(), currentCard.getWord(), replacePosition, currentRegenerationIndex);
-        currentCard.setIsRegenerated(true);
-        vocabularyCardRepository.save(currentCard);
+                lastCard.getId(), lastCard.getWord(), replacePosition, currentRegenerationIndex);
+        lastCard.setIsRegenerated(true);
+        vocabularyCardRepository.save(lastCard);
 
         // 生成新词汇卡（使用相同的position，regenerationIndex递增）
                 WordCardData generated = generateRandomWord(conversationId, level, "regenerate");
@@ -576,10 +571,10 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         log.info("重新生成词汇卡成功: id={}, word={}, position={}, regenerationIndex={}",
                 saved.getId(), saved.getWord(), replacePosition, saved.getRegenerationIndex());
         // 重新生成卡片后清除缓存（旧卡片和新卡片的缓存都清除）
-        evictCardCache(currentCard.getId());
+        evictCardCache(lastCard.getId());
         evictConversationCache(conversationId);
         log.info("Regenerated card and evicted cache: conversationId={}, oldCardId={}, newCardId={}", 
-                conversationId, currentCard.getId(), saved.getId());
+                conversationId, lastCard.getId(), saved.getId());
         return toDTOWithNavigation(saved);
     }
 
@@ -616,7 +611,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
      */
     private Conversation getConversation(Long conversationId) {
         return conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ChatException("对话不存�? " + conversationId));
+                .orElseThrow(() -> new ChatException("对话不存在: " + conversationId));
     }
 
     /**
@@ -624,7 +619,9 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
      * 核心流程：构建System Prompt -> 调用AI -> 解析工具返回结果
      * @param conversationId 对话ID
      * @param level 难度级别
-     * @param intent 意图（next_word/regenerate�?     * @return 生成的单词卡片数�?     */
+     * @param intent 意图（next_word/regenerate）
+     * @return 生成的单词卡片数据
+     */
     private WordCardData generateRandomWord(Long conversationId, String level, String intent) {
         try {
             log.info("=== 开始生成词汇卡（AI Agent 模式）===");
@@ -632,6 +629,23 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
             String vocabularyCategory = DEFAULT_VOCABULARY_CATEGORY;
             String vocabularyDifficulty = level != null ? level.toLowerCase() : "b2";
+            String model = DEFAULT_MODEL;
+
+            Conversation conversation = getConversation(conversationId);
+            if (conversation.getUser() != null && conversation.getUser().getId() != null) {
+                UserPreferenceDTO preference = userPreferenceService.getOrCreatePreference(conversation.getUser().getId());
+                if (isNotBlank(preference.getVocabularyCategory())) {
+                    vocabularyCategory = preference.getVocabularyCategory().toLowerCase();
+                }
+                if (level == null && isNotBlank(preference.getVocabularyDifficulty())) {
+                    vocabularyDifficulty = preference.getVocabularyDifficulty().toLowerCase();
+                }
+                if (isNotBlank(preference.getVocabularyModel())) {
+                    model = preference.getVocabularyModel().toLowerCase();
+                }
+            }
+            log.info("Using vocabulary preferences: category={}, difficulty={}, model={}",
+                    vocabularyCategory, vocabularyDifficulty, model);
 
             // 获取System Prompt并追加历史单词记录（避免重复）
             String systemPrompt = systemPromptService.getSystemPrompt(
@@ -664,7 +678,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             // 调用AI Agent执行工具调用
             log.info("调用 AI Agent 执行工具调用...");
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
-                    conversationId, messages, tools, DEFAULT_MODEL);
+                    conversationId, messages, tools, model);
 
             log.info("AI Agent 执行结果: hasToolCalls={}, hasTextResponse={}",
                     result.hasToolCalls(), result.hasTextResponse());
@@ -688,6 +702,10 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             log.error("生成词汇卡时发生错误", e);
             return getDefaultWord();
         }
+    }
+
+    private boolean isNotBlank(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     /**
@@ -732,7 +750,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                     .build();
 
         } catch (Exception e) {
-            log.error("解析工具返回结果时发生错�? {}", toolResultText, e);
+            log.error("解析工具返回结果时发生错误: {}", toolResultText, e);
             return getDefaultWord();
         }
     }
@@ -755,7 +773,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
      * 构建历史单词记录，用于注入到System Prompt中避免AI生成重复单词
      * 包含重新生成的历史，让AI知道用户对哪些单词不满意
      * @param conversationId 对话ID
-     * @return 格式化的历史记录字符�?     */
+     * @return 格式化的历史记录字符串
+     */
     private String buildVocabularyHistoryForPrompt(Long conversationId) {
         // 获取所有卡片（包括已重新生成的）用于构建历史
                 List<VocabularyCard> allCards = vocabularyCardRepository.findByConversationIdOrderByPositionAsc(conversationId);
@@ -810,7 +829,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             sb.append("\n");
         }
         
-        log.info("已为 conversationId {} 构建历史信息，包�?{} 个位置的单词记录", conversationId, positions.size());
+        log.info("已为 conversationId {} 构建历史信息，包含 {} 个位置的单词记录", conversationId, positions.size());
         return sb.toString();
     }
 
@@ -831,7 +850,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
 
     /**
-     * 获取某个位置的重新生成历史单词列�?     */
+     * 获取某个位置的重新生成历史单词列表
+     */
     private List<String> getRegeneratedWords(Long conversationId, Integer position) {
         List<VocabularyCard> cardsAtPosition = vocabularyCardRepository
                 .findByConversationIdAndPositionOrderByRegenerationIndexAsc(conversationId, position);
@@ -843,7 +863,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
 
     /**
-     * 将实体转换为DTO（基础转换�?     */
+     * 将实体转换为DTO（基础转换）
+     */
     private VocabularyCardDTO toDTO(VocabularyCard card) {
         // 获取该位置的重新生成历史
         List<String> regeneratedWords = getRegeneratedWords(

@@ -19,4 +19,6 @@ public class ConversationDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private int messageCount;
+    
+    private ContextStatusDTO contextStatus;
 }

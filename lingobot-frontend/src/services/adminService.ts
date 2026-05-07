@@ -3,7 +3,8 @@ import {
   BlockedUserInfo, 
   BlockedIpInfo, 
   AdminStatus, 
-  UserAdminDTO 
+  UserAdminDTO,
+  UpdateBalanceRequest
 } from '../types';
 
 export const adminService = {
@@ -41,5 +42,10 @@ export const adminService = {
 
   updateUserUsername: async (userId: number, newUsername: string): Promise<void> => {
     return httpClient.put<void>(`/admin/users/${userId}/username`, { newUsername });
+  },
+
+  updateUserBalance: async (userId: number, newBalance: number): Promise<void> => {
+    const request: UpdateBalanceRequest = { newBalance };
+    return httpClient.put<void>(`/admin/users/${userId}/balance`, request);
   },
 };

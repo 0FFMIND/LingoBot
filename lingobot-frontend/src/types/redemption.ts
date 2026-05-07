@@ -9,10 +9,13 @@ export interface RedemptionCodeDTO {
   createdByUserId: number;
   createdByUsername: string;
   createdAt: string;
+  expiresAt?: string;
+  isExpired?: boolean;
 }
 
 export interface CreateRedemptionCodeRequest {
   points: number;
+  expiresInSeconds?: number;
 }
 
 export interface RedeemCodeRequest {

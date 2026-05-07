@@ -35,7 +35,8 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
     }
 
     @Override
-    public UserPreferenceDTO getOrCreatePreference(Long userId) {
+    @Transactional
+    public synchronized UserPreferenceDTO getOrCreatePreference(Long userId) {
         String cacheKey = getCacheKey(userId);
         
         Object cached = redisTemplate.opsForValue().get(cacheKey);
@@ -69,7 +70,7 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
 
     @Override
     @Transactional
-    public UserPreferenceDTO updatePreference(Long userId, UpdateUserPreferenceRequest request) {
+    public synchronized UserPreferenceDTO updatePreference(Long userId, UpdateUserPreferenceRequest request) {
         String cacheKey = getCacheKey(userId);
         
         Optional<UserPreference> preferenceOpt = userPreferenceRepository.findByUserId(userId);

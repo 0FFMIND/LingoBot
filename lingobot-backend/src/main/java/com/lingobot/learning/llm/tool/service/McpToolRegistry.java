@@ -100,7 +100,8 @@ public class McpToolRegistry {
     }
 
     /**
-     * 执行指定的工具调�?     */
+     * 执行指定的工具调用
+     */
     public McpToolResult executeTool(McpToolCall call) {
         String toolName = call.getName();
         McpToolHandler handler = toolHandlers.get(toolName);

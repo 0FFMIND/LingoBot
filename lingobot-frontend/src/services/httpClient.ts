@@ -134,6 +134,7 @@ export const httpClient = {
   get: async <T>(url: string): Promise<T> => {
     const response = await fetch(`${API_BASE}${url}`, {
       headers: getAuthHeaders(),
+      cache: 'no-store',
     });
     await handleResponse(response);
     const result = await response.json();
@@ -175,6 +176,7 @@ export const httpClient = {
   getRaw: async (url: string): Promise<Response> => {
     const response = await fetch(`${API_BASE}${url}`, {
       headers: getAuthHeaders(),
+      cache: 'no-store',
     });
     await handleResponse(response);
     return response;

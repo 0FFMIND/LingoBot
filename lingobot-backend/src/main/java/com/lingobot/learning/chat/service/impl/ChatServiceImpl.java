@@ -4,6 +4,8 @@ import com.lingobot.learning.chat.dto.ChatRequest;
 import com.lingobot.learning.chat.dto.EditMessageRequest;
 import com.lingobot.learning.chat.dto.RetryMessageRequest;
 import com.lingobot.learning.chat.service.ChatService;
+import com.lingobot.learning.chat.service.ContextManagerService;
+import com.lingobot.learning.chat.service.MemoryCompactService;
 import com.lingobot.learning.chat.service.MessageHistoryService;
 import com.lingobot.learning.chat.service.SseEmitterService;
 import com.lingobot.learning.chat.service.ToolLoopService;
@@ -35,6 +37,8 @@ public class ChatServiceImpl implements ChatService {
     private final ToolLoopService toolLoopService;
     private final MessageHistoryService messageHistoryService;
     private final SseEmitterService sseEmitterService;
+    private final ContextManagerService contextManagerService;
+    private final MemoryCompactService memoryCompactService;
     
     private static final String DEFAULT_MODE = "chat";
     
@@ -69,6 +73,8 @@ public class ChatServiceImpl implements ChatService {
             request.getLearningModeOrDefault();
         String vocabularyCategory = request.getVocabularyCategoryOrDefault();
         String vocabularyDifficulty = request.getVocabularyDifficultyOrDefault();
+        
+        checkAndExecuteCompactIfNeeded(request.getConversationId());
         
         List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryWithMode(
                 request.getConversationId(), learningMode, vocabularyCategory, vocabularyDifficulty);
@@ -555,5 +561,39 @@ public class ChatServiceImpl implements ChatService {
         List<OpenAiTool> tools = mcpService.getOpenAiTools();
         
         return sseEmitterService.createStreamEmitterWithTools(request.getConversationId(), messages, tools, DEFAULT_MODE, "gpt");
+    }
+    
+    private void checkAndExecuteCompactIfNeeded(Long conversationId) {
+        if (conversationId == null) {
+            return;
+        }
+        
+        try {
+            ContextManagerService.CompactCheckResult checkResult = 
+                    contextManagerService.checkAndGetReason(conversationId);
+            
+            if (checkResult.isNeeded()) {
+                log.info("检测到需要Compact，conversationId: {}, 原因: {}", 
+                        conversationId, checkResult.getReason());
+                
+                MemoryCompactService.CompactResult result = 
+                        memoryCompactService.executeCompact(conversationId);
+                
+                if (result.isExecuted()) {
+                    log.info("Compact执行完成，conversationId: {}, 之前: {} tokens, 之后: {} tokens, 节省: {} tokens",
+                            conversationId, 
+                            result.getBeforeTokens(), 
+                            result.getAfterTokens(), 
+                            result.getSavedTokens());
+                } else {
+                    log.warn("Compact未执行，conversationId: {}, 原因: {}", 
+                            conversationId, result.getReason());
+                }
+            } else {
+                log.debug("不需要Compact，conversationId: {}", conversationId);
+            }
+        } catch (Exception e) {
+            log.error("检查或执行Compact时发生错误，conversationId: {}", conversationId, e);
+        }
     }
 }

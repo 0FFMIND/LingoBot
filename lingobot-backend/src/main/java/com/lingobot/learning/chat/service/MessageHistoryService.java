@@ -1,8 +1,11 @@
 package com.lingobot.learning.chat.service;
 
 import com.lingobot.core.conversation.dto.MessageDTO;
+import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.entity.Message;
+import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.core.conversation.repository.MessageRepository;
+import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.learning.mode.service.SystemPromptService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
@@ -25,8 +28,10 @@ public class MessageHistoryService {
     private final SystemPromptService systemPromptService;
     private final VocabularyStateService vocabularyStateService;
     private final VocabularyCardRepository vocabularyCardRepository;
+    private final ConversationRepository conversationRepository;
     
     private static final int MAX_HISTORY_MESSAGES = 20;
+    private static final int RECENT_CARDS_TO_KEEP_IN_DETAIL = 5;
     
     public List<OpenAiChatMessage> buildConversationHistory(Long conversationId) {
         return buildConversationHistoryWithMode(conversationId, "chat");
@@ -53,7 +58,7 @@ public class MessageHistoryService {
         List<OpenAiChatMessage> result = buildConversationHistoryUpToIndexWithMode(allMessages, allMessages.size(), 
                 learningMode, vocabularyCategory, vocabularyDifficulty, conversationId);
         
-        log.info("=== 发送给 AI 的完整对话历�?===");
+        log.info("=== 发送给 AI 的完整对话历史 ===");
         for (int i = 0; i < result.size(); i++) {
             OpenAiChatMessage msg = result.get(i);
             String contentStr = msg.getContentAsString();
@@ -98,7 +103,7 @@ public class MessageHistoryService {
                 }
             }
             messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
-            log.info("已添�?System Prompt 用于模式: {}, Category: {}, Difficulty: {}",
+            log.info("已添加 System Prompt 用于模式: {}, Category: {}, Difficulty: {}",
                     learningMode, vocabularyCategory, vocabularyDifficulty);
         }
         
@@ -118,6 +123,11 @@ public class MessageHistoryService {
     }
     
     private String buildVocabularyHistoryForPrompt(Long conversationId) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ChatException("对话不存在: " + conversationId));
+        
+        String compactedSummary = conversation.getCompactedSummary();
+        
         List<VocabularyCard> allCards = vocabularyCardRepository.findByConversationIdOrderByPositionAsc(conversationId);
         
         if (allCards == null || allCards.isEmpty()) {
@@ -142,18 +152,47 @@ public class MessageHistoryService {
         
         StringBuilder sb = new StringBuilder();
         
-        if (!completedCards.isEmpty()) {
-            sb.append("\n\n## 历史单词卡学习记录\n");
-            sb.append("用户之前已经学习完成了以下单词，请在生成新单词时确保不重复：\n\n");
+        if (compactedSummary != null && !compactedSummary.isEmpty()) {
+            sb.append("\n\n## [已Compact] 历史单词卡学习摘要\n");
+            sb.append("以下是之前学习的单词摘要（已压缩以节省上下文）：\n\n");
+            sb.append(compactedSummary);
+            sb.append("\n\n");
             
-            for (int i = 0; i < completedCards.size(); i++) {
-                VocabularyCard card = completedCards.get(i);
-                sb.append(i + 1).append(". **").append(card.getWord() != null ? card.getWord() : "").append("**\n");
-                if (card.getMeaning() != null && !card.getMeaning().isEmpty()) {
-                    sb.append("   - 释义: ").append(card.getMeaning()).append("\n");
+            log.info("使用Compacted摘要构建词汇历史，conversationId: {}", conversationId);
+            
+            if (!completedCards.isEmpty()) {
+                int recentCount = Math.min(completedCards.size(), RECENT_CARDS_TO_KEEP_IN_DETAIL);
+                if (recentCount > 0) {
+                    List<VocabularyCard> recentCompleted = completedCards.subList(
+                            completedCards.size() - recentCount, 
+                            completedCards.size()
+                    );
+                    
+                    sb.append("## 最近完成的单词（详细信息）\n");
+                    for (int i = 0; i < recentCompleted.size(); i++) {
+                        VocabularyCard card = recentCompleted.get(i);
+                        sb.append(i + 1).append(". **").append(card.getWord() != null ? card.getWord() : "").append("**\n");
+                        if (card.getMeaning() != null && !card.getMeaning().isEmpty()) {
+                            sb.append("   - 释义: ").append(card.getMeaning()).append("\n");
+                        }
+                    }
+                    sb.append("\n");
                 }
             }
-            sb.append("\n");
+        } else {
+            if (!completedCards.isEmpty()) {
+                sb.append("\n\n## 历史单词卡学习记录\n");
+                sb.append("用户之前已经学习完成了以下单词，请在生成新单词时确保不重复：\n\n");
+                
+                for (int i = 0; i < completedCards.size(); i++) {
+                    VocabularyCard card = completedCards.get(i);
+                    sb.append(i + 1).append(". **").append(card.getWord() != null ? card.getWord() : "").append("**\n");
+                    if (card.getMeaning() != null && !card.getMeaning().isEmpty()) {
+                        sb.append("   - 释义: ").append(card.getMeaning()).append("\n");
+                    }
+                }
+                sb.append("\n");
+            }
         }
         
         if (!incompleteCards.isEmpty()) {
@@ -180,9 +219,9 @@ public class MessageHistoryService {
                 if (card.getUserSentence() != null && !card.getUserSentence().isEmpty()) {
                     sb.append("   - 用户造的句子: ").append(card.getUserSentence()).append("\n");
                     if (card.getAiFeedback() == null || card.getAiFeedback().isEmpty()) {
-                        sb.append("   - 状�? 句子已提交，等待 AI 反馈\n");
+                        sb.append("   - 状态: 句子已提交，等待 AI 反馈\n");
                     } else {
-                        sb.append("   - 状�? AI 已提供反馈\n");
+                        sb.append("   - 状态: AI 已提供反馈\n");
                     }
                 }
                 
@@ -196,8 +235,11 @@ public class MessageHistoryService {
             sb.append("\n");
         }
         
-        log.info("已为 conversationId {} 构建历史信息：已完成 {} 个，未完成 {} 个",
-                conversationId, completedCards.size(), incompleteCards.size());
+        log.info("已为 conversationId {} 构建词汇历史信息：hasCompactedSummary={}, 已完成 {} 个，未完成 {} 个",
+                conversationId, 
+                compactedSummary != null && !compactedSummary.isEmpty(),
+                completedCards.size(), 
+                incompleteCards.size());
         
         return sb.toString();
     }
@@ -207,7 +249,7 @@ public class MessageHistoryService {
         List<Message> messagesAsc = new ArrayList<>(latestMessagesDesc);
         java.util.Collections.reverse(messagesAsc);
         
-        log.info("获取对话消息列表（最�?0条），conversationId: {}, 消息�? {}", conversationId, messagesAsc.size());
+        log.info("获取对话消息列表（最近10条），conversationId: {}, 消息数: {}", conversationId, messagesAsc.size());
         
         return messagesAsc.stream()
                 .map(this::toDTO)
