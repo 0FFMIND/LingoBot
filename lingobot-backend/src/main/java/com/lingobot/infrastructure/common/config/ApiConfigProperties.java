@@ -7,25 +7,17 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * API配置属性类
- * 用于管理各API端点的点数消耗配置 */
 @Data
 @Component
 @ConfigurationProperties(prefix = "api")
 public class ApiConfigProperties {
+
+    // 兜底 cost，端点未配置时不扣费
+    private double defaultCost = 0.0;
     
-    /**
-     * 默认点数消耗     */
-    private double defaultCost = 0.1;
-    
-    /**
-     * API端点配置
-     */
     private Map<String, Map<String, ApiEndpointConfig>> endpoints = new HashMap<>();
-    
-    /**
-     * 获取指定API的点数消耗     * @param category API类别（如vocabulary）     * @param endpointName 端点名称（如create-card）     * @return 点数消耗     */
+
+    // 查询指定端点的 cost，category 如 "vocabulary"，endpointName 如 "create-card"
     public double getCost(String category, String endpointName) {
         if (endpoints.containsKey(category)) {
             Map<String, ApiEndpointConfig> categoryEndpoints = endpoints.get(category);
@@ -33,12 +25,10 @@ public class ApiConfigProperties {
                 return categoryEndpoints.get(endpointName).getCost();
             }
         }
-        return defaultCost;
+        // 未命中任何配置，默认不扣费
+        return defaultCost; 
     }
     
-    /**
-     * API端点配置
-     */
     @Data
     public static class ApiEndpointConfig {
         private String path;

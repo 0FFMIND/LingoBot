@@ -20,25 +20,25 @@ spring:
             enable: true
   
   datasource:
-    url: jdbc:postgresql://localhost:5432/lingobotdb
+    url: jdbc:postgresql://localhost:5432/lingobotdb  # 数据库地址，lingobotdb 为库名
     driver-class-name: org.postgresql.Driver
-    username: lingobot_user
-    password: lingobot_password
+    username: ${DB_USERNAME}   # 读取 .env 中的 DB_USERNAME
+    password: ${DB_PASSWORD}   # 读取 .env 中的 DB_PASSWORD
   
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: update  # 启动时自动对比 Entity 和数据库表结构，有差异则更新（不删数据）
+    show-sql: true      # 在控制台打印执行的 SQL 语句，便于调试
     properties:
       hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true                                      # SQL 格式化输出，更易读
+        dialect: org.hibernate.dialect.PostgreSQLDialect      # 指定 PostgreSQL 方言
   
   data:
     redis:
       host: localhost
       port: 6379
-      password: 
+      password: ${REDIS_PASSWORD}
       timeout: 10000ms
       lettuce:
         pool:
@@ -77,8 +77,3 @@ llm:
   max-tokens: ${LLM_MAX_TOKENS:4096}
   timeout: ${LLM_TIMEOUT:120000}
   audio-enabled: ${LLM_AUDIO_ENABLED:true}
-
-proxy:
-  enabled: ${PROXY_ENABLED:false}
-  host: ${PROXY_HOST:localhost}
-  port: ${PROXY_PORT:7897}

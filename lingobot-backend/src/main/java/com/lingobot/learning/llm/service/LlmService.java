@@ -1,7 +1,6 @@
 package com.lingobot.learning.llm.service;
 
 import com.lingobot.media.audio.service.AudioConversionService;
-import com.lingobot.infrastructure.common.config.ProxyProperties;
 import com.lingobot.infrastructure.common.config.LlmProperties;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatRequest;
@@ -16,8 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.net.InetSocketAddress;
-import java.net.ProxySelector;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -35,7 +32,6 @@ public class LlmService {
     private static final String TOOL_CALL_MARKER = "TOOL_CALL:";
 
     private final LlmProperties llmProperties;
-    private final ProxyProperties proxyProperties;
     private final ObjectMapper objectMapper;
     private final AudioConversionService audioConversionService;
 
@@ -398,12 +394,6 @@ public class LlmService {
                         .version(HttpClient.Version.HTTP_1_1)
                         .connectTimeout(Duration.ofSeconds(30));
 
-                if (proxyProperties.isValid()) {
-                    log.info("LLM API 流式调用使用代理: {}:{}", proxyProperties.getHost(), proxyProperties.getPort());
-                    InetSocketAddress proxyAddress = new InetSocketAddress(proxyProperties.getHost(), proxyProperties.getPort());
-                    clientBuilder.proxy(ProxySelector.of(proxyAddress));
-                }
-
                 HttpClient httpClient = clientBuilder.build();
 
                 java.net.http.HttpResponse<java.io.InputStream> response =
@@ -685,12 +675,6 @@ public class LlmService {
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(30));
 
-        if (proxyProperties.isValid()) {
-            log.info("LLM API 使用代理: {}:{}", proxyProperties.getHost(), proxyProperties.getPort());
-            InetSocketAddress proxyAddress = new InetSocketAddress(proxyProperties.getHost(), proxyProperties.getPort());
-            clientBuilder.proxy(ProxySelector.of(proxyAddress));
-        }
-
         HttpClient httpClient = clientBuilder.build();
 
         java.net.http.HttpResponse<String> response =
@@ -735,12 +719,6 @@ public class LlmService {
                 HttpClient.Builder clientBuilder = HttpClient.newBuilder()
                         .version(HttpClient.Version.HTTP_1_1)
                         .connectTimeout(Duration.ofSeconds(30));
-
-                if (proxyProperties.isValid()) {
-                    log.info("LLM API 流式调用使用代理: {}:{}", proxyProperties.getHost(), proxyProperties.getPort());
-                    InetSocketAddress proxyAddress = new InetSocketAddress(proxyProperties.getHost(), proxyProperties.getPort());
-                    clientBuilder.proxy(ProxySelector.of(proxyAddress));
-                }
 
                 HttpClient httpClient = clientBuilder.build();
 
