@@ -4,6 +4,7 @@ import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
 import com.lingobot.core.user.auth.service.LoginAttemptService;
 import com.lingobot.infrastructure.common.response.ApiResponse;
+import com.lingobot.infrastructure.common.response.ErrorCode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -87,29 +88,29 @@ public class AdminController {
     
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/users/{userId}")
-    public ResponseEntity<ApiResponse<Void>> deleteUser(@PathVariable Long userId) {
+    public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
         String currentAdmin = SecurityContextHolder.getContext().getAuthentication().getName();
         
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户不存在", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户不存在"));
         }
         
         User user = userOpt.get();
         
         if (user.getUsername().equals(currentAdmin)) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("不能删除当前登录的管理员账户", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "不能删除当前登录的管理员账户"));
         }
         
         loginAttemptService.unlockUser(userId);
         
         userRepository.delete(user);
-        log.info("管理员删除用户: userId={}, username={}, 操作管理员: {}", 
+        log.info("管理员删除用户: userId={}, username={}, 操作管理员: {}",
                 userId, user.getUsername(), currentAdmin);
-        
-        return ResponseEntity.ok(ApiResponse.success("用户删除成功", null));
+
+        return ResponseEntity.noContent().build();
     }
     
     @PreAuthorize("hasRole('ADMIN')")
@@ -123,14 +124,14 @@ public class AdminController {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户不存在", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户不存在"));
         }
 
         User user = userOpt.get();
 
         if (request.getNewPassword() == null || request.getNewPassword().length() < 6) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("密码长度至少6个字符", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "密码长度至少6个字符"));
         }
         
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
@@ -185,7 +186,7 @@ public class AdminController {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户不存在", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户不存在"));
         }
 
         User user = userOpt.get();
@@ -193,18 +194,18 @@ public class AdminController {
         String newUsername = request.getNewUsername();
         if (newUsername == null || newUsername.trim().isEmpty()) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户名不能为空", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户名不能为空"));
         }
 
         if (newUsername.length() < 2 || newUsername.length() > 50) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户名长度必须在2-50个字符之间", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户名长度必须在2-50个字符之间"));
         }
 
         Optional<User> existingUser = userRepository.findByUsername(newUsername.trim());
         if (existingUser.isPresent() && !existingUser.get().getId().equals(userId)) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户名已被使用", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户名已被使用"));
         }
 
         user.setUsername(newUsername.trim());
@@ -241,7 +242,7 @@ public class AdminController {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户不存在", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户不存在"));
         }
 
         User user = userOpt.get();
@@ -249,12 +250,12 @@ public class AdminController {
         Double newBalance = request.getNewBalance();
         if (newBalance == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("余额不能为空", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "余额不能为空"));
         }
         
         if (newBalance < 0) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("余额不能为负数", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "余额不能为负数"));
         }
 
         user.setBalance(newBalance);

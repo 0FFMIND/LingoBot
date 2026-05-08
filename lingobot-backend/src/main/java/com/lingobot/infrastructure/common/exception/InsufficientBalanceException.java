@@ -1,8 +1,6 @@
 package com.lingobot.infrastructure.common.exception;
 
-/**
- * 余额不足异常
- * 当用户余额不足以支付API调用时抛出 */
+// 余额不足异常：当用户余额不足以支付本次 API 调用时抛出，由 GlobalExceptionHandler 捕获并返回 402
 public class InsufficientBalanceException extends RuntimeException {
     
     private final double currentBalance;

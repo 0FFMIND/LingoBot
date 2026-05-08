@@ -89,8 +89,8 @@ public class ConversationController {
     }
     
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<Void>> deleteConversation(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteConversation(@PathVariable Long id) {
         conversationService.deleteConversation(id);
-        return ResponseEntity.ok(ApiResponse.success("对话已删除", null));
+        return ResponseEntity.noContent().build();
     }
 }

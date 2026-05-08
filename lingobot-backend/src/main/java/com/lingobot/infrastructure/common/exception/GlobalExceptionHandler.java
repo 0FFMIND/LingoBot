@@ -1,5 +1,7 @@
 package com.lingobot.infrastructure.common.exception;
 
+import com.lingobot.infrastructure.common.response.ApiResponse;
+import com.lingobot.infrastructure.common.response.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -9,114 +11,88 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-
+/**
+ * 全局异常拦截器。
+ *
+ * @RestControllerAdvice 会拦截所有 Controller 抛出的异常，
+ * 在异常到达客户端之前统一包装成 ApiResponse 格式返回，
+ * 避免 Spring 默认的 /error 白页或裸异常堆栈暴露给前端。
+ *
+ * 每个 @ExceptionHandler 方法负责一种异常类型：
+ * 设置合适的 HTTP 状态码 + 将错误信息填入 ApiResponse.error()，
+ * 前端同时拿到 HTTP 状态码和响应体中的 code / message。
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    
+
+    // SSE 长连接正常断开时触发，无需返回响应体
     @ExceptionHandler(AsyncRequestTimeoutException.class)
-    public void handleAsyncRequestTimeoutException(AsyncRequestTimeoutException ex) {
-        log.debug("异步请求超时（SSE 连接正常超时）: {}", ex.getMessage());
+    public void handleAsyncRequestTimeout(AsyncRequestTimeoutException ex) {
+        log.debug("SSE 连接超时: {}", ex.getMessage());
     }
-    
+
+    // 业务逻辑主动抛出的错误（如对话不存在、消息为空等）→ 400
     @ExceptionHandler(ChatException.class)
-    public ResponseEntity<Map<String, Object>> handleChatException(ChatException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleChatException(ChatException ex) {
         log.error("业务异常: {}", ex.getMessage());
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.BAD_REQUEST.value());
-        body.put("error", "Bad Request");
-        body.put("message", ex.getMessage());
-        
-        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ErrorCode.BAD_REQUEST, ex.getMessage()));
     }
-    
+
+    // 限流触发时抛出（如登录频率过高）→ 429
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalStateException(IllegalStateException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleIllegalStateException(IllegalStateException ex) {
         log.warn("业务状态异常: {}", ex.getMessage());
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.TOO_MANY_REQUESTS.value());
-        body.put("error", "Too Many Requests");
-        body.put("message", ex.getMessage());
-        
-        return new ResponseEntity<>(body, HttpStatus.TOO_MANY_REQUESTS);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiResponse.error(ErrorCode.TOO_MANY_REQUESTS, ex.getMessage()));
     }
-    
+
+    // 请求参数校验失败 → 400
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(IllegalArgumentException ex) {
         log.warn("参数异常: {}", ex.getMessage());
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.BAD_REQUEST.value());
-        body.put("error", "Bad Request");
-        body.put("message", ex.getMessage());
-        
-        return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(ErrorCode.BAD_REQUEST, ex.getMessage()));
     }
-    
+
+    // JWT 无效或未登录，Spring Security 抛出 → 401
     @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<Map<String, Object>> handleAuthenticationException(AuthenticationException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleAuthenticationException(AuthenticationException ex) {
         log.warn("认证异常: {}", ex.getMessage());
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.UNAUTHORIZED.value());
-        body.put("error", "Unauthorized");
-        body.put("message", "请先登录");
-        
-        return new ResponseEntity<>(body, HttpStatus.UNAUTHORIZED);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(ErrorCode.UNAUTHORIZED));
     }
-    
+
+    // 已登录但权限不足（如普通用户访问管理员接口）→ 403
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, Object>> handleAccessDeniedException(AccessDeniedException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException ex) {
         log.warn("访问被拒绝: {}", ex.getMessage());
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.FORBIDDEN.value());
-        body.put("error", "Forbidden");
-        body.put("message", "没有权限访问此资源");
-        
-        return new ResponseEntity<>(body, HttpStatus.FORBIDDEN);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(ErrorCode.FORBIDDEN));
     }
-    
+
+    // 用户余额不足以支付本次 API 调用 → 402
     @ExceptionHandler(InsufficientBalanceException.class)
-    public ResponseEntity<Map<String, Object>> handleInsufficientBalanceException(InsufficientBalanceException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleInsufficientBalanceException(InsufficientBalanceException ex) {
         log.warn("余额不足: {}", ex.getMessage());
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.PAYMENT_REQUIRED.value());
-        body.put("error", "Payment Required");
-        body.put("message", ex.getMessage());
-        body.put("currentBalance", ex.getCurrentBalance());
-        body.put("requiredCost", ex.getRequiredCost());
-        
-        return new ResponseEntity<>(body, HttpStatus.PAYMENT_REQUIRED);
+        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
+                .body(ApiResponse.error(ErrorCode.PAYMENT_REQUIRED, ex.getMessage()));
     }
-    
+
+    // 未被上面规则覆盖的 RuntimeException 兜底 → 500
     @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex) {
         log.error("运行时异常: ", ex);
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
-        body.put("error", "Internal Server Error");
-        body.put("message", "服务器内部错误");
-        
-        return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR));
     }
-    
+
+    // 所有其他未知异常兜底 → 500
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleException(Exception ex) {
+    public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
         log.error("未知异常: ", ex);
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
-        body.put("error", "Internal Server Error");
-        body.put("message", "服务器内部错误");
-        
-        return new ResponseEntity<>(body, HttpStatus.INTERNAL_SERVER_ERROR);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR));
     }
 }

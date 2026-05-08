@@ -2,6 +2,7 @@ package com.lingobot.core.user.preference.controller;
 
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.infrastructure.common.response.ApiResponse;
+import com.lingobot.infrastructure.common.response.ErrorCode;
 import com.lingobot.core.user.preference.dto.UpdateUserPreferenceRequest;
 import com.lingobot.core.user.preference.dto.UserPreferenceDTO;
 import com.lingobot.core.user.preference.service.UserPreferenceService;
@@ -38,7 +39,7 @@ public class UserPreferenceController {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户未登录", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
         }
         
         UserPreferenceDTO updated = userPreferenceService.updatePreference(userId, request);
@@ -54,7 +55,7 @@ public class UserPreferenceController {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户未登录", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
         }
         
         UpdateUserPreferenceRequest updateRequest = UpdateUserPreferenceRequest.builder()
@@ -71,7 +72,7 @@ public class UserPreferenceController {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户未登录", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
         }
         
         UpdateUserPreferenceRequest updateRequest = UpdateUserPreferenceRequest.builder()
@@ -88,7 +89,7 @@ public class UserPreferenceController {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户未登录", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
         }
         
         UpdateUserPreferenceRequest updateRequest = UpdateUserPreferenceRequest.builder()
@@ -105,7 +106,7 @@ public class UserPreferenceController {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户未登录", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
         }
         
         UpdateUserPreferenceRequest updateRequest = UpdateUserPreferenceRequest.builder()

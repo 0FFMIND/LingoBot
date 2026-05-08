@@ -2,6 +2,7 @@ package com.lingobot.core.user.redemption.controller;
 
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.infrastructure.common.response.ApiResponse;
+import com.lingobot.infrastructure.common.response.ErrorCode;
 import com.lingobot.core.user.redemption.dto.CreateRedemptionCodeRequest;
 import com.lingobot.core.user.redemption.dto.RedeemCodeRequest;
 import com.lingobot.core.user.redemption.dto.RedemptionCodeDTO;
@@ -30,7 +31,7 @@ public class RedemptionCodeController {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户未登录", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
         }
         Double balance = redemptionCodeService.getUserBalance(userId);
         return ResponseEntity.ok(ApiResponse.success("获取余额成功", balance));
@@ -42,15 +43,16 @@ public class RedemptionCodeController {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("用户未登录", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
         }
         
         try {
             RedemptionCodeDTO result = redemptionCodeService.redeemCode(request.getCode(), userId);
-            return ResponseEntity.ok(ApiResponse.success("兑换成功", result));
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.created("兑换成功", result));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(e.getMessage(), null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, e.getMessage()));
         }
     }
     
@@ -61,14 +63,15 @@ public class RedemptionCodeController {
         Long creatorId = authService.getCurrentUserId();
         if (creatorId == null) {
             return ResponseEntity.badRequest()
-                    .body(ApiResponse.error("管理员未登录", null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "管理员未登录"));
         }
         
         RedemptionCodeDTO result = redemptionCodeService.createCode(
                 request.getPoints(), 
                 creatorId, 
                 request.getExpiresInSeconds());
-        return ResponseEntity.ok(ApiResponse.success("兑换码创建成功", result));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created("兑换码创建成功", result));
     }
     
     @PreAuthorize("hasRole('ADMIN')")
@@ -86,19 +89,19 @@ public class RedemptionCodeController {
             return ResponseEntity.ok(ApiResponse.success(code));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.error(e.getMessage(), null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, e.getMessage()));
         }
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/codes/{id}")
-    public ResponseEntity<ApiResponse<Void>> deleteCode(@PathVariable Long id) {
+    public ResponseEntity<?> deleteCode(@PathVariable Long id) {
         try {
             redemptionCodeService.deleteCode(id);
-            return ResponseEntity.ok(ApiResponse.success(null));
+            return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error(e.getMessage(), null));
+                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, e.getMessage()));
         }
     }
 }

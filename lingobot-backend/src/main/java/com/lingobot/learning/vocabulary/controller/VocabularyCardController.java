@@ -228,10 +228,9 @@ public class VocabularyCardController {
      * @return 删除成功响应
      */
     @DeleteMapping("/conversations/{conversationId}/cards")
-    public ResponseEntity<ApiResponse<Void>> deleteAllCards(
-            @PathVariable Long conversationId) {
+    public ResponseEntity<Void> deleteAllCards(@PathVariable Long conversationId) {
         vocabularyCardService.deleteAllCards(conversationId);
-        return ResponseEntity.ok(ApiResponse.success("所有词汇卡已删除", null));
+        return ResponseEntity.noContent().build();
     }
 
     /**
