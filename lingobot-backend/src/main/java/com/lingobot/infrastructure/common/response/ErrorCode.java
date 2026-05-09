@@ -45,7 +45,10 @@ public enum ErrorCode {
     PASSWORD_INCORRECT(1106, "密码错误"),
     CURRENT_PASSWORD_INCORRECT(1107, "当前密码错误"),
     NEW_PASSWORD_SAME_AS_CURRENT(1108, "新密码不能与当前密码相同"),
-    PASSWORDS_NOT_MATCH(1109, "两次输入的密码不一致");
+    PASSWORDS_NOT_MATCH(1109, "两次输入的密码不一致"),
+
+    // 余额相关 (1200-1299)
+    INSUFFICIENT_BALANCE(1201, "余额不足");
     
     private final int code;
     private final String message;

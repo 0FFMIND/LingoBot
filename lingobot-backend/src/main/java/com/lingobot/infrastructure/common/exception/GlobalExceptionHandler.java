@@ -112,14 +112,7 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR));
     }
 
-    /**
-     * 根据 ErrorCode 的 code 值推导对应的 HTTP 状态码。
-     *
-     * 规则：
-     *   4xx/5xx 范围 → 直接使用（如 400 → BAD_REQUEST）
-     *   1xxx 业务错误码 → 统一返回 400 BAD_REQUEST
-     *   其他值兜底 → 500 INTERNAL_SERVER_ERROR
-     */
+    // 根据 ErrorCode.code 推导 HTTP 状态码：4xx/5xx 直接用，1xxx 业务码→400，其余→500
     private HttpStatus extractHttpStatus(ErrorCode errorCode) {
         int code = errorCode.getCode();
         if (code >= 400 && code <= 599) {

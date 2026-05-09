@@ -6,4 +6,8 @@
 5. 加速搜索，搜索能搜到当前的
 6. 记忆功能，记忆当前学了多少单词，然后还能track
 
+重构相关：
+1.exception部分已经重构完成，需要前端利用error code和error message
+2.重构前端
+
 现在先开发支付功能把，via z-pay.cn

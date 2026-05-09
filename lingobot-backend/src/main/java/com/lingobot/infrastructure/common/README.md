@@ -17,8 +17,18 @@
   │
   └─ 异常路径 ─► GlobalExceptionHandler（@RestControllerAdvice 自动拦截）
                      │
-                     └─► ResponseEntity + ApiResponse.error(ErrorCode, msg)
-                          HTTP 状态码对应异常类型（400 / 401 / 402 / 403 / 429 / 500）
+                     ├─ ChatException / AuthException / BalanceException / BusinessException
+                     │    └─ 均继承 BaseException，携带 ErrorCode
+                     │         extractHttpStatus：400-599 直接用，1xxx 业务码→400，其余→500
+                     │
+                     ├─ Spring Security 异常
+                     │    ├─ AuthenticationException → HTTP 401
+                     │    └─ AccessDeniedException   → HTTP 403
+                     │
+                     ├─ IllegalStateException（限流）→ HTTP 429
+                     ├─ IllegalArgumentException（参数校验）→ HTTP 400
+                     ├─ AsyncRequestTimeoutException（SSE 正常断开）→ 无响应体
+                     └─ RuntimeException / Exception（兜底）→ HTTP 500
 ```
 
 ## 各类职责

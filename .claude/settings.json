@@ -23,7 +23,14 @@
       "Bash(mvn clean *)",
       "Bash(grep -v \"^\\\\[ERROR\\\\] $\")",
       "Bash(grep -v \"^\\\\\\\\[ERROR\\\\\\\\] $\")",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(redis-cli -a root ping)",
+      "Bash(redis-cli -a root PING)",
+      "Bash(redis-cli PING)",
+      "Bash(redis-cli AUTH root)",
+      "Bash(redis-cli --no-auth-warning -a root PING)",
+      "Bash(redis-cli -a root -e PING)",
+      "Bash(redis-cli --version)"
     ],
     "additionalDirectories": [
       "c:\\Users\\ALIENWARE\\Downloads\\�½��ļ��� (2)\\lingobot-backend\\src\\main\\java\\com"
