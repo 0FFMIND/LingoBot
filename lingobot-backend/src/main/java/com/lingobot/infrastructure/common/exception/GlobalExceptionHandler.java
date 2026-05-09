@@ -32,12 +32,28 @@ public class GlobalExceptionHandler {
         log.debug("SSE 连接超时: {}", ex.getMessage());
     }
 
-    // 业务逻辑主动抛出的错误（如对话不存在、消息为空等）→ 400
+    // 聊天相关业务异常（对话、消息、AI 响应等）→ 返回 HTTP + ErrorCode + 异常消息
     @ExceptionHandler(ChatException.class)
     public ResponseEntity<ApiResponse<Void>> handleChatException(ChatException ex) {
+        log.error("聊天业务异常: {}", ex.getMessage());
+        return ResponseEntity.status(extractHttpStatus(ex.getErrorCode()))
+                .body(ApiResponse.error(ex.getErrorCode(), ex.getMessage()));
+    }
+
+    // 认证与用户相关异常（注册、登录、账户管理等）→ 返回 HTTP + ErrorCode + 异常消息
+    @ExceptionHandler(AuthException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthException(AuthException ex) {
+        log.warn("认证异常: {}", ex.getMessage());
+        return ResponseEntity.status(extractHttpStatus(ex.getErrorCode()))
+                .body(ApiResponse.error(ex.getErrorCode(), ex.getMessage()));
+    }
+
+    // 通用业务异常（无明确分类的业务错误）→ 返回 HTTP + ErrorCode + 异常消息
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
         log.error("业务异常: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(ErrorCode.BAD_REQUEST, ex.getMessage()));
+        return ResponseEntity.status(extractHttpStatus(ex.getErrorCode()))
+                .body(ApiResponse.error(ex.getErrorCode(), ex.getMessage()));
     }
 
     // 限流触发时抛出（如登录频率过高）→ 429
@@ -72,12 +88,12 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ErrorCode.FORBIDDEN));
     }
 
-    // 用户余额不足以支付本次 API 调用 → 402
-    @ExceptionHandler(InsufficientBalanceException.class)
-    public ResponseEntity<ApiResponse<Void>> handleInsufficientBalanceException(InsufficientBalanceException ex) {
-        log.warn("余额不足: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
-                .body(ApiResponse.error(ErrorCode.PAYMENT_REQUIRED, ex.getMessage()));
+    // 用户余额相关异常（如余额不足等）→ 返回 HTTP + ErrorCode.PAYMENT_REQUIRED + 异常消息
+    @ExceptionHandler(BalanceException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBalanceException(BalanceException ex) {
+        log.warn("余额异常: {}", ex.getMessage());
+        return ResponseEntity.status(extractHttpStatus(ex.getErrorCode()))
+                .body(ApiResponse.error(ex.getErrorCode(), ex.getMessage()));
     }
 
     // 未被上面规则覆盖的 RuntimeException 兜底 → 500
@@ -94,5 +110,24 @@ public class GlobalExceptionHandler {
         log.error("未知异常: ", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR));
+    }
+
+    /**
+     * 根据 ErrorCode 的 code 值推导对应的 HTTP 状态码。
+     *
+     * 规则：
+     *   4xx/5xx 范围 → 直接使用（如 400 → BAD_REQUEST）
+     *   1xxx 业务错误码 → 统一返回 400 BAD_REQUEST
+     *   其他值兜底 → 500 INTERNAL_SERVER_ERROR
+     */
+    private HttpStatus extractHttpStatus(ErrorCode errorCode) {
+        int code = errorCode.getCode();
+        if (code >= 400 && code <= 599) {
+            return HttpStatus.valueOf(code);
+        }
+        if (code >= 1000) {
+            return HttpStatus.BAD_REQUEST;
+        }
+        return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 }

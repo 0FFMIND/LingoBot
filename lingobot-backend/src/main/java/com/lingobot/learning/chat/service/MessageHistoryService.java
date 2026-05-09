@@ -124,7 +124,7 @@ public class MessageHistoryService {
     
     private String buildVocabularyHistoryForPrompt(Long conversationId) {
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ChatException("对话不存在: " + conversationId));
+                .orElseThrow(() -> ChatException.badRequest("对话不存在: " + conversationId));
         
         String compactedSummary = conversation.getCompactedSummary();
         

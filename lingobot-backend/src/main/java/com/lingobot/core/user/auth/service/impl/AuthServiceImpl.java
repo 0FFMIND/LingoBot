@@ -13,7 +13,7 @@ import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.auth.service.EmailVerificationService;
 import com.lingobot.core.user.auth.service.JwtService;
 import com.lingobot.core.user.auth.service.LoginAttemptService;
-import com.lingobot.infrastructure.common.exception.ChatException;
+import com.lingobot.infrastructure.common.exception.AuthException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -49,35 +49,35 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
             String expiryStr = expiry != null 
                 ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                 : "未知";
-            throw new ChatException("操作过于频繁，请稍后再试。限制解除时间 " + expiryStr);
+            throw AuthException.tooManyRequests("操作过于频繁，请稍后再试。限制解除时间 " + expiryStr);
         }
         
         if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
-            throw new ChatException("用户名不能为空");
+            throw AuthException.badRequest("用户名不能为空");
         }
         
         if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
-            throw new ChatException("密码不能为空");
+            throw AuthException.badRequest("密码不能为空");
         }
         
         if (request.getUsername().length() < 3 || request.getUsername().length() > 20) {
-            throw new ChatException("用户名长度必须在3-20个字符之间");
+            throw AuthException.badRequest("用户名长度必须在3-20个字符之间");
         }
 
         if (request.getPassword().length() < 6) {
-            throw new ChatException("密码长度至少6个字符");
+            throw AuthException.badRequest("密码长度至少6个字符");
         }
         
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new ChatException("用户名已存在");
+            throw AuthException.usernameExists("用户名已存在");
         }
         
         if (request.getEmail() != null && !request.getEmail().isEmpty()) {
             if (!isValidEmail(request.getEmail())) {
-                throw new ChatException("无效的邮箱地址");
+                throw AuthException.invalidEmail("无效的邮箱地址");
             }
             if (userRepository.existsByEmail(request.getEmail())) {
-                throw new ChatException("该邮箱已被注册");
+                throw AuthException.emailAlreadyRegistered("该邮箱已被注册");
             }
         }
 
@@ -111,13 +111,13 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         
         if (email == null || email.trim().isEmpty()) {
             loginAttemptService.applyDelayOnFailure();
-            throw new ChatException("邮箱不能为空");
+            throw AuthException.badRequest("邮箱不能为空");
         }
         
         if (password == null || password.trim().isEmpty()) {
             loginAttemptService.recordLoginAttempt(clientIp, email, false, "密码不能为空");
             loginAttemptService.applyDelayOnFailure();
-            throw new ChatException("密码不能为空");
+            throw AuthException.badRequest("密码不能为空");
         }
         
         if (loginAttemptService.isIpBlocked(clientIp)) {
@@ -126,7 +126,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                 : "未知";
             log.warn("被阻止的登录尝试 - IP: {}, 邮箱: {}, 解除时间: {}", clientIp, email, expiryStr);
-            throw new ChatException("登录尝试次数过多，请稍后再试。限制解除时间 " + expiryStr);
+            throw AuthException.tooManyRequests("登录尝试次数过多，请稍后再试。限制解除时间 " + expiryStr);
         }
         
         java.util.Optional<User> userOpt = userRepository.findByEmail(email);
@@ -137,9 +137,9 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
             
             int remaining = loginAttemptService.getRemainingAttempts(clientIp, email);
             if (remaining > 0) {
-                throw new ChatException("邮箱或密码错误。剩余尝试次数 " + remaining);
+                throw AuthException.usernameOrPasswordError("邮箱或密码错误。剩余尝试次数 " + remaining);
             }
-            throw new ChatException("邮箱或密码错误");
+            throw AuthException.usernameOrPasswordError("邮箱或密码错误");
         }
         
         User user = userOpt.get();
@@ -150,7 +150,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                 : "未知";
             log.warn("被阻止的登录尝试 - 用户: {}, IP: {}, 解除时间: {}", user.getUsername(), clientIp, expiryStr);
-            throw new ChatException("账户已被临时锁定，请稍后再试。锁定解除时间 " + expiryStr);
+            throw AuthException.accountLocked("账户已被临时锁定，请稍后再试。锁定解除时间 " + expiryStr);
         }
         
         if (!passwordEncoder.matches(password, user.getPassword())) {
@@ -159,9 +159,9 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
             
             int remaining = loginAttemptService.getRemainingAttempts(clientIp, email);
             if (remaining > 0) {
-                throw new ChatException("邮箱或密码错误。剩余尝试次数 " + remaining);
+                throw AuthException.usernameOrPasswordError("邮箱或密码错误。剩余尝试次数 " + remaining);
             }
-            throw new ChatException("邮箱或密码错误");
+            throw AuthException.usernameOrPasswordError("邮箱或密码错误");
         }
         
         loginAttemptService.recordLoginAttempt(clientIp, user.getUsername(), true, null);
@@ -185,7 +185,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
     public UserDTO getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ChatException("用户不存在"));
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
         return toDTO(user);
     }
     
@@ -194,7 +194,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         try {
             String username = SecurityContextHolder.getContext().getAuthentication().getName();
             User user = userRepository.findByUsername(username)
-                    .orElseThrow(() -> new ChatException("用户不存在"));
+                    .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
             return user.getId();
         } catch (Exception e) {
             log.warn("获取当前用户ID失败: {}", e.getMessage());
@@ -214,30 +214,30 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
     public void changePassword(ChangePasswordRequest request) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ChatException("用户不存在"));
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
         
         if (request.getCurrentPassword() == null || request.getCurrentPassword().trim().isEmpty()) {
-            throw new ChatException("当前密码不能为空");
+            throw AuthException.badRequest("当前密码不能为空");
         }
 
         if (request.getNewPassword() == null || request.getNewPassword().trim().isEmpty()) {
-            throw new ChatException("新密码不能为空");
+            throw AuthException.badRequest("新密码不能为空");
         }
 
         if (request.getNewPassword().length() < 6) {
-            throw new ChatException("新密码长度至少为6个字符");
+            throw AuthException.badRequest("新密码长度至少为6个字符");
         }
 
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {
-            throw new ChatException("两次输入的新密码不一致");
+            throw AuthException.passwordsNotMatch("两次输入的新密码不一致");
         }
         
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-            throw new ChatException("当前密码错误");
+            throw AuthException.currentPasswordIncorrect("当前密码错误");
         }
         
         if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
-            throw new ChatException("新密码不能与当前密码相同");
+            throw AuthException.newPasswordSameAsCurrent("新密码不能与当前密码相同");
         }
         
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
@@ -251,7 +251,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
     public void deactivateAccount() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ChatException("用户不存在"));
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
         
         log.info("用户注销账户，删除用户数据 {}", user.getUsername());
         
@@ -265,7 +265,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
     public void updateAvatar(String avatarBase64) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ChatException("用户不存在"));
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
         
         user.setAvatar(avatarBase64);
         userRepository.save(user);
@@ -278,21 +278,21 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
     public AuthResponse updateUsername(String newUsername) {
         String currentUsername = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsername(currentUsername)
-                .orElseThrow(() -> new ChatException("用户不存在"));
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
         
         if (newUsername == null || newUsername.trim().isEmpty()) {
-            throw new ChatException("昵称不能为空");
+            throw AuthException.badRequest("昵称不能为空");
         }
         
         String trimmedUsername = newUsername.trim();
         
         if (trimmedUsername.length() < 3 || trimmedUsername.length() > 20) {
-            throw new ChatException("昵称长度必须3-20个字符之间");
+            throw AuthException.badRequest("昵称长度必须3-20个字符之间");
         }
 
         if (!currentUsername.equals(trimmedUsername)) {
             if (userRepository.existsByUsername(trimmedUsername)) {
-                throw new ChatException("该昵称已被使用");
+                throw AuthException.usernameExists("该昵称已被使用");
             }
         }
         
@@ -334,38 +334,38 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
             String expiryStr = expiry != null 
                 ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                 : "未知";
-            throw new ChatException("操作过于频繁，请稍后再试。限制解除时间 " + expiryStr);
+            throw AuthException.tooManyRequests("操作过于频繁，请稍后再试。限制解除时间 " + expiryStr);
         }
         
         if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
-            throw new ChatException("邮箱不能为空");
+            throw AuthException.badRequest("邮箱不能为空");
         }
         
         if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
-            throw new ChatException("密码不能为空");
+            throw AuthException.badRequest("密码不能为空");
         }
         
         if (request.getVerificationCode() == null || request.getVerificationCode().trim().isEmpty()) {
-            throw new ChatException("验证码不能为空");
+            throw AuthException.badRequest("验证码不能为空");
         }
 
         if (request.getPassword().length() < 6) {
-            throw new ChatException("密码长度至少6个字符");
+            throw AuthException.badRequest("密码长度至少6个字符");
         }
 
         if (!isValidEmail(request.getEmail())) {
-            throw new ChatException("无效的邮箱地址");
+            throw AuthException.invalidEmail("无效的邮箱地址");
         }
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new ChatException("该邮箱已被注册");
+            throw AuthException.emailAlreadyRegistered("该邮箱已被注册");
         }
 
         String baseUsername = extractUsernameFromEmail(request.getEmail());
         String username = generateUniqueUsername(baseUsername);
 
         if (!emailVerificationService.verifyCode(request.getEmail(), request.getVerificationCode())) {
-            throw new ChatException("验证码无效或已过期");
+            throw AuthException.invalidVerificationCode("验证码无效或已过期");
         }
         
         User user = User.builder()

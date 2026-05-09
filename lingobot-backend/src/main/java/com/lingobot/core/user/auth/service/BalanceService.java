@@ -27,7 +27,7 @@ public interface BalanceService {
      * 扣除用户余额
      * @param cost 需要消耗的点数
      * @return 扣除后的余额
-     * @throws InsufficientBalanceException 如果余额不足
+     * @throws BalanceException 如果余额不足
      */
     double deductBalance(double cost);
     
@@ -39,7 +39,7 @@ public interface BalanceService {
      * @param description 描述
      * @param conversationId 对话ID（可选）
      * @return 扣除后的余额
-     * @throws InsufficientBalanceException 如果余额不足
+     * @throws BalanceException 如果余额不足
      */
     double deductBalanceWithLog(double cost, String apiCategory, String apiEndpoint, String description, Long conversationId);
     

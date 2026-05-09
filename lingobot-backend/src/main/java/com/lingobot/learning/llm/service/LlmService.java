@@ -38,11 +38,11 @@ public class LlmService {
     public String chat(List<OpenAiChatMessage> messages) {
         OpenAiChatResponse response = chatWithTools(messages, null);
         if (response.getChoices() == null || response.getChoices().isEmpty()) {
-            throw new ChatException("AI 返回空响应");
+            throw ChatException.badRequest("AI 返回空响应");
         }
         String text = response.getChoices().get(0).getMessage().getContentAsString();
         if (text == null || text.isEmpty()) {
-            throw new ChatException("AI 返回空响应");
+            throw ChatException.badRequest("AI 返回空响应");
         }
         return text;
     }
@@ -403,7 +403,7 @@ public class LlmService {
                     byte[] body = response.body().readAllBytes();
                     String bodyStr = new String(body, java.nio.charset.StandardCharsets.UTF_8);
                     log.error("流式 API 错误 {}: {}", response.statusCode(), bodyStr);
-                    emitter.error(new ChatException("API错误 " + response.statusCode() + ": " + bodyStr));
+                    emitter.error(ChatException.badRequest("API错误 " + response.statusCode() + ": " + bodyStr));
                     return;
                 }
 
@@ -437,7 +437,7 @@ public class LlmService {
                 }
 
                 if (!hasContent) {
-                    emitter.error(new ChatException(
+                    emitter.error(ChatException.badRequest(
                             "API 未返回内容，请检查模型: " + model + " 和密钥"));
                     return;
                 }
@@ -450,7 +450,7 @@ public class LlmService {
                 emitter.error(e);
             } catch (Exception e) {
                 log.error("流式 API 调用失败", e);
-                emitter.error(new ChatException("AI 流式服务调用失败: " + e.getMessage()));
+                emitter.error(ChatException.badRequest("AI 流式服务调用失败: " + e.getMessage()));
             }
         }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
@@ -648,15 +648,15 @@ public class LlmService {
                         Thread.sleep(500L * attempt);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        throw new ChatException("AI 服务调用被中断");
+                        throw ChatException.badRequest("AI 服务调用被中断");
                     }
                 } else {
                     log.error("API 调用失败", e);
-                    throw new ChatException("AI 服务调用失败: " + e.getMessage());
+                    throw ChatException.badRequest("AI 服务调用失败: " + e.getMessage());
                 }
             }
         }
-        throw new ChatException("AI 服务调用失败：超过最大重试次数");
+        throw ChatException.badRequest("AI 服务调用失败：超过最大重试次数");
     }
 
     private OpenAiChatResponse doCallApi(OpenAiChatRequest request) throws Exception {
@@ -684,7 +684,7 @@ public class LlmService {
 
         if (response.statusCode() >= 400) {
             log.error("API 错误 {}: {}", response.statusCode(), response.body());
-            throw new ChatException("API错误 " + response.statusCode() + ": " + response.body());
+            throw ChatException.badRequest("API错误 " + response.statusCode() + ": " + response.body());
         }
 
         return objectMapper.readValue(response.body(), OpenAiChatResponse.class);
@@ -729,7 +729,7 @@ public class LlmService {
                     byte[] body = response.body().readAllBytes();
                     String bodyStr = new String(body, java.nio.charset.StandardCharsets.UTF_8);
                     log.error("流式 API 错误 {}: {}", response.statusCode(), bodyStr);
-                    emitter.error(new ChatException("API错误 " + response.statusCode() + ": " + bodyStr));
+                    emitter.error(ChatException.badRequest("API错误 " + response.statusCode() + ": " + bodyStr));
                     return;
                 }
 
@@ -763,7 +763,7 @@ public class LlmService {
                 }
 
                 if (!hasContent) {
-                    emitter.error(new ChatException(
+                    emitter.error(ChatException.badRequest(
                             "API 未返回内容，请检查模型: " + llmProperties.getModel() + " 和密钥"));
                     return;
                 }
@@ -776,7 +776,7 @@ public class LlmService {
                 emitter.error(e);
             } catch (Exception e) {
                 log.error("流式 API 调用失败", e);
-                emitter.error(new ChatException("AI 流式服务调用失败: " + e.getMessage()));
+                emitter.error(ChatException.badRequest("AI 流式服务调用失败: " + e.getMessage()));
             }
         }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }

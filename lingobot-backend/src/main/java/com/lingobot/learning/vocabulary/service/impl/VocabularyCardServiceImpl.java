@@ -262,7 +262,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         
         // 缓存未命中，从数据库查询
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
-                .orElseThrow(() -> new ChatException("词汇卡不存在: " + cardId));
+                .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
         VocabularyCardDTO dto = toDTOWithNavigation(card);
         
         // 写入缓存
@@ -334,7 +334,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         List<VocabularyCardDTO> cardDTOs = getAllCards(conversationId);
         
         if (cardDTOs.isEmpty()) {
-            throw new ChatException("该对话没有词汇卡");
+            throw ChatException.badRequest("该对话没有词汇卡");
         }
 
         int currentIndex = -1;
@@ -353,7 +353,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
         int prevIndex = currentIndex - 1;
         if (prevIndex < 0) {
-            throw new ChatException("已经是第一个单词了");
+            throw ChatException.badRequest("已经是第一个单词了");
         }
 
         VocabularyCardDTO prevCard = cardDTOs.get(prevIndex);
@@ -398,7 +398,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     @Transactional
     public VocabularyCardDTO updateUserMeaning(Long cardId, String userMeaning) {
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
-                .orElseThrow(() -> new ChatException("词汇卡不存在: " + cardId));
+                .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
 
         card.setUserMeaningGuess(userMeaning);
         card.setMeaningCheckCompleted(false);
@@ -421,7 +421,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     @Transactional
     public VocabularyCardDTO updateUserSentence(Long cardId, String userSentence) {
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
-                .orElseThrow(() -> new ChatException("词汇卡不存在: " + cardId));
+                .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
         
         card.setUserSentence(userSentence);
         VocabularyCard saved = vocabularyCardRepository.save(card);
@@ -435,7 +435,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     @Transactional
     public VocabularyCardDTO updateAIFeedback(Long cardId, String feedback) {
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
-                .orElseThrow(() -> new ChatException("词汇卡不存在: " + cardId));
+                .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
         
         card.setAiFeedback(feedback);
         VocabularyCard saved = vocabularyCardRepository.save(card);
@@ -449,7 +449,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     @Transactional
     public VocabularyCardDTO markAsCompleted(Long cardId) {
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
-                .orElseThrow(() -> new ChatException("词汇卡不存在: " + cardId));
+                .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
         
         card.setIsCompleted(true);
         VocabularyCard saved = vocabularyCardRepository.save(card);
@@ -611,7 +611,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
      */
     private Conversation getConversation(Long conversationId) {
         return conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ChatException("对话不存在: " + conversationId));
+                .orElseThrow(() -> ChatException.badRequest("对话不存在: " + conversationId));
     }
 
     /**

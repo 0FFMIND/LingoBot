@@ -420,7 +420,7 @@ public class SseEmitterService {
                 var response = modelRouterService.chatWithTools(model, currentMessages, tools);
                 
                 if (response.getChoices() == null || response.getChoices().isEmpty()) {
-                    throw new ChatException("AI 返回空响应");
+                    throw ChatException.badRequest("AI 返回空响应");
                 }
                 
                 OpenAiChatMessage assistantMsg = response.getChoices().get(0).getMessage();
@@ -489,11 +489,11 @@ public class SseEmitterService {
                     return;
                 } else {
                     log.warn("AI returned empty response with no tool calls");
-                    throw new ChatException("AI 返回空响应");
+                    throw ChatException.badRequest("AI 返回空响应");
                 }
             }
             
-            throw new ChatException("工具调用次数超过限制 (" + MAX_TOOL_CALLS + ")");
+            throw ChatException.badRequest("工具调用次数超过限制 (" + MAX_TOOL_CALLS + ")");
             
         } catch (Exception e) {
             log.error("Agent tool loop failed", e);

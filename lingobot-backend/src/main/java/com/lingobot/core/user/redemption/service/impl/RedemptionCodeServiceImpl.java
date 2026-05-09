@@ -50,7 +50,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
     @Transactional
     public RedemptionCodeDTO createCode(Integer points, Long creatorId, Long expiresInSeconds) {
         if (points == null || points <= 0) {
-            throw new ChatException("兑换码点数必须大于0");
+            throw ChatException.badRequest("兑换码点数必须大于0");
         }
         
         User creator = userRepository.findById(creatorId)

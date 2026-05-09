@@ -169,6 +169,9 @@ export const httpClient = {
       headers: getAuthHeaders(),
     });
     await handleResponse(response);
+    if (response.status === 204) {
+      return undefined as unknown as T;
+    }
     const result = await response.json();
     return result.data;
   },

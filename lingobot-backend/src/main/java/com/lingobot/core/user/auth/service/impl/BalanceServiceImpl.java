@@ -6,8 +6,8 @@ import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.BalanceTransactionRepository;
 import com.lingobot.core.user.auth.repository.UserRepository;
 import com.lingobot.core.user.auth.service.BalanceService;
-import com.lingobot.infrastructure.common.exception.ChatException;
-import com.lingobot.infrastructure.common.exception.InsufficientBalanceException;
+import com.lingobot.infrastructure.common.exception.AuthException;
+import com.lingobot.infrastructure.common.exception.BalanceException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -47,13 +47,13 @@ public class BalanceServiceImpl implements BalanceService {
     public double deductBalanceWithLog(double cost, String apiCategory, String apiEndpoint, String description, Long conversationId) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsernameForUpdate(username)
-                .orElseThrow(() -> new ChatException("用户不存在"));
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
         double currentBalance = user.getBalance() != null ? user.getBalance() : 0.0;
 
         if (currentBalance < cost) {
             log.warn("用户余额不足。用户: {}, 当前余额: {}, 需要: {}",
                     user.getUsername(), currentBalance, cost);
-            throw new InsufficientBalanceException("你的余额不足", currentBalance, cost);
+            throw BalanceException.insufficientBalance("余额不足。当前余额: " + currentBalance + "，需要: " + cost);
         }
 
         double newBalance = roundToTwoDecimals(currentBalance - cost);
@@ -89,11 +89,11 @@ public class BalanceServiceImpl implements BalanceService {
     @Transactional
     public double addBalanceWithLog(Long userId, double amount, String description) {
         if (amount <= 0) {
-            throw new ChatException("充值金额必须大于0");
+            throw AuthException.badRequest("充值金额必须大于0");
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ChatException("用户不存在"));
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
 
         double currentBalance = user.getBalance() != null ? user.getBalance() : 0.0;
         double newBalance = roundToTwoDecimals(currentBalance + amount);
@@ -133,7 +133,7 @@ public class BalanceServiceImpl implements BalanceService {
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)
-                .orElseThrow(() -> new ChatException("用户不存在"));
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
     }
 
     private double roundToTwoDecimals(double value) {

@@ -229,21 +229,21 @@ public class ChatServiceImpl implements ChatService {
         boolean isAudioType = ChatRequest.MESSAGE_TYPE_AUDIO.equals(request.getMessageType());
         
         if (isAudioType && !isAudioMessage) {
-            throw new ChatException("音频数据不能为空或无效，请重新录制");
+            throw ChatException.badRequest("音频数据不能为空或无效，请重新录制");
         }
 
         if (!isAudioMessage && (request.getContent() == null || request.getContent().trim().isEmpty())) {
-            throw new ChatException("消息内容不能为空");
+            throw ChatException.badRequest("消息内容不能为空");
         }
 
         if (request.getConversationId() == null) {
-            throw new ChatException("需要指定conversationId");
+            throw ChatException.badRequest("需要指定conversationId");
         }
     }
 
     private void validateChatRequestStream(ChatRequest request) {
         if (request.getConversationId() == null) {
-            throw new ChatException("需要指定conversationId");
+            throw ChatException.badRequest("需要指定conversationId");
         }
 
         boolean isAudioMessage = request.isAudioMessage();
@@ -252,16 +252,16 @@ public class ChatServiceImpl implements ChatService {
         boolean isImageType = ChatRequest.MESSAGE_TYPE_IMAGE.equals(request.getMessageType());
 
         if (isAudioType && !isAudioMessage) {
-            throw new ChatException("音频数据不能为空或无效，请重新录制");
+            throw ChatException.badRequest("音频数据不能为空或无效，请重新录制");
         }
 
         if (isImageType && !isImageMessage) {
-            throw new ChatException("图片数据不能为空或无效，请重新上传");
+            throw ChatException.badRequest("图片数据不能为空或无效，请重新上传");
         }
         
         if (!isAudioMessage && !isImageMessage && 
                 (request.getContent() == null || request.getContent().trim().isEmpty())) {
-            throw new ChatException("消息内容不能为空");
+            throw ChatException.badRequest("消息内容不能为空");
         }
     }
     
@@ -331,17 +331,17 @@ public class ChatServiceImpl implements ChatService {
         Optional<Message> assistantMessageOpt = messageRepository.findById(assistantMessageId);
         
         if (assistantMessageOpt.isEmpty()) {
-            throw new ChatException("要重试的消息不存在 " + assistantMessageId);
+            throw ChatException.badRequest("要重试的消息不存在 " + assistantMessageId);
         }
 
         Message assistantMessage = assistantMessageOpt.get();
 
         if (!"assistant".equals(assistantMessage.getRole())) {
-            throw new ChatException("只能重试AI助手的消息");
+            throw ChatException.badRequest("只能重试AI助手的消息");
         }
 
         if (!assistantMessage.getConversation().getId().equals(conversationId)) {
-            throw new ChatException("消息不属于该对话");
+            throw ChatException.badRequest("消息不属于该对话");
         }
 
         List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
@@ -355,17 +355,17 @@ public class ChatServiceImpl implements ChatService {
         }
 
         if (assistantIndex == -1) {
-            throw new ChatException("在对话中未找到该消息");
+            throw ChatException.badRequest("在对话中未找到该消息");
         }
 
         if (assistantIndex == 0) {
-            throw new ChatException("该消息是第一条消息，无法重试");
+            throw ChatException.badRequest("该消息是第一条消息，无法重试");
         }
 
         Message userMessage = allMessages.get(assistantIndex - 1);
 
         if (!"user".equals(userMessage.getRole())) {
-            throw new ChatException("前一条消息不是用户消息");
+            throw ChatException.badRequest("前一条消息不是用户消息");
         }
 
         conversationService.deleteMessagesFromIndex(conversationId, assistantIndex);
@@ -402,17 +402,17 @@ public class ChatServiceImpl implements ChatService {
         Optional<Message> assistantMessageOpt = messageRepository.findById(assistantMessageId);
         
         if (assistantMessageOpt.isEmpty()) {
-            throw new ChatException("要重试的消息不存在 " + assistantMessageId);
+            throw ChatException.badRequest("要重试的消息不存在 " + assistantMessageId);
         }
 
         Message assistantMessage = assistantMessageOpt.get();
 
         if (!"assistant".equals(assistantMessage.getRole())) {
-            throw new ChatException("只能重试AI助手的消息");
+            throw ChatException.badRequest("只能重试AI助手的消息");
         }
         
         if (!assistantMessage.getConversation().getId().equals(conversationId)) {
-            throw new ChatException("消息不属于该对话");
+            throw ChatException.badRequest("消息不属于该对话");
         }
         
         List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
@@ -426,17 +426,17 @@ public class ChatServiceImpl implements ChatService {
         }
         
         if (assistantIndex == -1) {
-            throw new ChatException("在对话中未找到该消息");
+            throw ChatException.badRequest("在对话中未找到该消息");
         }
         
         if (assistantIndex == 0) {
-            throw new ChatException("该消息是第一条消息，无法重试");
+            throw ChatException.badRequest("该消息是第一条消息，无法重试");
         }
         
         Message userMessage = allMessages.get(assistantIndex - 1);
         
         if (!"user".equals(userMessage.getRole())) {
-            throw new ChatException("前一条消息不是用户消息");
+            throw ChatException.badRequest("前一条消息不是用户消息");
         }
 
         conversationService.deleteMessagesFromIndex(conversationId, assistantIndex);
@@ -453,27 +453,27 @@ public class ChatServiceImpl implements ChatService {
     @Transactional
     public MessageDTO editMessage(EditMessageRequest request) {
         if (request.getNewContent() == null || request.getNewContent().trim().isEmpty()) {
-            throw new ChatException("消息内容不能为空");
+            throw ChatException.badRequest("消息内容不能为空");
         }
         
         Optional<Message> userMessageOpt = messageRepository.findById(request.getUserMessageId());
         
         if (userMessageOpt.isEmpty()) {
-            throw new ChatException("要编辑的消息不存在 " + request.getUserMessageId());
+            throw ChatException.badRequest("要编辑的消息不存在 " + request.getUserMessageId());
         }
         
         Message userMessage = userMessageOpt.get();
         
         if (!"user".equals(userMessage.getRole())) {
-            throw new ChatException("只能编辑用户消息");
+            throw ChatException.badRequest("只能编辑用户消息");
         }
         
         if (!userMessage.getConversation().getId().equals(request.getConversationId())) {
-            throw new ChatException("消息不属于该对话");
+            throw ChatException.badRequest("消息不属于该对话");
         }
         
         if (userMessage.getContent().trim().equals(request.getNewContent().trim())) {
-            throw new ChatException("消息内容没有变化");
+            throw ChatException.badRequest("消息内容没有变化");
         }
         
         List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
@@ -487,7 +487,7 @@ public class ChatServiceImpl implements ChatService {
         }
         
         if (userMessageIndex == -1) {
-            throw new ChatException("在对话中未找到该消息");
+            throw ChatException.badRequest("在对话中未找到该消息");
         }
         
         int deleteFromIndex = userMessageIndex + 1;
@@ -511,27 +511,27 @@ public class ChatServiceImpl implements ChatService {
     @Transactional
     public SseEmitter editMessageStream(EditMessageRequest request) {
         if (request.getNewContent() == null || request.getNewContent().trim().isEmpty()) {
-            throw new ChatException("消息内容不能为空");
+            throw ChatException.badRequest("消息内容不能为空");
         }
         
         Optional<Message> userMessageOpt = messageRepository.findById(request.getUserMessageId());
         
         if (userMessageOpt.isEmpty()) {
-            throw new ChatException("要编辑的消息不存在 " + request.getUserMessageId());
+            throw ChatException.badRequest("要编辑的消息不存在 " + request.getUserMessageId());
         }
         
         Message userMessage = userMessageOpt.get();
         
         if (!"user".equals(userMessage.getRole())) {
-            throw new ChatException("只能编辑用户消息");
+            throw ChatException.badRequest("只能编辑用户消息");
         }
         
         if (!userMessage.getConversation().getId().equals(request.getConversationId())) {
-            throw new ChatException("消息不属于该对话");
+            throw ChatException.badRequest("消息不属于该对话");
         }
         
         if (userMessage.getContent().trim().equals(request.getNewContent().trim())) {
-            throw new ChatException("消息内容没有变化");
+            throw ChatException.badRequest("消息内容没有变化");
         }
         
         List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
@@ -545,7 +545,7 @@ public class ChatServiceImpl implements ChatService {
         }
         
         if (userMessageIndex == -1) {
-            throw new ChatException("在对话中未找到该消息");
+            throw ChatException.badRequest("在对话中未找到该消息");
         }
         
         int deleteFromIndex = userMessageIndex + 1;

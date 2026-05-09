@@ -34,7 +34,18 @@ public enum ErrorCode {
     MESSAGE_NOT_FOUND(1005, "消息不存在"),
     AI_RESPONSE_EMPTY(1006, "AI 返回空响应"),
     TOOL_CALL_EXCEEDED(1007, "工具调用次数超过限制"),
-    AUDIO_DATA_INVALID(1008, "音频数据不能为空或无效，请重新录制");
+    AUDIO_DATA_INVALID(1008, "音频数据不能为空或无效，请重新录制"),
+
+    // 用户与认证相关 (1100-1199)
+    EMAIL_ALREADY_REGISTERED(1101, "该邮箱已被注册"),
+    INVALID_EMAIL(1102, "无效的邮箱地址"),
+    INVALID_VERIFICATION_CODE(1103, "验证码无效或已过期"),
+    ACCOUNT_LOCKED(1104, "账户已被临时锁定，请稍后再试"),
+    USER_NOT_FOUND(1105, "用户不存在"),
+    PASSWORD_INCORRECT(1106, "密码错误"),
+    CURRENT_PASSWORD_INCORRECT(1107, "当前密码错误"),
+    NEW_PASSWORD_SAME_AS_CURRENT(1108, "新密码不能与当前密码相同"),
+    PASSWORDS_NOT_MATCH(1109, "两次输入的密码不一致");
     
     private final int code;
     private final String message;

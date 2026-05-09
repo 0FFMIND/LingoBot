@@ -72,10 +72,10 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation conversation;
         if (currentUserId != null) {
             conversation = conversationRepository.findByIdAndUserId(id, currentUserId)
-                    .orElseThrow(() -> new ChatException("对话不存在或无权访问: " + id));
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + id));
         } else {
             conversation = conversationRepository.findById(id)
-                    .orElseThrow(() -> new ChatException("对话不存在 " + id));
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在 " + id));
         }
         
         return toDTO(conversation);
@@ -135,10 +135,10 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation conversation;
         if (currentUserId != null) {
             conversation = conversationRepository.findByIdAndUserId(id, currentUserId)
-                    .orElseThrow(() -> new ChatException("对话不存在或无权访问: " + id));
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + id));
         } else {
             conversation = conversationRepository.findById(id)
-                    .orElseThrow(() -> new ChatException("对话不存在 " + id));
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在 " + id));
         }
         
         conversation.setTitle(title);
@@ -154,10 +154,10 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation conversation;
         if (currentUserId != null) {
             conversation = conversationRepository.findByIdAndUserId(id, currentUserId)
-                    .orElseThrow(() -> new ChatException("对话不存在或无权访问: " + id));
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + id));
         } else {
             conversation = conversationRepository.findById(id)
-                    .orElseThrow(() -> new ChatException("对话不存在 " + id));
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在 " + id));
         }
         
         conversation.setLearningMode(learningMode);
@@ -202,7 +202,7 @@ public class ConversationServiceImpl implements ConversationService {
             Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, currentUserId)
                     .orElse(null);
             if (conversation == null) {
-                throw new ChatException("对话不存在或无权访问: " + conversationId);
+                throw ChatException.badRequest("对话不存在或无权访问: " + conversationId);
             }
             user.setCurrentConversationId(conversationId);
         }
@@ -217,11 +217,11 @@ public class ConversationServiceImpl implements ConversationService {
         
         if (currentUserId != null) {
             if (!conversationRepository.existsByIdAndUserId(id, currentUserId)) {
-                throw new ChatException("对话不存在或无权访问: " + id);
+                throw ChatException.badRequest("对话不存在或无权访问: " + id);
             }
         } else {
             if (!conversationRepository.existsById(id)) {
-                throw new ChatException("对话不存在 " + id);
+                throw ChatException.badRequest("对话不存在 " + id);
             }
         }
         
@@ -235,11 +235,11 @@ public class ConversationServiceImpl implements ConversationService {
         
         if (currentUserId != null) {
             return conversationRepository.findByIdAndUserId(id, currentUserId)
-                    .orElseThrow(() -> new ChatException("对话不存在或无权访问: " + id));
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + id));
         }
         
         return conversationRepository.findById(id)
-                .orElseThrow(() -> new ChatException("对话不存在 " + id));
+                .orElseThrow(() -> ChatException.badRequest("对话不存在 " + id));
     }
     
     @Override
@@ -333,7 +333,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Transactional
     public void deleteMessage(Long messageId) {
         if (!messageRepository.existsById(messageId)) {
-            throw new ChatException("消息不存在: " + messageId);
+            throw ChatException.badRequest("消息不存在: " + messageId);
         }
         messageRepository.deleteMessageById(messageId);
     }
