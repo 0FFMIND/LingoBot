@@ -26,30 +26,48 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Spring Security 安全配置类。
+ * 配置 JWT 认证、权限控制、跨域策略和密码编码器，
+ * 采用无状态（Stateless）的 REST API 安全模型。
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
     
+    // JWT 认证过滤器，用于从请求头中提取和验证 JWT Token
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     
+    // 配置安全过滤链：禁用 CSRF、配置 CORS、设置无状态会话、配置白名单和认证入口
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // 禁用 CSRF，因为我们使用 JWT Token 而非 Cookie 进行认证
             .csrf(AbstractHttpConfigurer::disable)
+            // 配置 CORS，使用自定义的 corsConfigurationSource
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            // 使用无状态会话策略，不创建或使用 HttpSession
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            // 配置请求授权规则
             .authorizeHttpRequests(auth -> auth
+                // 认证相关接口：注册、登录等
                 .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/logs/**").permitAll()
+                // H2 控制台：仅开发环境使用
                 .requestMatchers("/h2-console/**").permitAll()
+                // 错误页面
                 .requestMatchers("/error").permitAll()
+                // 音频资源
                 .requestMatchers("/audio/**").permitAll()
+                // 静态资源
                 .requestMatchers("/static/**").permitAll()
+                // TTS 语音合成接口
                 .requestMatchers("/api/tts/**").permitAll()
+                // 其他所有请求需要认证
                 .anyRequest().authenticated()
             )
+            // 配置未认证时的处理逻辑，返回 JSON 格式的错误信息
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint((request, response, authException) -> {
                     response.setStatus(HttpStatus.UNAUTHORIZED.value());
@@ -66,15 +84,19 @@ public class SecurityConfig {
                     response.getWriter().write(objectMapper.writeValueAsString(body));
                 })
             )
+            // 禁用 X-Frame-Options 以允许 H2 控制台在 iframe 中显示
             .headers(headers -> headers.frameOptions(frame -> frame.disable()))
+            // 在 UsernamePasswordAuthenticationFilter 之前添加 JWT 认证过滤器
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         
         return http.build();
     }
     
+    // 配置 CORS 策略，允许本地开发环境的前端访问后端 API
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
+        // 允许的来源：本地开发环境的所有端口
         configuration.setAllowedOriginPatterns(Arrays.asList(
             "http://localhost:*",
             "http://127.0.0.1:*"
@@ -89,6 +111,7 @@ public class SecurityConfig {
         return source;
     }
     
+    // 配置密码编码器，使用 BCrypt 算法进行密码加密和验证
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

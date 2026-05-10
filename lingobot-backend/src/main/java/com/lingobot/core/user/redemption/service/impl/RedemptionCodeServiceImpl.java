@@ -20,6 +20,25 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+/**
+ * 兑换码服务实现类。
+ *
+ * 实现 RedemptionCodeService 接口，包含以下核心逻辑：
+ *
+ * 1. createCode：创建兑换码，生成唯一的 sk- 格式编码
+ *    - 使用 UUID + 循环校验确保唯一性（最多100次重试）
+ *    - 支持设置过期时间（秒），不设置则永不过期
+ *
+ * 2. redeemCode：使用兑换码，采用 Redis 分布式锁防止并发重复兑换
+ *    - 先获取锁，超时10秒
+ *    - 校验：存在 → 未使用 → 未过期 → 用户存在
+ *    - 调用 BalanceService 增加余额
+ *    - finally 块确保锁释放
+ *
+ * 3. 其他方法：查询列表、查询详情、查询余额、删除（仅允许删除未使用的码）
+ *
+ * 所有修改操作都标注 @Transactional，确保事务一致性。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -30,9 +49,12 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
     private final StringRedisTemplate stringRedisTemplate;
     private final BalanceService balanceService;
     
+    // Redis 分布式锁前缀，防止重复兑换
     private static final String LOCK_PREFIX = "redemption:lock:";
+    // 锁过期时间，防止死锁
     private static final long LOCK_EXPIRE_SECONDS = 10;
     
+    // 生成唯一兑换码：sk- + UUID（去横杠），循环校验确保不重复
     private String generateUniqueCode() {
         String code;
         int attempts = 0;
@@ -46,6 +68,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         return code;
     }
     
+    // 管理员创建兑换码：校验参数 → 生成唯一码 → 设置属性（可选过期时间）→ 保存 → 返回DTO
     @Override
     @Transactional
     public RedemptionCodeDTO createCode(Integer points, Long creatorId, Long expiresInSeconds) {
@@ -78,12 +101,14 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         return RedemptionCodeDTO.fromEntity(saved);
     }
     
+    // 用户使用兑换码：Redis分布式锁 → 三重校验 → 增加余额 → 标记已使用 → finally释放锁
     @Override
     @Transactional
     public RedemptionCodeDTO redeemCode(String code, Long userId) {
         String trimmedCode = code.trim();
         String lockKey = LOCK_PREFIX + trimmedCode;
         
+        // 获取 Redis 分布式锁，使用 setIfAbsent + 过期时间
         Boolean lockAcquired = stringRedisTemplate.opsForValue()
                 .setIfAbsent(lockKey, "1", LOCK_EXPIRE_SECONDS, TimeUnit.SECONDS);
         
@@ -93,22 +118,28 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         }
         
         try {
+            // 校验兑换码存在
             RedemptionCode redemptionCode = redemptionCodeRepository.findByCode(trimmedCode)
                     .orElseThrow(() -> new IllegalArgumentException("兑换码不存在"));
             
+            // 校验未使用
             if (redemptionCode.getIsUsed()) {
                 throw new IllegalArgumentException("兑换码已被使用");
             }
             
+            // 校验未过期
             if (redemptionCode.isExpired()) {
                 throw new IllegalArgumentException("兑换码已过期");
             }
             
+            // 校验用户存在
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
             
+            // 调用余额服务增加点数
             double newBalance = balanceService.addBalance(userId, redemptionCode.getPoints().doubleValue());
             
+            // 标记兑换码已使用
             redemptionCode.setIsUsed(true);
             redemptionCode.setUsedBy(user);
             redemptionCode.setUsedAt(LocalDateTime.now());
@@ -119,11 +150,13 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
             
             return RedemptionCodeDTO.fromEntity(saved);
         } finally {
+            // 无论成功失败都释放锁
             stringRedisTemplate.delete(lockKey);
             log.debug("释放兑换码 {} 的Redis锁", trimmedCode);
         }
     }
     
+    // 查询所有兑换码，带关联对象，转DTO返回
     @Override
     public List<RedemptionCodeDTO> getAllCodes() {
         List<RedemptionCode> codes = redemptionCodeRepository.findAllWithDetails();
@@ -132,6 +165,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
                 .collect(Collectors.toList());
     }
     
+    // 按ID查询兑换码，带关联对象，不存在抛异常
     @Override
     public RedemptionCodeDTO getCodeById(Long id) {
         RedemptionCode code = redemptionCodeRepository.findByIdWithDetails(id)
@@ -139,6 +173,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         return RedemptionCodeDTO.fromEntity(code);
     }
     
+    // 查询用户余额，null时返回0.0
     @Override
     public Double getUserBalance(Long userId) {
         User user = userRepository.findById(userId)
@@ -146,6 +181,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         return user.getBalance() != null ? user.getBalance() : 0.0;
     }
     
+    // 删除兑换码：仅允许删除未使用的，已使用的抛异常
     @Override
     @Transactional
     public void deleteCode(Long id) {

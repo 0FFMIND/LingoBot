@@ -4,8 +4,10 @@ import com.lingobot.infrastructure.common.config.RateLimitProperties;
 import com.lingobot.core.user.auth.dto.AuthResponse;
 import com.lingobot.core.user.auth.dto.ChangePasswordRequest;
 import com.lingobot.core.user.auth.dto.LoginRequest;
+import com.lingobot.core.user.auth.dto.LoginWithCodeRequest;
 import com.lingobot.core.user.auth.dto.RegisterRequest;
 import com.lingobot.core.user.auth.dto.RegisterWithCodeRequest;
+import com.lingobot.core.user.auth.dto.SendLoginCodeRequest;
 import com.lingobot.core.user.auth.dto.UserDTO;
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
@@ -16,6 +18,7 @@ import com.lingobot.core.user.auth.service.LoginAttemptService;
 import com.lingobot.infrastructure.common.exception.AuthException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -40,6 +43,9 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
     private final LoginAttemptService loginAttemptService;
     private final RateLimitProperties rateLimitProperties;
     private final EmailVerificationService emailVerificationService;
+    
+    @Value("${ADMIN_EMAIL:admin@example.com}")
+    private String adminEmail;
     
     @Override
     @Transactional
@@ -169,6 +175,142 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         String token = jwtService.generateToken(user.getUsername(), user.getId());
         
         log.info("用户登录成功: {}, IP: {}", user.getUsername(), clientIp);
+        
+        return AuthResponse.builder()
+                .token(token)
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .userId(user.getId())
+                .role(user.getRole().name())
+                .avatar(user.getAvatar())
+                .balance(user.getBalance() != null ? user.getBalance() : 0.0)
+                .build();
+    }
+    
+    @Override
+    public void sendLoginVerificationCode(SendLoginCodeRequest request, String clientIp) {
+        String email = request.getEmail();
+        String password = request.getPassword();
+        
+        if (email == null || email.trim().isEmpty()) {
+            throw AuthException.badRequest("邮箱不能为空");
+        }
+        
+        if (password == null || password.trim().isEmpty()) {
+            throw AuthException.badRequest("密码不能为空");
+        }
+        
+        if (loginAttemptService.isIpBlocked(clientIp)) {
+            LocalDateTime expiry = loginAttemptService.getIpBlockExpiry(clientIp);
+            String expiryStr = expiry != null 
+                ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                : "未知";
+            log.warn("被阻止的登录验证码发送 - IP: {}, 邮箱: {}, 解除时间: {}", clientIp, email, expiryStr);
+            throw AuthException.tooManyRequests("操作过于频繁，请稍后再试。限制解除时间 " + expiryStr);
+        }
+        
+        java.util.Optional<User> userOpt = userRepository.findByEmail(email);
+        
+        if (userOpt.isEmpty()) {
+            loginAttemptService.recordLoginAttempt(clientIp, email, false, "用户不存在");
+            loginAttemptService.applyDelayOnFailure();
+            
+            int remaining = loginAttemptService.getRemainingAttempts(clientIp, email);
+            if (remaining > 0) {
+                throw AuthException.usernameOrPasswordError("邮箱或密码错误。剩余尝试次数 " + remaining);
+            }
+            throw AuthException.usernameOrPasswordError("邮箱或密码错误");
+        }
+        
+        User user = userOpt.get();
+        
+        if (loginAttemptService.isUserBlocked(user.getId())) {
+            LocalDateTime expiry = loginAttemptService.getUserBlockExpiry(user.getId());
+            String expiryStr = expiry != null 
+                ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                : "未知";
+            log.warn("被阻止的登录验证码发送 - 用户: {}, IP: {}, 解除时间: {}", user.getUsername(), clientIp, expiryStr);
+            throw AuthException.accountLocked("账户已被临时锁定，请稍后再试。锁定解除时间 " + expiryStr);
+        }
+        
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            loginAttemptService.recordLoginAttempt(clientIp, email, false, "密码错误");
+            loginAttemptService.applyDelayOnFailure();
+            
+            int remaining = loginAttemptService.getRemainingAttempts(clientIp, email);
+            if (remaining > 0) {
+                throw AuthException.usernameOrPasswordError("邮箱或密码错误。剩余尝试次数 " + remaining);
+            }
+            throw AuthException.usernameOrPasswordError("邮箱或密码错误");
+        }
+        
+        emailVerificationService.sendLoginVerificationCode(email);
+        log.info("登录验证码已发送 - 用户: {}, IP: {}", user.getUsername(), clientIp);
+    }
+    
+    @Override
+    public AuthResponse loginWithCode(LoginWithCodeRequest request, String clientIp) {
+        String email = request.getEmail();
+        String password = request.getPassword();
+        String verificationCode = request.getVerificationCode();
+        
+        if (email == null || email.trim().isEmpty()) {
+            throw AuthException.badRequest("邮箱不能为空");
+        }
+        
+        if (password == null || password.trim().isEmpty()) {
+            throw AuthException.badRequest("密码不能为空");
+        }
+        
+        if (verificationCode == null || verificationCode.trim().isEmpty()) {
+            throw AuthException.badRequest("验证码不能为空");
+        }
+        
+        if (loginAttemptService.isIpBlocked(clientIp)) {
+            LocalDateTime expiry = loginAttemptService.getIpBlockExpiry(clientIp);
+            String expiryStr = expiry != null 
+                ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                : "未知";
+            log.warn("被阻止的登录尝试 - IP: {}, 邮箱: {}, 解除时间: {}", clientIp, email, expiryStr);
+            throw AuthException.tooManyRequests("登录尝试次数过多，请稍后再试。限制解除时间 " + expiryStr);
+        }
+        
+        java.util.Optional<User> userOpt = userRepository.findByEmail(email);
+        
+        if (userOpt.isEmpty()) {
+            loginAttemptService.recordLoginAttempt(clientIp, email, false, "用户不存在");
+            throw AuthException.usernameOrPasswordError("邮箱或密码错误");
+        }
+        
+        User user = userOpt.get();
+        
+        if (loginAttemptService.isUserBlocked(user.getId())) {
+            LocalDateTime expiry = loginAttemptService.getUserBlockExpiry(user.getId());
+            String expiryStr = expiry != null 
+                ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                : "未知";
+            log.warn("被阻止的登录尝试 - 用户: {}, IP: {}, 解除时间: {}", user.getUsername(), clientIp, expiryStr);
+            throw AuthException.accountLocked("账户已被临时锁定，请稍后再试。锁定解除时间 " + expiryStr);
+        }
+        
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            loginAttemptService.recordLoginAttempt(clientIp, email, false, "密码错误");
+            int remaining = loginAttemptService.getRemainingAttempts(clientIp, email);
+            if (remaining > 0) {
+                throw AuthException.usernameOrPasswordError("邮箱或密码错误。剩余尝试次数 " + remaining);
+            }
+            throw AuthException.usernameOrPasswordError("邮箱或密码错误");
+        }
+        
+        if (!emailVerificationService.verifyLoginCode(email, verificationCode)) {
+            throw AuthException.invalidVerificationCode("验证码无效或已过期");
+        }
+        
+        loginAttemptService.recordLoginAttempt(clientIp, user.getUsername(), true, null);
+        
+        String token = jwtService.generateToken(user.getUsername(), user.getId());
+        
+        log.info("用户通过验证码登录成功: {}, IP: {}", user.getUsername(), clientIp);
         
         return AuthResponse.builder()
                 .token(token)

@@ -4414,6 +4414,313 @@
   }
 }
 
+.log-dashboard {
+  width: 100%;
+  min-height: 100vh;
+  background-color: #f3f4f6;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.log-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.log-header-left h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.back-to-chat-btn-styled {
+  padding: 8px 16px;
+  background-color: #eef2ff;
+  color: #4f46e5;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.back-to-chat-btn-styled:hover {
+  background-color: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.log-status-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.log-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.log-status-connected {
+  background-color: #10b981;
+}
+
+.log-status-disconnected {
+  background-color: #ef4444;
+  animation: none;
+}
+
+.log-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.log-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  background-color: transparent;
+  user-select: none;
+  line-height: 1;
+}
+
+.log-filter-all {
+  color: #374151;
+}
+
+.log-filter-all:hover {
+  background-color: #f3f4f6;
+}
+
+.log-filter-request {
+  color: #1d4ed8;
+}
+
+.log-filter-request:hover {
+  background-color: #eff6ff;
+}
+
+.log-filter-response {
+  color: #7c3aed;
+}
+
+.log-filter-response:hover {
+  background-color: #f5f3ff;
+}
+
+.log-filter-other {
+  color: #374151;
+}
+
+.log-filter-other:hover {
+  background-color: #f3f4f6;
+}
+
+.log-filter-checkbox {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  border-radius: 3px;
+  accent-color: #4f46e5;
+  flex-shrink: 0;
+}
+
+.log-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background-color: #d1d5db;
+  margin: 0 6px;
+}
+
+.log-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.log-action-btn:hover {
+  background-color: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.log-action-clear {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.log-action-clear:hover {
+  background-color: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.log-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.log-entries-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.log-entry-row {
+  padding: 10px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background-color 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.log-entry-row:hover {
+  background-color: #f9fafb;
+}
+
+.log-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.log-timestamp {
+  color: #6b7280;
+  font-size: 12px;
+  white-space: nowrap;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.log-level-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.log-level-error {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.log-level-warn {
+  background-color: #fffbeb;
+  color: #d97706;
+}
+
+.log-level-info {
+  background-color: #ecfdf5;
+  color: #059669;
+}
+
+.log-level-debug {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.log-type-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.log-type-request {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+}
+
+.log-type-response {
+  background-color: #ede9fe;
+  color: #7c3aed;
+}
+
+.log-user-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  background-color: #ffedd5;
+  color: #c2410c;
+}
+
+.log-logger-name {
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 500;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.log-message {
+  font-size: 12px;
+  margin: 0 0 0 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  font-family: 'Consolas', 'Monaco', monospace;
+  line-height: 1.6;
+}
+
+.log-message-error {
+  color: #dc2626;
+}
+
+.log-message-warn {
+  color: #d97706;
+}
+
+.log-message-info {
+  color: #059669;
+}
+
+.log-message-debug {
+  color: #6b7280;
+}
+
 .learning-mode-header {
   display: flex;
   align-items: center;

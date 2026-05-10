@@ -10,24 +10,25 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 日志推送服务
- * 通过 SSE (Server-Sent Events) 技术将应用日志实时推送到前端
- * 同时维护日志历史记录，供新连接的客户端获取历史日志
+ * 日志推送服务。
+ * 通过 SSE (Server-Sent Events) 技术将应用日志实时推送到前端，
+ * 同时维护日志历史记录，供新连接的客户端获取历史日志。
  */
 @Slf4j
 @Service
 public class LogPushService {
 
-    // 存储所有活跃的 SSE 连接，使用CopyOnWriteArrayList 保证线程安全
+    // 存储所有活跃的 SSE 连接，使用 CopyOnWriteArrayList 保证线程安全
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
     // 存储日志历史记录，用于新连接时发送历史日志
     private final List<String> logHistory = new ArrayList<>();
     // 日志历史记录的最大数量，超过后移除最旧的日志
-    private static final int MAX_HISTORY_SIZE = 100;
+    private static final int MAX_HISTORY_SIZE = 200;
 
     /**
-     * 创建一个新的SSE 连接
-     * 当客户端连接时，会先发送历史日志，然后实时推送新日志
+     * 创建一个新的 SSE 连接。
+     * 当客户端连接时，会先发送历史日志，然后实时推送新日志。
+     * 
      * @return SseEmitter 对象，用于与客户端保持长连接
      */
     public SseEmitter createEmitter() {
@@ -72,8 +73,9 @@ public class LogPushService {
     }
 
     /**
-     * 推送日志到所有活跃的 SSE 连接
-     * 同时将日志添加到历史记录中
+     * 推送日志到所有活跃的 SSE 连接。
+     * 同时将日志添加到历史记录中。
+     * 
      * @param level 日志级别 (INFO, DEBUG, WARN, ERROR 等)
      * @param logger 日志记录器名称
      * @param message 日志消息内容
@@ -83,7 +85,8 @@ public class LogPushService {
     }
 
     /**
-     * 推送带有异常堆栈信息的日志
+     * 推送带有异常堆栈信息的日志。
+     * 
      * @param level 日志级别
      * @param logger 日志记录器名称
      * @param message 日志消息内容
@@ -94,8 +97,9 @@ public class LogPushService {
     }
 
     /**
-     * 推送日志到所有活跃的 SSE 连接（带用户标识）
-     * 同时将日志添加到历史记录中
+     * 推送日志到所有活跃的 SSE 连接（带用户标识）。
+     * 同时将日志添加到历史记录中。
+     * 
      * @param level 日志级别 (INFO, DEBUG, WARN, ERROR 等)
      * @param logger 日志记录器名称
      * @param message 日志消息内容
@@ -106,8 +110,9 @@ public class LogPushService {
     }
 
     /**
-     * 核心推送方法：推送带有异常堆栈和用户标识的日志
-     * 同时将日志添加到历史记录中
+     * 核心推送方法：推送带有异常堆栈和用户标识的日志。
+     * 同时将日志添加到历史记录中。
+     * 
      * @param level 日志级别 (INFO, DEBUG, WARN, ERROR 等)
      * @param logger 日志记录器名称
      * @param message 日志消息内容
@@ -127,10 +132,15 @@ public class LogPushService {
             fullMessage = sb.toString();
         }
 
-        // 生成格式化的日志条目，包含用户标识
         String timestamp = java.time.LocalTime.now().toString();
-        String identifier = (userIdentifier != null && !userIdentifier.isEmpty()) ? userIdentifier + " " : "";
-        String logEntry = String.format("%s[%s] [%s] %s - %s", identifier, timestamp, level, logger, fullMessage);
+        String userPart;
+        if (userIdentifier != null && !userIdentifier.isEmpty() && userIdentifier.startsWith("[USER ")) {
+            String username = userIdentifier.substring(6, userIdentifier.length() - 1);
+            userPart = "[" + username + "]";
+        } else {
+            userPart = "[SYSTEM]";
+        }
+        String logEntry = String.format("[%s] [%s] %s %s - %s", timestamp, level, userPart, logger, fullMessage);
         
         // 将日志添加到历史记录，超出最大数量时移除最旧的
         synchronized (logHistory) {

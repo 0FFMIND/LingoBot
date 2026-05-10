@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { authUtils } from '../api';
 
 interface LogEntry {
   id: number;
@@ -10,6 +11,7 @@ interface LogEntry {
   hasJson: boolean;
   logType: 'request' | 'response' | 'other';
   uniqueKey: string;
+  identifier?: string;
 }
 
 type LogFilter = 'all' | 'request' | 'response' | 'other';
@@ -148,6 +150,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
       hasJson: hasJson,
       logType: 'response',
       uniqueKey: headerLog.uniqueKey + '|' + contentLog.uniqueKey,
+      identifier: headerLog.identifier,
     };
   }, [tryParseAndFormatJson]);
 
@@ -177,7 +180,52 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
     return filters.has(log.logType);
   }, [filters]);
 
-  const closeCurrentConnection = useCallback(() => {
+  const handleLogData = useCallback((data: string) => {
+    const logEntry = parseLogEntry(data);
+    
+    if (logEntry && !shouldFilterLog(logEntry.logger, logEntry.message)) {
+      if (logEntry.logType === 'response' && logEntry.message.includes('响应完整 JSON:') && logEntry.message.trim() === '响应完整 JSON:') {
+        pendingResponseHeaderRef.current = logEntry;
+        return;
+      }
+      
+      if (pendingResponseHeaderRef.current) {
+        const mergedLog = mergeResponseLogs(pendingResponseHeaderRef.current, logEntry);
+        pendingResponseHeaderRef.current = null;
+        setLogs(prev => {
+          const newLogs = [...prev, mergedLog];
+          if (newLogs.length > 100) {
+            return newLogs.slice(newLogs.length - 100);
+          }
+          return newLogs;
+        });
+        return;
+      }
+      
+      setLogs(prev => {
+        const newLogs = [...prev, logEntry];
+        if (newLogs.length > 100) {
+          return newLogs.slice(newLogs.length - 100);
+        }
+        return newLogs;
+      });
+    }
+  }, [mergeResponseLogs, shouldFilterLog]);
+
+  const connectToLogStream = useCallback(() => {
+    if (isConnectingRef.current) {
+      console.log('⚠️ [LogViewer] 已有连接正在建立中，跳过');
+      return;
+    }
+    
+    const token = authUtils.getToken();
+    if (!token) {
+      console.log('⚠️ [LogViewer] 未登录，跳过连接');
+      return;
+    }
+    
+    console.log('🔌 [LogViewer] 尝试连接日志流 SSE: /api/logs/stream');
+    
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
@@ -189,110 +237,75 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
       eventSourceRef.current = null;
     }
     
-    isConnectingRef.current = false;
-  }, []);
+    isConnectingRef.current = true;
+    
+    const eventSource = new EventSource(`/api/logs/stream?token=${encodeURIComponent(token)}`);
+    eventSourceRef.current = eventSource;
+
+    eventSource.onopen = () => {
+      console.log('✅ [LogViewer] SSE 连接已建立');
+      isConnectingRef.current = false;
+      setIsConnected(true);
+      addLog('INFO', 'LogViewer', '已连接到日志流');
+    };
+
+    eventSource.addEventListener('log', (event) => {
+      handleLogData((event as MessageEvent).data);
+    });
+
+    eventSource.onerror = () => {
+      if (eventSourceRef.current !== eventSource) {
+        return;
+      }
+
+      eventSource.close();
+      eventSourceRef.current = null;
+      isConnectingRef.current = false;
+      setIsConnected(false);
+      addLog('ERROR', 'LogViewer', '日志流连接错误，3秒后重试...');
+      
+      reconnectTimeoutRef.current = window.setTimeout(() => {
+        connectToLogStream();
+      }, 3000);
+    };
+  }, [handleLogData]);
 
   useEffect(() => {
     connectToLogStream();
 
     return () => {
-      closeCurrentConnection();
-    };
-  }, [closeCurrentConnection]);
-
-  const connectToLogStream = () => {
-    if (isConnectingRef.current) {
-      console.log('⚠️ [LogViewer] 已有连接正在建立中，跳过');
-      return;
-    }
-    
-    console.log('🔌 [LogViewer] 尝试连接日志流 SSE: /api/logs/stream');
-    
-    closeCurrentConnection();
-    isConnectingRef.current = true;
-    
-    try {
-      const eventSource = new EventSource('/api/logs/stream');
-      eventSourceRef.current = eventSource;
-
-      eventSource.onopen = () => {
-        console.log('✅ [LogViewer] SSE 连接已建立');
-        isConnectingRef.current = false;
-        setIsConnected(true);
-        addLog('INFO', 'LogViewer', '已连接到日志流');
-      };
-
-      eventSource.addEventListener('log', (event) => {
-        const anyEvent = event as any;
-        const logEntry = parseLogEntry(anyEvent.data);
-        
-        if (logEntry && !shouldFilterLog(logEntry.logger, logEntry.message)) {
-          if (logEntry.logType === 'response' && logEntry.message.includes('响应完整 JSON:') && logEntry.message.trim() === '响应完整 JSON:') {
-            pendingResponseHeaderRef.current = logEntry;
-            return;
-          }
-          
-          if (pendingResponseHeaderRef.current) {
-            const mergedLog = mergeResponseLogs(pendingResponseHeaderRef.current, logEntry);
-            pendingResponseHeaderRef.current = null;
-            setLogs(prev => {
-              const newLogs = [...prev, mergedLog];
-              if (newLogs.length > 100) {
-                return newLogs.slice(newLogs.length - 100);
-              }
-              return newLogs;
-            });
-            return;
-          }
-          
-          setLogs(prev => {
-            const newLogs = [...prev, logEntry];
-            if (newLogs.length > 100) {
-              return newLogs.slice(newLogs.length - 100);
-            }
-            return newLogs;
-          });
-        }
-      });
-
-      eventSource.onerror = (error) => {
-        console.error('❌ [LogViewer] SSE 连接错误:', error);
-        isConnectingRef.current = false;
-        setIsConnected(false);
-        addLog('ERROR', 'LogViewer', '日志流连接错误，3秒后重试...');
-        
-        if (eventSourceRef.current === eventSource) {
-          eventSource.close();
-          eventSourceRef.current = null;
-        }
-        
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connectToLogStream();
-        }, 3000);
-      };
-    } catch (error) {
-      console.error('❌ [LogViewer] 创建 EventSource 失败:', error);
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      
+      if (eventSourceRef.current) {
+        console.log('🔌 [LogViewer] 关闭现有 SSE 连接');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      
       isConnectingRef.current = false;
-      addLog('ERROR', 'LogViewer', `连接日志流失败: ${error}`);
-    }
-  };
+    };
+  }, []);
 
   const parseLogEntry = (data: string): LogEntry | null => {
-    const match = data.match(/\[([^\]]+)\]\s+\[([^\]]+)\]\s+([^\s]+)\s+-\s+([\s\S]+)/);
-    
+    const match = data.match(/^\[([^\]]+)\]\s+\[([^\]]+)\]\s+\[([^\]]+)\]\s+([^\s]+)\s+-\s+([\s\S]+)/);
+
     if (match) {
       const timestamp = match[1];
       const level = match[2];
-      const logger = match[3];
-      const message = match[4];
+      const identifier = match[3];
+      const logger = match[4];
+      const message = match[5];
       const { formatted, hasJson } = tryParseAndFormatJson(message);
       const { type } = detectLogType(message);
       const uniqueKey = generateLogKey(timestamp, level, logger, message);
-      
+
       if (isDuplicateLog(uniqueKey)) {
         return null;
       }
-      
+
       return {
         id: generateUniqueId(),
         timestamp,
@@ -303,31 +316,11 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
         hasJson,
         logType: type,
         uniqueKey,
+        identifier,
       };
     }
-    
-    const timestamp = new Date().toLocaleTimeString();
-    const level = 'INFO';
-    const logger = 'Unknown';
-    const { formatted, hasJson } = tryParseAndFormatJson(data);
-    const { type } = detectLogType(data);
-    const uniqueKey = generateLogKey(timestamp, level, logger, data);
-    
-    if (isDuplicateLog(uniqueKey)) {
-      return null;
-    }
-    
-    return {
-      id: generateUniqueId(),
-      timestamp,
-      level,
-      logger,
-      message: data,
-      formattedMessage: formatted,
-      hasJson,
-      logType: type,
-      uniqueKey,
-    };
+
+    return null;
   };
 
   const addLog = (level: string, logger: string, message: string) => {
@@ -412,6 +405,49 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
     }
   };
 
+  const getLogLevelClass = (level: string): string => {
+    switch (level.toUpperCase()) {
+      case 'ERROR':
+        return 'log-level-error';
+      case 'WARN':
+        return 'log-level-warn';
+      case 'INFO':
+        return 'log-level-info';
+      case 'DEBUG':
+        return 'log-level-debug';
+      default:
+        return 'log-level-info';
+    }
+  };
+
+  const getLogLevelTextClass = (level: string): string => {
+    switch (level.toUpperCase()) {
+      case 'ERROR':
+        return 'log-message-error';
+      case 'WARN':
+        return 'log-message-warn';
+      case 'INFO':
+        return 'log-message-info';
+      case 'DEBUG':
+        return 'log-message-debug';
+      default:
+        return 'log-message-info';
+    }
+  };
+
+  const getLogTypeClass = (logType: string): string => {
+    switch (logType) {
+      case 'request':
+        return 'log-type-request';
+      case 'response':
+        return 'log-type-response';
+      default:
+        return '';
+    }
+  };
+
+  const getLogIdentity = (log: LogEntry): string => log.identifier || 'SYSTEM';
+
   if (fullPage) {
     return (
       <div className="log-viewer-full-page">
@@ -422,46 +458,46 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
               后端日志 ({filteredLogs.length}/{logs.length}) - {isConnected ? '已连接' : '未连接'}
             </span>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-            <label className="flex items-center gap-1 text-xs cursor-pointer hover:bg-gray-200 px-2 py-1 rounded transition-colors">
+          <div className="log-toolbar-controls">
+            <label className="log-filter-label log-filter-all">
               <input
                 type="checkbox"
                 checked={filters.has('request') && filters.has('response') && filters.has('other')}
                 onChange={() => toggleFilter('all')}
-                className="w-3 h-3 rounded"
+                className="log-filter-checkbox"
               />
-              <span className="text-gray-700">全部</span>
+              <span>全部</span>
             </label>
-            <label className="flex items-center gap-1 text-xs cursor-pointer hover:bg-blue-100 px-2 py-1 rounded transition-colors">
+            <label className="log-filter-label log-filter-request">
               <input
                 type="checkbox"
                 checked={filters.has('request')}
                 onChange={() => toggleFilter('request')}
-                className="w-3 h-3 rounded"
+                className="log-filter-checkbox"
               />
-              <span className="text-blue-700">请求JSON</span>
+              <span>请求JSON</span>
             </label>
-            <label className="flex items-center gap-1 text-xs cursor-pointer hover:bg-purple-100 px-2 py-1 rounded transition-colors">
+            <label className="log-filter-label log-filter-response">
               <input
                 type="checkbox"
                 checked={filters.has('response')}
                 onChange={() => toggleFilter('response')}
-                className="w-3 h-3 rounded"
+                className="log-filter-checkbox"
               />
-              <span className="text-purple-700">响应JSON</span>
+              <span>响应JSON</span>
             </label>
-            <label className="flex items-center gap-1 text-xs cursor-pointer hover:bg-gray-200 px-2 py-1 rounded transition-colors">
+            <label className="log-filter-label log-filter-other">
               <input
                 type="checkbox"
                 checked={filters.has('other')}
                 onChange={() => toggleFilter('other')}
-                className="w-3 h-3 rounded"
+                className="log-filter-checkbox"
               />
-              <span className="text-gray-700">其他</span>
+              <span>其他</span>
             </label>
-            <span className="border-l border-gray-300 h-4 mx-1"></span>
+            <span className="log-toolbar-divider"></span>
             <button
-              className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+              className="log-action-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 setShowFormatted(!showFormatted);
@@ -471,7 +507,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
               {showFormatted ? '格式化' : '原始'}
             </button>
             <button
-              className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+              className="log-action-btn log-action-clear"
               onClick={(e) => {
                 e.stopPropagation();
                 clearLogs();
@@ -498,7 +534,10 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-gray-400 text-xs whitespace-nowrap">[{log.timestamp}]</span>
                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${getLevelBg(log.level)}`}>
-                      {log.level}
+                      [{log.level}]
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${getLogIdentity(log) === 'SYSTEM' ? 'bg-gray-100 text-gray-700' : 'bg-orange-100 text-orange-700'}`} title={getLogIdentity(log)}>
+                      [{getLogIdentity(log)}]
                     </span>
                     {log.logType !== 'other' && (
                       <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${getLogTypeColor(log.logType)}`}>
@@ -506,7 +545,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
                       </span>
                     )}
                     <span className="text-indigo-600 text-xs font-medium" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.logger}>
-                      {log.logger.includes('.') ? log.logger.split('.').pop() : log.logger}:
+                      {log.logger.includes('.') ? log.logger.split('.').pop() : log.logger} -
                     </span>
                   </div>
                   <pre
@@ -544,46 +583,46 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
             后端日志 ({filteredLogs.length}/{logs.length}) - {isConnected ? '已连接' : '未连接'}
           </span>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-          <label className="flex items-center gap-1 text-xs cursor-pointer hover:bg-gray-200 px-2 py-1 rounded transition-colors">
+        <div className="log-toolbar-controls">
+          <label className="log-filter-label log-filter-all">
             <input
               type="checkbox"
               checked={filters.has('request') && filters.has('response') && filters.has('other')}
               onChange={() => toggleFilter('all')}
-              className="w-3 h-3 rounded"
+              className="log-filter-checkbox"
             />
-            <span className="text-gray-700">全部</span>
+            <span>全部</span>
           </label>
-          <label className="flex items-center gap-1 text-xs cursor-pointer hover:bg-blue-100 px-2 py-1 rounded transition-colors">
+          <label className="log-filter-label log-filter-request">
             <input
               type="checkbox"
               checked={filters.has('request')}
               onChange={() => toggleFilter('request')}
-              className="w-3 h-3 rounded"
+              className="log-filter-checkbox"
             />
-            <span className="text-blue-700">请求JSON</span>
+            <span>请求JSON</span>
           </label>
-          <label className="flex items-center gap-1 text-xs cursor-pointer hover:bg-purple-100 px-2 py-1 rounded transition-colors">
+          <label className="log-filter-label log-filter-response">
             <input
               type="checkbox"
               checked={filters.has('response')}
               onChange={() => toggleFilter('response')}
-              className="w-3 h-3 rounded"
+              className="log-filter-checkbox"
             />
-            <span className="text-purple-700">响应JSON</span>
+            <span>响应JSON</span>
           </label>
-          <label className="flex items-center gap-1 text-xs cursor-pointer hover:bg-gray-200 px-2 py-1 rounded transition-colors">
+          <label className="log-filter-label log-filter-other">
             <input
               type="checkbox"
               checked={filters.has('other')}
               onChange={() => toggleFilter('other')}
-              className="w-3 h-3 rounded"
+              className="log-filter-checkbox"
             />
-            <span className="text-gray-700">其他</span>
+            <span>其他</span>
           </label>
-          <span className="border-l border-gray-300 h-4 mx-1"></span>
+          <span className="log-toolbar-divider"></span>
           <button
-            className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+            className="log-action-btn"
             onClick={(e) => {
               e.stopPropagation();
               setShowFormatted(!showFormatted);
@@ -593,7 +632,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
             {showFormatted ? '格式化' : '原始'}
           </button>
           <button
-            className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded transition-colors"
+            className="log-action-btn log-action-clear"
             onClick={(e) => {
               e.stopPropagation();
               clearLogs();
@@ -621,7 +660,10 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-gray-400 text-xs whitespace-nowrap">[{log.timestamp}]</span>
                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${getLevelBg(log.level)}`}>
-                      {log.level}
+                      [{log.level}]
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${getLogIdentity(log) === 'SYSTEM' ? 'bg-gray-100 text-gray-700' : 'bg-orange-100 text-orange-700'}`} title={getLogIdentity(log)}>
+                      [{getLogIdentity(log)}]
                     </span>
                     {log.logType !== 'other' && (
                       <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${getLogTypeColor(log.logType)}`}>
@@ -629,7 +671,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
                       </span>
                     )}
                     <span className="text-indigo-600 text-xs font-medium" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.logger}>
-                      {log.logger.includes('.') ? log.logger.split('.').pop() : log.logger}:
+                      {log.logger.includes('.') ? log.logger.split('.').pop() : log.logger} -
                     </span>
                   </div>
                   <pre

@@ -60,7 +60,6 @@ public class LoginAttemptService {
         
         if (success) {
             resetLoginFailures(ipAddress, username, userOpt.orElse(null));
-            log.info("登录成功 - IP: {}, 用户名: {}", ipAddress, username);
         } else {
             incrementLoginFailures(ipAddress, username, userOpt.orElse(null));
             log.warn("登录失败 - IP: {}, 用户名: {}, 原因: {}", ipAddress, username, failureReason);

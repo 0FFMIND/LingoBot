@@ -64,54 +64,45 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="admin-page">
-      <div className="admin-login-container">
-        <div className="admin-login-header">
-          <h1>管理员登录</h1>
-          <p>管理锁定用户和IP地址</p>
-        </div>
+    <form onSubmit={handleSubmit} className="admin-login-form">
+      {error && <div className="admin-login-error">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="admin-login-form">
-          {error && <div className="admin-login-error">{error}</div>}
-
-          <div className="admin-login-field">
-            <label htmlFor="admin-email">邮箱</label>
-            <input
-              id="admin-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="请输入邮箱"
-              disabled={loading}
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="admin-login-field">
-            <label htmlFor="admin-password">密码</label>
-            <input
-              id="admin-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="请输入密码"
-              disabled={loading}
-              autoComplete="current-password"
-            />
-          </div>
-
-          <button type="submit" className="admin-login-submit-btn" disabled={loading}>
-            {loading ? '登录中...' : '登录'}
-          </button>
-
-          <div className="admin-back-link">
-            <button type="button" onClick={handleBackToChat}>
-              ← 返回聊天页面
-            </button>
-          </div>
-        </form>
+      <div className="admin-login-field">
+        <label htmlFor="admin-email">邮箱</label>
+        <input
+          id="admin-email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="请输入邮箱"
+          disabled={loading}
+          autoComplete="email"
+        />
       </div>
-    </div>
+
+      <div className="admin-login-field">
+        <label htmlFor="admin-password">密码</label>
+        <input
+          id="admin-password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="请输入密码"
+          disabled={loading}
+          autoComplete="current-password"
+        />
+      </div>
+
+      <button type="submit" className="admin-login-submit-btn" disabled={loading}>
+        {loading ? '登录中...' : '登录'}
+      </button>
+
+      <div className="admin-back-link">
+        <button type="button" onClick={handleBackToChat}>
+          ← 返回聊天页面
+        </button>
+      </div>
+    </form>
   );
 };
 

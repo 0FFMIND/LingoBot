@@ -6,6 +6,7 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -23,7 +24,14 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     private final StringRedisTemplate redisTemplate;
     private final JavaMailSender mailSender;
     
+    @Value("${ADMIN_EMAIL:admin@example.com}")
+    private String adminEmail;
+    
+    @Value("${ADMIN_PERSONAL_EMAIL:}")
+    private String adminPersonalEmail;
+    
     private static final String VERIFICATION_CODE_PREFIX = "email:verify:";
+    private static final String LOGIN_CODE_PREFIX = "login:verify:";
     private static final String SEND_COUNT_PREFIX = "email:send:count:";
     private static final String LOCK_PREFIX = "email:lock:";
     private static final String LAST_SEND_PREFIX = "email:lastsend:";
@@ -150,6 +158,107 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
         
         return isValid;
+    }
+    
+    @Override
+    public void sendLoginVerificationCode(String email) {
+        if (!isValidEmail(email)) {
+            throw new IllegalArgumentException("无效的邮箱地址");
+        }
+        
+        checkLockStatus(email);
+        
+        checkSendInterval(email);
+        
+        incrementSendCountAndCheckLimit(email);
+        
+        String code = generateVerificationCode();
+        
+        String key = LOGIN_CODE_PREFIX + email;
+        redisTemplate.opsForValue().set(key, code, CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
+        
+        try {
+            String targetEmail = determineTargetEmail(email);
+            sendLoginEmail(targetEmail, code);
+            log.info("登录验证码已发送到邮箱: {}", targetEmail);
+        } catch (MessagingException e) {
+            log.error("发送登录验证码失败: {}", e.getMessage());
+            throw new RuntimeException("发送验证码失败，请稍后重试");
+        }
+        
+        updateLastSendTime(email);
+        
+        log.info("发送登录验证码到邮箱: {}: {}", email, code);
+        log.info("验证码有效期: {}分钟", CODE_EXPIRE_MINUTES);
+    }
+    
+    private String determineTargetEmail(String loginEmail) {
+        if (adminEmail != null && adminEmail.equalsIgnoreCase(loginEmail)) {
+            if (adminPersonalEmail != null && !adminPersonalEmail.isEmpty() && isValidEmail(adminPersonalEmail)) {
+                log.info("管理员登录，验证码发送到私人邮箱: {}", adminPersonalEmail);
+                return adminPersonalEmail;
+            }
+        }
+        return loginEmail;
+    }
+    
+    @Override
+    public boolean verifyLoginCode(String email, String code) {
+        if (!isValidEmail(email)) {
+            return false;
+        }
+        
+        String key = LOGIN_CODE_PREFIX + email;
+        String storedCode = redisTemplate.opsForValue().get(key);
+        
+        if (storedCode == null) {
+            return false;
+        }
+        
+        boolean isValid = storedCode.equals(code);
+        
+        if (isValid) {
+            redisTemplate.delete(key);
+        }
+        
+        return isValid;
+    }
+    
+    private void sendLoginEmail(String to, String code) throws MessagingException {
+        MimeMessage message = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+        
+        helper.setFrom("gushisun123@gmail.com");
+        helper.setTo(to);
+        helper.setSubject("【英语学习助手】登录验证码");
+        
+        String htmlContent = String.format("""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>登录验证码</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
+                <div style="background-color: #f5f5f5; padding: 20px; border-radius: 10px;">
+                    <h2 style="color: #333; text-align: center;">英语学习助手</h2>
+                    <p style="color: #666; line-height: 1.6;">您好！</p>
+                    <p style="color: #666; line-height: 1.6;">您正在登录英语学习助手账号，以下是您的登录验证码：</p>
+                    <div style="text-align: center; margin: 20px 0;">
+                        <span style="font-size: 32px; font-weight: bold; color: #4CAF50;">%s</span>
+                    </div>
+                    <p style="color: #666; line-height: 1.6;">验证码有效期：<strong>5分钟</strong>，请尽快使用！</p>
+                    <p style="color: #666; line-height: 1.6;">如果这不是您的操作，请忽略此邮件！</p>
+                    <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+                    <p style="color: #999; font-size: 12px; text-align: center;">© 2024 英语学习助手</p>
+                </div>
+            </body>
+            </html>
+            """, code);
+        
+        helper.setText(htmlContent, true);
+        
+        mailSender.send(message);
     }
     
     private boolean isValidEmail(String email) {

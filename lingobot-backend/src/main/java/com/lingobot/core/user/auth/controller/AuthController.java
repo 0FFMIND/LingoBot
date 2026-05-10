@@ -3,8 +3,10 @@ package com.lingobot.core.user.auth.controller;
 import com.lingobot.core.user.auth.dto.AuthResponse;
 import com.lingobot.core.user.auth.dto.ChangePasswordRequest;
 import com.lingobot.core.user.auth.dto.LoginRequest;
+import com.lingobot.core.user.auth.dto.LoginWithCodeRequest;
 import com.lingobot.core.user.auth.dto.RegisterRequest;
 import com.lingobot.core.user.auth.dto.RegisterWithCodeRequest;
+import com.lingobot.core.user.auth.dto.SendLoginCodeRequest;
 import com.lingobot.core.user.auth.dto.SendVerificationCodeRequest;
 import com.lingobot.core.user.auth.dto.UpdateAvatarRequest;
 import com.lingobot.core.user.auth.dto.UpdateUsernameRequest;
@@ -43,6 +45,24 @@ public class AuthController {
             HttpServletRequest httpRequest) {
         String clientIp = IpUtils.getClientIp(httpRequest);
         AuthResponse response = authService.login(request, clientIp);
+        return ResponseEntity.ok(ApiResponse.success("登录成功", response));
+    }
+    
+    @PostMapping("/send-login-code")
+    public ResponseEntity<ApiResponse<Void>> sendLoginCode(
+            @RequestBody SendLoginCodeRequest request,
+            HttpServletRequest httpRequest) {
+        String clientIp = IpUtils.getClientIp(httpRequest);
+        authService.sendLoginVerificationCode(request, clientIp);
+        return ResponseEntity.ok(ApiResponse.success("登录验证码已发送", null));
+    }
+    
+    @PostMapping("/login-with-code")
+    public ResponseEntity<ApiResponse<AuthResponse>> loginWithCode(
+            @RequestBody LoginWithCodeRequest request,
+            HttpServletRequest httpRequest) {
+        String clientIp = IpUtils.getClientIp(httpRequest);
+        AuthResponse response = authService.loginWithCode(request, clientIp);
         return ResponseEntity.ok(ApiResponse.success("登录成功", response));
     }
     

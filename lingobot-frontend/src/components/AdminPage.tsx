@@ -53,7 +53,13 @@ const AdminPage: React.FC = () => {
   return (
     <div className="admin-page">
       {!isAuthenticated ? (
-        <AdminLogin onLoginSuccess={handleLoginSuccess} />
+        <div className="admin-login-container">
+          <div className="admin-login-header">
+            <h1>管理员登录</h1>
+            <p>管理锁定用户和IP地址</p>
+          </div>
+          <AdminLogin onLoginSuccess={handleLoginSuccess} />
+        </div>
       ) : (
         currentUser && (
           <AdminDashboard currentUser={currentUser} onLogout={handleLogout} />
