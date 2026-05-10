@@ -77,3 +77,6 @@ llm:
   max-tokens: ${LLM_MAX_TOKENS:4096}
   timeout: ${LLM_TIMEOUT:120000}
   audio-enabled: ${LLM_AUDIO_ENABLED:true}
+
+app:
+  env: ${APP_ENV:production}

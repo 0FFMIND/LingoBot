@@ -24,8 +24,10 @@ import java.util.List;
  * 统一入口路径：/api/redemption
  *
  * 权限划分：
- * - 普通用户接口：/balance（查余额）、/redeem（使用兑换码）→ 登录即可访问
+ * - 普通用户接口：/redeem（使用兑换码）→ 登录即可访问
  * - 管理员接口：/codes/** → 使用 @PreAuthorize("hasRole('ADMIN')") 限制
+ *
+ * 注意：余额查询已移至 /api/balance 端点
  *
  * 异常处理策略：
  * - Service 层抛出 IllegalArgumentException → 捕获并包装为 HTTP 400 + ApiResponse.error()
@@ -45,18 +47,6 @@ public class RedemptionCodeController {
     
     private final RedemptionCodeService redemptionCodeService;
     private final AuthService authService;
-    
-    // 查询当前登录用户的余额，需登录
-    @GetMapping("/balance")
-    public ResponseEntity<ApiResponse<BigDecimal>> getBalance() {
-        Long userId = authService.getCurrentUserId();
-        if (userId == null) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
-        }
-        BigDecimal balance = redemptionCodeService.getUserBalance(userId);
-        return ResponseEntity.ok(ApiResponse.success("获取余额成功", balance));
-    }
     
     // 用户使用兑换码：校验登录 → 调用Service → 捕获IllegalArgumentException转400
     @PostMapping("/redeem")

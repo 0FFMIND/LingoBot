@@ -31,6 +31,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [showFormatted, setShowFormatted] = useState(true);
   const [filters, setFilters] = useState<Set<LogFilter>>(new Set(['request', 'response', 'other']));
+  const [isDevEnv, setIsDevEnv] = useState<boolean | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pendingResponseHeaderRef = useRef<LogEntry | null>(null);
   const isConnectingRef = useRef(false);
@@ -212,19 +213,19 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
     }
   }, [mergeResponseLogs, shouldFilterLog]);
 
-  const connectToLogStream = useCallback(() => {
+  const connectToLogStream = useCallback((isDev: boolean) => {
     if (isConnectingRef.current) {
       console.log('⚠️ [LogViewer] 已有连接正在建立中，跳过');
       return;
     }
     
     const token = authUtils.getToken();
-    if (!token) {
+    if (!isDev && !token) {
       console.log('⚠️ [LogViewer] 未登录，跳过连接');
       return;
     }
     
-    console.log('🔌 [LogViewer] 尝试连接日志流 SSE: /api/logs/stream');
+    console.log('🔌 [LogViewer] 尝试连接日志流 SSE: /api/logs/stream', isDev ? '(开发环境)' : '(生产环境)');
     
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -239,7 +240,8 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
     
     isConnectingRef.current = true;
     
-    const eventSource = new EventSource(`/api/logs/stream?token=${encodeURIComponent(token)}`);
+    const url = isDev ? '/api/logs/stream' : `/api/logs/stream?token=${encodeURIComponent(token || '')}`;
+    const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
@@ -265,15 +267,35 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
       addLog('ERROR', 'LogViewer', '日志流连接错误，3秒后重试...');
       
       reconnectTimeoutRef.current = window.setTimeout(() => {
-        connectToLogStream();
+        connectToLogStream(isDev);
       }, 3000);
     };
-  }, [handleLogData]);
+  }, [handleLogData, isDevEnv]);
 
   useEffect(() => {
-    connectToLogStream();
+    let cancelled = false;
+    
+    const init = async () => {
+      try {
+        const response = await fetch('/api/logs/dev-check');
+        const isDev = await response.json();
+        if (cancelled) return;
+        setIsDevEnv(isDev);
+        if (isDev) {
+          addLog('INFO', 'LogViewer', '开发环境模式，无需登录即可查看日志');
+        }
+        connectToLogStream(isDev);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('⚠️ [LogViewer] 检查开发环境失败:', error);
+        setIsDevEnv(false);
+      }
+    };
+    
+    init();
 
     return () => {
+      cancelled = true;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;

@@ -1,6 +1,6 @@
-package com.lingobot.core.user.auth.service;
+package com.lingobot.core.user.balance.service;
 
-import com.lingobot.core.user.auth.dto.BalanceTransactionDTO;
+import com.lingobot.core.user.balance.dto.BalanceTransactionDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -31,4 +31,10 @@ public interface BalanceService {
     BigDecimal addCurrentUserBalance(BigDecimal amount);
 
     Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable);
+
+    BigDecimal getUserBalance(Long userId);
+
+    BigDecimal getUserFrozenBalance(Long userId);
+
+    BigDecimal setUserBalance(Long userId, BigDecimal newBalance);
 }

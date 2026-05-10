@@ -1,6 +1,5 @@
 package com.lingobot.core.user.auth.entity;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,14 +57,6 @@ public class User {
     
     @Column(name = "avatar", columnDefinition = "TEXT")
     private String avatar;
-    
-    @Column(columnDefinition = "DECIMAL(10,2)")
-    @Builder.Default
-    private BigDecimal balance = BigDecimal.ZERO;
-
-    @Column(name = "frozen_balance", columnDefinition = "DECIMAL(10,2)")
-    @Builder.Default
-    private BigDecimal frozenBalance = BigDecimal.ZERO;
     
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

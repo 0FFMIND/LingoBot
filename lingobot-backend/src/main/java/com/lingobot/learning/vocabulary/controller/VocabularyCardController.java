@@ -1,6 +1,6 @@
 package com.lingobot.learning.vocabulary.controller;
 
-import com.lingobot.core.user.auth.service.BalanceService;
+import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.learning.vocabulary.dto.CreateVocabularyCardRequest;

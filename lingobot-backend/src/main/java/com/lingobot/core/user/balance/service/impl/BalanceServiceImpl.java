@@ -1,11 +1,13 @@
-package com.lingobot.core.user.auth.service.impl;
+package com.lingobot.core.user.balance.service.impl;
 
-import com.lingobot.core.user.auth.dto.BalanceTransactionDTO;
-import com.lingobot.core.user.auth.entity.BalanceTransaction;
 import com.lingobot.core.user.auth.entity.User;
-import com.lingobot.core.user.auth.repository.BalanceTransactionRepository;
 import com.lingobot.core.user.auth.repository.UserRepository;
-import com.lingobot.core.user.auth.service.BalanceService;
+import com.lingobot.core.user.balance.dto.BalanceTransactionDTO;
+import com.lingobot.core.user.balance.entity.BalanceTransaction;
+import com.lingobot.core.user.balance.entity.UserBalance;
+import com.lingobot.core.user.balance.repository.BalanceTransactionRepository;
+import com.lingobot.core.user.balance.repository.UserBalanceRepository;
+import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.exception.AuthException;
 import com.lingobot.infrastructure.common.exception.BalanceException;
 import lombok.RequiredArgsConstructor;
@@ -26,18 +28,19 @@ import java.time.LocalDateTime;
 public class BalanceServiceImpl implements BalanceService {
 
     private final UserRepository userRepository;
+    private final UserBalanceRepository userBalanceRepository;
     private final BalanceTransactionRepository transactionRepository;
 
     @Override
     public BigDecimal getCurrentUserBalance() {
-        User user = getCurrentUser();
-        return user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
+        UserBalance userBalance = getOrCreateCurrentUserBalance();
+        return userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
     }
 
     @Override
     public BigDecimal getCurrentUserFrozenBalance() {
-        User user = getCurrentUser();
-        return user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO;
+        UserBalance userBalance = getOrCreateCurrentUserBalance();
+        return userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
     }
 
     @Override
@@ -56,9 +59,10 @@ public class BalanceServiceImpl implements BalanceService {
     @Transactional
     public BigDecimal deductBalanceWithLog(BigDecimal cost, String apiCategory, String apiEndpoint, String description, Long conversationId) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByUsernameForUpdate(username)
+        User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
-        BigDecimal currentBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
+        UserBalance userBalance = getOrCreateUserBalanceForUpdate(user.getId());
+        BigDecimal currentBalance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
 
         if (currentBalance.compareTo(cost) < 0) {
             log.warn("用户余额不足。用户: {}, 当前余额: {}, 需要: {}",
@@ -67,8 +71,8 @@ public class BalanceServiceImpl implements BalanceService {
         }
 
         BigDecimal newBalance = currentBalance.subtract(cost).setScale(2, RoundingMode.HALF_UP);
-        user.setBalance(newBalance);
-        userRepository.saveAndFlush(user);
+        userBalance.setBalance(newBalance);
+        userBalanceRepository.saveAndFlush(userBalance);
 
         BalanceTransaction transaction = BalanceTransaction.builder()
                 .user(user)
@@ -95,10 +99,11 @@ public class BalanceServiceImpl implements BalanceService {
     @Transactional
     public Long freezeBalance(BigDecimal cost, String apiCategory, String apiEndpoint, String description, Long conversationId) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByUsernameForUpdate(username)
+        User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
-        BigDecimal currentBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
-        BigDecimal currentFrozenBalance = user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO;
+        UserBalance userBalance = getOrCreateUserBalanceForUpdate(user.getId());
+        BigDecimal currentBalance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
+        BigDecimal currentFrozenBalance = userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
 
         if (currentBalance.compareTo(cost) < 0) {
             log.warn("用户余额不足，无法冻结。用户: {}, 当前余额: {}, 需要: {}",
@@ -108,9 +113,9 @@ public class BalanceServiceImpl implements BalanceService {
 
         BigDecimal newBalance = currentBalance.subtract(cost).setScale(2, RoundingMode.HALF_UP);
         BigDecimal newFrozenBalance = currentFrozenBalance.add(cost).setScale(2, RoundingMode.HALF_UP);
-        user.setBalance(newBalance);
-        user.setFrozenBalance(newFrozenBalance);
-        userRepository.saveAndFlush(user);
+        userBalance.setBalance(newBalance);
+        userBalance.setFrozenBalance(newFrozenBalance);
+        userBalanceRepository.saveAndFlush(userBalance);
 
         BalanceTransaction transaction = BalanceTransaction.builder()
                 .user(user)
@@ -148,28 +153,26 @@ public class BalanceServiceImpl implements BalanceService {
             throw new IllegalStateException("交易没有关联用户: " + transactionId);
         }
 
-        User user = userRepository.findByIdForUpdate(transactionUser.getId())
-                .orElseThrow(() -> AuthException.userNotFound("交易关联的用户不存在"));
-
+        UserBalance userBalance = getOrCreateUserBalanceForUpdate(transactionUser.getId());
         BigDecimal cost = transaction.getAmount();
-        BigDecimal currentFrozenBalance = user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO;
+        BigDecimal currentFrozenBalance = userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
 
         if (currentFrozenBalance.compareTo(cost) < 0) {
             log.error("冻结余额不足，无法确认交易。用户: {}, 冻结余额: {}, 需要: {}",
-                    user.getUsername(), currentFrozenBalance, cost);
+                    transactionUser.getUsername(), currentFrozenBalance, cost);
             throw new IllegalStateException("冻结余额不足");
         }
 
         BigDecimal newFrozenBalance = currentFrozenBalance.subtract(cost).setScale(2, RoundingMode.HALF_UP);
-        user.setFrozenBalance(newFrozenBalance);
-        userRepository.saveAndFlush(user);
+        userBalance.setFrozenBalance(newFrozenBalance);
+        userBalanceRepository.saveAndFlush(userBalance);
 
         transaction.setStatus(BalanceTransaction.TransactionStatus.SUCCEEDED);
         transaction.setCompletedAt(LocalDateTime.now());
         transactionRepository.save(transaction);
 
         log.info("交易确认成功。交易ID: {}, 用户: {}, 扣费: {}, 剩余冻结: {}",
-                transactionId, user.getUsername(), cost, newFrozenBalance);
+                transactionId, transactionUser.getUsername(), cost, newFrozenBalance);
     }
 
     @Override
@@ -188,31 +191,29 @@ public class BalanceServiceImpl implements BalanceService {
             throw new IllegalStateException("交易没有关联用户: " + transactionId);
         }
 
-        User user = userRepository.findByIdForUpdate(transactionUser.getId())
-                .orElseThrow(() -> AuthException.userNotFound("交易关联的用户不存在"));
-
+        UserBalance userBalance = getOrCreateUserBalanceForUpdate(transactionUser.getId());
         BigDecimal cost = transaction.getAmount();
-        BigDecimal currentBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
-        BigDecimal currentFrozenBalance = user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO;
+        BigDecimal currentBalance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
+        BigDecimal currentFrozenBalance = userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
 
         if (currentFrozenBalance.compareTo(cost) < 0) {
             log.error("冻结余额不足，无法取消交易。用户: {}, 冻结余额: {}, 需要: {}",
-                    user.getUsername(), currentFrozenBalance, cost);
+                    transactionUser.getUsername(), currentFrozenBalance, cost);
             throw new IllegalStateException("冻结余额不足");
         }
 
         BigDecimal newBalance = currentBalance.add(cost).setScale(2, RoundingMode.HALF_UP);
         BigDecimal newFrozenBalance = currentFrozenBalance.subtract(cost).setScale(2, RoundingMode.HALF_UP);
-        user.setBalance(newBalance);
-        user.setFrozenBalance(newFrozenBalance);
-        userRepository.saveAndFlush(user);
+        userBalance.setBalance(newBalance);
+        userBalance.setFrozenBalance(newFrozenBalance);
+        userBalanceRepository.saveAndFlush(userBalance);
 
         transaction.setStatus(BalanceTransaction.TransactionStatus.RELEASED);
         transaction.setCompletedAt(LocalDateTime.now());
         transactionRepository.save(transaction);
 
         log.info("交易取消成功，余额已返还。交易ID: {}, 用户: {}, 返还: {}, 新余额: {}, 剩余冻结: {}",
-                transactionId, user.getUsername(), cost, newBalance, newFrozenBalance);
+                transactionId, transactionUser.getUsername(), cost, newBalance, newFrozenBalance);
     }
 
     @Override
@@ -231,10 +232,11 @@ public class BalanceServiceImpl implements BalanceService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
 
-        BigDecimal currentBalance = user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
+        UserBalance userBalance = getOrCreateUserBalanceForUpdate(userId);
+        BigDecimal currentBalance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
         BigDecimal newBalance = currentBalance.add(amount).setScale(2, RoundingMode.HALF_UP);
-        user.setBalance(newBalance);
-        userRepository.saveAndFlush(user);
+        userBalance.setBalance(newBalance);
+        userBalanceRepository.saveAndFlush(userBalance);
 
         BalanceTransaction transaction = BalanceTransaction.builder()
                 .user(user)
@@ -268,9 +270,86 @@ public class BalanceServiceImpl implements BalanceService {
                 .map(BalanceTransactionDTO::fromEntity);
     }
 
+    @Override
+    public BigDecimal getUserBalance(Long userId) {
+        UserBalance userBalance = userBalanceRepository.findByUserId(userId).orElse(null);
+        if (userBalance == null) {
+            return BigDecimal.ZERO;
+        }
+        return userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
+    }
+
+    @Override
+    public BigDecimal getUserFrozenBalance(Long userId) {
+        UserBalance userBalance = userBalanceRepository.findByUserId(userId).orElse(null);
+        if (userBalance == null) {
+            return BigDecimal.ZERO;
+        }
+        return userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
+    }
+
+    @Override
+    @Transactional
+    public BigDecimal setUserBalance(Long userId, BigDecimal newBalance) {
+        if (newBalance == null) {
+            throw new IllegalArgumentException("余额不能为空");
+        }
+        if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("余额不能为负数");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+
+        UserBalance userBalance = getOrCreateUserBalanceForUpdate(userId);
+        BigDecimal oldBalance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
+        userBalance.setBalance(newBalance);
+        userBalanceRepository.saveAndFlush(userBalance);
+
+        log.info("管理员修改用户余额: userId={}, username={}, 旧余额={}, 新余额={}",
+                userId, user.getUsername(), oldBalance, newBalance);
+
+        return newBalance;
+    }
+
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
+    }
+
+    private UserBalance getOrCreateCurrentUserBalance() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
+        return getOrCreateUserBalance(user.getId());
+    }
+
+    private UserBalance getOrCreateUserBalance(Long userId) {
+        return userBalanceRepository.findByUserId(userId)
+                .orElseGet(() -> {
+                    User user = userRepository.findById(userId)
+                            .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
+                    UserBalance newBalance = UserBalance.builder()
+                            .user(user)
+                            .balance(BigDecimal.ZERO)
+                            .frozenBalance(BigDecimal.ZERO)
+                            .build();
+                    return userBalanceRepository.save(newBalance);
+                });
+    }
+
+    private UserBalance getOrCreateUserBalanceForUpdate(Long userId) {
+        return userBalanceRepository.findByUserIdForUpdate(userId)
+                .orElseGet(() -> {
+                    User user = userRepository.findById(userId)
+                            .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
+                    UserBalance newBalance = UserBalance.builder()
+                            .user(user)
+                            .balance(BigDecimal.ZERO)
+                            .frozenBalance(BigDecimal.ZERO)
+                            .build();
+                    return userBalanceRepository.save(newBalance);
+                });
     }
 }

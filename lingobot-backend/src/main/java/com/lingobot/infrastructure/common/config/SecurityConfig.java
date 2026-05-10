@@ -40,6 +40,9 @@ public class SecurityConfig {
     // JWT 认证过滤器，用于从请求头中提取和验证 JWT Token
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     
+    // 应用配置属性
+    private final AppProperties appProperties;
+    
     // 配置安全过滤链：禁用 CSRF、配置 CORS、设置无状态会话、配置白名单和认证入口
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -51,22 +54,28 @@ public class SecurityConfig {
             // 使用无状态会话策略，不创建或使用 HttpSession
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             // 配置请求授权规则
-            .authorizeHttpRequests(auth -> auth
+            .authorizeHttpRequests(auth -> {
                 // 认证相关接口：注册、登录等
-                .requestMatchers("/api/auth/**").permitAll()
+                auth.requestMatchers("/api/auth/**").permitAll();
                 // H2 控制台：仅开发环境使用
-                .requestMatchers("/h2-console/**").permitAll()
+                auth.requestMatchers("/h2-console/**").permitAll();
                 // 错误页面
-                .requestMatchers("/error").permitAll()
+                auth.requestMatchers("/error").permitAll();
                 // 音频资源
-                .requestMatchers("/audio/**").permitAll()
+                auth.requestMatchers("/audio/**").permitAll();
                 // 静态资源
-                .requestMatchers("/static/**").permitAll()
+                auth.requestMatchers("/static/**").permitAll();
                 // TTS 语音合成接口
-                .requestMatchers("/api/tts/**").permitAll()
+                auth.requestMatchers("/api/tts/**").permitAll();
+                // 日志环境检查接口：任何环境下都可访问
+                auth.requestMatchers("/api/logs/dev-check").permitAll();
+                // 开发环境下：所有日志接口无需认证
+                if (appProperties.isDev()) {
+                    auth.requestMatchers("/api/logs/**").permitAll();
+                }
                 // 其他所有请求需要认证
-                .anyRequest().authenticated()
-            )
+                auth.anyRequest().authenticated();
+            })
             // 配置未认证时的处理逻辑，返回 JSON 格式的错误信息
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint((request, response, authException) -> {

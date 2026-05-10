@@ -1,8 +1,9 @@
-package com.lingobot.core.user.auth.dto;
+package com.lingobot.core.user.balance.dto;
 
-import com.lingobot.core.user.auth.entity.BalanceTransaction;
+import com.lingobot.core.user.balance.entity.BalanceTransaction;
 import lombok.Builder;
 import lombok.Data;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 

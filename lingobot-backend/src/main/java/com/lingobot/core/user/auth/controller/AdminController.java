@@ -3,6 +3,7 @@ package com.lingobot.core.user.auth.controller;
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
 import com.lingobot.core.user.auth.service.LoginAttemptService;
+import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.infrastructure.common.response.ErrorCode;
 import jakarta.validation.Valid;
@@ -29,6 +30,7 @@ public class AdminController {
     
     private final LoginAttemptService loginAttemptService;
     private final UserRepository userRepository;
+    private final BalanceService balanceService;
     private final PasswordEncoder passwordEncoder;
     
     @PreAuthorize("hasRole('ADMIN')")
@@ -81,7 +83,7 @@ public class AdminController {
         String currentAdmin = SecurityContextHolder.getContext().getAuthentication().getName();
         
         List<UserAdminDTO> userDTOs = users.stream()
-                .map(user -> UserAdminDTO.fromEntity(user, currentAdmin))
+                .map(user -> UserAdminDTO.fromEntity(user, balanceService, currentAdmin))
                 .collect(Collectors.toList());
         
         return ResponseEntity.ok(ApiResponse.success("获取用户列表成功", userDTOs));
@@ -164,15 +166,25 @@ public class AdminController {
         private BigDecimal frozenBalance;
         private boolean isCurrentAdmin;
 
-        public static UserAdminDTO fromEntity(User user, String currentAdminUsername) {
+        public static UserAdminDTO fromEntity(User user, BalanceService balanceService, String currentAdminUsername) {
+            BigDecimal balance = balanceService.getUserBalance(user.getId());
+            if (balance == null) {
+                balance = BigDecimal.ZERO;
+            }
+
+            BigDecimal frozenBalance = balanceService.getUserFrozenBalance(user.getId());
+            if (frozenBalance == null) {
+                frozenBalance = BigDecimal.ZERO;
+            }
+            
             return UserAdminDTO.builder()
                     .id(user.getId())
                     .username(user.getUsername())
                     .email(user.getEmail())
                     .role(user.getRole() != null ? user.getRole().name() : User.Role.ROLE_USER.name())
                     .createdAt(user.getCreatedAt() != null ? user.getCreatedAt().toString() : null)
-                    .balance(user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO)
-                    .frozenBalance(user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO)
+                    .balance(balance)
+                    .frozenBalance(frozenBalance)
                     .isCurrentAdmin(user.getUsername().equals(currentAdminUsername))
                     .build();
         }
@@ -232,48 +244,5 @@ public class AdminController {
         @NotBlank(message = "新用户名不能为空")
         @Size(min = 2, max = 50, message = "用户名长度必须在2-50个字符之间")
         private String newUsername;
-    }
-    
-    @PreAuthorize("hasRole('ADMIN')")
-    @PutMapping("/users/{userId}/balance")
-    public ResponseEntity<ApiResponse<Void>> updateUserBalance(
-            @PathVariable Long userId,
-            @Valid @RequestBody UpdateBalanceRequest request) {
-
-        String currentAdmin = SecurityContextHolder.getContext().getAuthentication().getName();
-
-        Optional<User> userOpt = userRepository.findById(userId);
-        if (userOpt.isEmpty()) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户不存在"));
-        }
-
-        User user = userOpt.get();
-
-        BigDecimal newBalance = request.getNewBalance();
-        if (newBalance == null) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "余额不能为空"));
-        }
-
-        if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "余额不能为负数"));
-        }
-
-        user.setBalance(newBalance);
-        userRepository.save(user);
-
-        log.info("管理员修改用户余额: userId={}, username={}, 旧余额={}, 新余额={}, 操作管理员: {}",
-                userId, user.getUsername(),
-                user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO,
-                newBalance, currentAdmin);
-
-        return ResponseEntity.ok(ApiResponse.success("余额修改成功", null));
-    }
-
-    @lombok.Data
-    public static class UpdateBalanceRequest {
-        private BigDecimal newBalance;
     }
 }

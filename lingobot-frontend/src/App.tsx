@@ -1821,23 +1821,39 @@ function LogPage() {
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    const token = authUtils.initializeAuth();
-    if (token) {
-      authApi.getCurrentUser()
-        .then((user) => {
-          if (user.role === 'ROLE_ADMIN') {
-            authUtils.setUser(user);
-            setIsAuthenticated(true);
-            setCurrentUser(user);
-          }
-        })
-        .catch(() => {
-          authUtils.clearAuth();
-        })
-        .finally(() => setInitializing(false));
-    } else {
-      setInitializing(false);
-    }
+    const init = async () => {
+      try {
+        const devRes = await fetch('/api/logs/dev-check');
+        const isDev = await devRes.json();
+        if (isDev) {
+          setIsAuthenticated(true);
+          setInitializing(false);
+          return;
+        }
+      } catch {
+        // dev-check 失败则回退到正常认证流程
+      }
+
+      const token = authUtils.initializeAuth();
+      if (token) {
+        authApi.getCurrentUser()
+          .then((user) => {
+            if (user.role === 'ROLE_ADMIN') {
+              authUtils.setUser(user);
+              setIsAuthenticated(true);
+              setCurrentUser(user);
+            }
+          })
+          .catch(() => {
+            authUtils.clearAuth();
+          })
+          .finally(() => setInitializing(false));
+      } else {
+        setInitializing(false);
+      }
+    };
+
+    init();
   }, []);
 
   const handleLoginSuccess = (user: UserDTO) => {

@@ -15,6 +15,8 @@ import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.auth.service.EmailVerificationService;
 import com.lingobot.core.user.auth.service.JwtService;
 import com.lingobot.core.user.auth.service.LoginAttemptService;
+import com.lingobot.core.user.balance.entity.UserBalance;
+import com.lingobot.core.user.balance.repository.UserBalanceRepository;
 import com.lingobot.infrastructure.common.exception.AuthException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +46,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
     private final LoginAttemptService loginAttemptService;
     private final RateLimitProperties rateLimitProperties;
     private final EmailVerificationService emailVerificationService;
+    private final UserBalanceRepository userBalanceRepository;
     
     @Value("${ADMIN_EMAIL:admin@example.com}")
     private String adminEmail;
@@ -96,6 +99,13 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         
         User savedUser = userRepository.save(user);
         
+        UserBalance userBalance = UserBalance.builder()
+                .user(savedUser)
+                .balance(BigDecimal.ZERO)
+                .frozenBalance(BigDecimal.ZERO)
+                .build();
+        userBalanceRepository.save(userBalance);
+        
         String token = jwtService.generateToken(savedUser.getUsername(), savedUser.getId());
         
         log.info("用户注册成功: {}, IP: {}", savedUser.getUsername(), clientIp);
@@ -107,8 +117,8 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
-                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : BigDecimal.ZERO)
-                .frozenBalance(savedUser.getFrozenBalance() != null ? savedUser.getFrozenBalance() : BigDecimal.ZERO)
+                .balance(BigDecimal.ZERO)
+                .frozenBalance(BigDecimal.ZERO)
                 .build();
     }
 
@@ -176,6 +186,12 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         
         String token = jwtService.generateToken(user.getUsername(), user.getId());
         
+        UserBalance userBalance = userBalanceRepository.findByUserId(user.getId()).orElse(null);
+        BigDecimal balance = userBalance != null && userBalance.getBalance() != null 
+                ? userBalance.getBalance() : BigDecimal.ZERO;
+        BigDecimal frozenBalance = userBalance != null && userBalance.getFrozenBalance() != null 
+                ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
+        
         log.info("用户登录成功: {}, IP: {}", user.getUsername(), clientIp);
         
         return AuthResponse.builder()
@@ -185,8 +201,8 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(user.getId())
                 .role(user.getRole().name())
                 .avatar(user.getAvatar())
-                .balance(user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO)
-                .frozenBalance(user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO)
+                .balance(balance)
+                .frozenBalance(frozenBalance)
                 .build();
     }
 
@@ -313,6 +329,12 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         
         String token = jwtService.generateToken(user.getUsername(), user.getId());
         
+        UserBalance userBalance = userBalanceRepository.findByUserId(user.getId()).orElse(null);
+        BigDecimal balance = userBalance != null && userBalance.getBalance() != null 
+                ? userBalance.getBalance() : BigDecimal.ZERO;
+        BigDecimal frozenBalance = userBalance != null && userBalance.getFrozenBalance() != null 
+                ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
+        
         log.info("用户通过验证码登录成功: {}, IP: {}", user.getUsername(), clientIp);
         
         return AuthResponse.builder()
@@ -322,8 +344,8 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(user.getId())
                 .role(user.getRole().name())
                 .avatar(user.getAvatar())
-                .balance(user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO)
-                .frozenBalance(user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO)
+                .balance(balance)
+                .frozenBalance(frozenBalance)
                 .build();
     }
 
@@ -447,6 +469,12 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         
         String newToken = jwtService.generateToken(savedUser.getUsername(), savedUser.getId());
         
+        UserBalance userBalance = userBalanceRepository.findByUserId(savedUser.getId()).orElse(null);
+        BigDecimal balance = userBalance != null && userBalance.getBalance() != null 
+                ? userBalance.getBalance() : BigDecimal.ZERO;
+        BigDecimal frozenBalance = userBalance != null && userBalance.getFrozenBalance() != null 
+                ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
+        
         log.info("用户修改昵称成功: {} -> {}", currentUsername, trimmedUsername);
         
         return AuthResponse.builder()
@@ -456,8 +484,8 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
-                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : BigDecimal.ZERO)
-                .frozenBalance(savedUser.getFrozenBalance() != null ? savedUser.getFrozenBalance() : BigDecimal.ZERO)
+                .balance(balance)
+                .frozenBalance(frozenBalance)
                 .build();
     }
 
@@ -523,6 +551,13 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         
         User savedUser = userRepository.save(user);
         
+        UserBalance userBalance = UserBalance.builder()
+                .user(savedUser)
+                .balance(BigDecimal.ZERO)
+                .frozenBalance(BigDecimal.ZERO)
+                .build();
+        userBalanceRepository.save(userBalance);
+        
         String token = jwtService.generateToken(savedUser.getUsername(), savedUser.getId());
         
         log.info("用户通过验证码注册成功: {}, 邮箱: {}, IP: {}", savedUser.getUsername(), savedUser.getEmail(), clientIp);
@@ -534,12 +569,18 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
-                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : BigDecimal.ZERO)
-                .frozenBalance(savedUser.getFrozenBalance() != null ? savedUser.getFrozenBalance() : BigDecimal.ZERO)
+                .balance(BigDecimal.ZERO)
+                .frozenBalance(BigDecimal.ZERO)
                 .build();
     }
 
     private UserDTO toDTO(User user) {
+        UserBalance userBalance = userBalanceRepository.findByUserId(user.getId()).orElse(null);
+        BigDecimal balance = userBalance != null && userBalance.getBalance() != null 
+                ? userBalance.getBalance() : BigDecimal.ZERO;
+        BigDecimal frozenBalance = userBalance != null && userBalance.getFrozenBalance() != null 
+                ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
+        
         return UserDTO.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -547,8 +588,8 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .role(user.getRole().name())
                 .avatar(user.getAvatar())
                 .createdAt(user.getCreatedAt())
-                .balance(user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO)
-                .frozenBalance(user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO)
+                .balance(balance)
+                .frozenBalance(frozenBalance)
                 .build();
     }
     

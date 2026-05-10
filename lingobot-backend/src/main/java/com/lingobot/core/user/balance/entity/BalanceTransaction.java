@@ -1,7 +1,9 @@
-package com.lingobot.core.user.auth.entity;
+package com.lingobot.core.user.balance.entity;
 
+import com.lingobot.core.user.auth.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 

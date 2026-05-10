@@ -2,7 +2,7 @@ package com.lingobot.core.user.redemption.service.impl;
 
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
-import com.lingobot.core.user.auth.service.BalanceService;
+import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.user.redemption.dto.RedemptionCodeDTO;
 import com.lingobot.core.user.redemption.entity.RedemptionCode;
@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
  *    - 调用 BalanceService 增加余额
  *    - finally 块确保锁释放
  *
- * 3. 其他方法：查询列表、查询详情、查询余额、删除（仅允许删除未使用的码）
+ * 3. 其他方法：查询列表、查询详情、删除（仅允许删除未使用的码）
  *
  * 所有修改操作都标注 @Transactional，确保事务一致性。
  */
@@ -172,14 +172,6 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         RedemptionCode code = redemptionCodeRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new IllegalArgumentException("兑换码不存在"));
         return RedemptionCodeDTO.fromEntity(code);
-    }
-    
-    // 查询用户余额，null时返回BigDecimal.ZERO
-    @Override
-    public BigDecimal getUserBalance(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
-        return user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
     }
     
     // 删除兑换码：仅允许删除未使用的，已使用的抛异常

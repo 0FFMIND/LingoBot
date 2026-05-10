@@ -1,6 +1,6 @@
-package com.lingobot.core.user.auth.repository;
+package com.lingobot.core.user.balance.repository;
 
-import com.lingobot.core.user.auth.entity.BalanceTransaction;
+import com.lingobot.core.user.balance.entity.BalanceTransaction;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
