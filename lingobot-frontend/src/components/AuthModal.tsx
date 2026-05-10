@@ -17,6 +17,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
   const [verificationCode, setVerificationCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [loginCodeButtonText, setLoginCodeButtonText] = useState('获取验证码');
+  const [loginCodeButtonDisabled, setLoginCodeButtonDisabled] = useState(false);
   const [codeButtonText, setCodeButtonText] = useState('获取验证码');
   const [codeButtonDisabled, setCodeButtonDisabled] = useState(false);
 
@@ -40,6 +42,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
       return;
     }
 
+    if (mode === 'login') {
+      if (!verificationCode.trim()) {
+        setError('请输入验证码');
+        return;
+      }
+    }
+
     if (mode === 'register') {
       if (!verificationCode.trim()) {
         setError('请输入验证码');
@@ -59,7 +68,11 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
 
     try {
       if (mode === 'login') {
-        await authApi.login({ email: email.trim(), password });
+        await authApi.loginWithCode({ 
+          email: email.trim(), 
+          password,
+          verificationCode: verificationCode.trim()
+        });
       } else {
         await authApi.registerWithCode({ 
           email: email.trim(),
@@ -74,6 +87,48 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
       setError(err instanceof Error ? err.message : '操作失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendLoginCode = async () => {
+    if (!email.trim()) {
+      setError('请先输入邮箱');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('请输入有效的邮箱地址');
+      return;
+    }
+
+    if (!password) {
+      setError('请先输入密码');
+      return;
+    }
+
+    setLoginCodeButtonDisabled(true);
+    setLoginCodeButtonText('发送中...');
+
+    try {
+      await authApi.sendLoginCode({ email: email.trim(), password });
+      setLoginCodeButtonText('60秒后重新获取');
+      
+      let count = 60;
+      const timer = setInterval(() => {
+        count--;
+        if (count > 0) {
+          setLoginCodeButtonText(`${count}秒后重新获取`);
+        } else {
+          clearInterval(timer);
+          setLoginCodeButtonText('获取验证码');
+          setLoginCodeButtonDisabled(false);
+        }
+      }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '发送失败');
+      setLoginCodeButtonText('获取验证码');
+      setLoginCodeButtonDisabled(false);
     }
   };
 
@@ -120,6 +175,8 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
     setConfirmPassword('');
     setVerificationCode('');
     setError('');
+    setLoginCodeButtonText('获取验证码');
+    setLoginCodeButtonDisabled(false);
     setCodeButtonText('获取验证码');
     setCodeButtonDisabled(false);
   };
@@ -169,6 +226,31 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
           </div>
+
+          {mode === 'login' && (
+            <div className="auth-field code-field">
+              <div className="code-input-wrapper">
+                <label htmlFor="loginVerificationCode">登录验证码</label>
+                <input
+                  id="loginVerificationCode"
+                  type="text"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  placeholder="请输入验证码"
+                  disabled={loading}
+                  maxLength={6}
+                />
+              </div>
+              <button
+                type="button"
+                className="code-button"
+                onClick={handleSendLoginCode}
+                disabled={loading || loginCodeButtonDisabled}
+              >
+                {loginCodeButtonText}
+              </button>
+            </div>
+          )}
 
           {mode === 'register' && (
             <>

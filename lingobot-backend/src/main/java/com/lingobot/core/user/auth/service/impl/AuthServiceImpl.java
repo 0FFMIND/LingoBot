@@ -28,6 +28,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
@@ -106,10 +107,11 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
-                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : 0.0)
+                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : BigDecimal.ZERO)
+                .frozenBalance(savedUser.getFrozenBalance() != null ? savedUser.getFrozenBalance() : BigDecimal.ZERO)
                 .build();
     }
-    
+
     @Override
     public AuthResponse login(LoginRequest request, String clientIp) {
         String email = request.getEmail();
@@ -183,10 +185,11 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(user.getId())
                 .role(user.getRole().name())
                 .avatar(user.getAvatar())
-                .balance(user.getBalance() != null ? user.getBalance() : 0.0)
+                .balance(user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO)
+                .frozenBalance(user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO)
                 .build();
     }
-    
+
     @Override
     public void sendLoginVerificationCode(SendLoginCodeRequest request, String clientIp) {
         String email = request.getEmail();
@@ -319,10 +322,11 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(user.getId())
                 .role(user.getRole().name())
                 .avatar(user.getAvatar())
-                .balance(user.getBalance() != null ? user.getBalance() : 0.0)
+                .balance(user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO)
+                .frozenBalance(user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO)
                 .build();
     }
-    
+
     @Override
     public UserDTO getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -452,10 +456,11 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
-                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : 0.0)
+                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : BigDecimal.ZERO)
+                .frozenBalance(savedUser.getFrozenBalance() != null ? savedUser.getFrozenBalance() : BigDecimal.ZERO)
                 .build();
     }
-    
+
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = userRepository.findByUsername(username)
@@ -529,10 +534,11 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .userId(savedUser.getId())
                 .role(savedUser.getRole().name())
                 .avatar(savedUser.getAvatar())
-                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : 0.0)
+                .balance(savedUser.getBalance() != null ? savedUser.getBalance() : BigDecimal.ZERO)
+                .frozenBalance(savedUser.getFrozenBalance() != null ? savedUser.getFrozenBalance() : BigDecimal.ZERO)
                 .build();
     }
-    
+
     private UserDTO toDTO(User user) {
         return UserDTO.builder()
                 .id(user.getId())
@@ -541,7 +547,8 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .role(user.getRole().name())
                 .avatar(user.getAvatar())
                 .createdAt(user.getCreatedAt())
-                .balance(user.getBalance() != null ? user.getBalance() : 0.0)
+                .balance(user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO)
+                .frozenBalance(user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO)
                 .build();
     }
     

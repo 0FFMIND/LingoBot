@@ -14,6 +14,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -137,7 +138,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
                     .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
             
             // 调用余额服务增加点数
-            double newBalance = balanceService.addBalance(userId, redemptionCode.getPoints().doubleValue());
+            BigDecimal newBalance = balanceService.addBalance(userId, BigDecimal.valueOf(redemptionCode.getPoints()));
             
             // 标记兑换码已使用
             redemptionCode.setIsUsed(true);
@@ -173,12 +174,12 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         return RedemptionCodeDTO.fromEntity(code);
     }
     
-    // 查询用户余额，null时返回0.0
+    // 查询用户余额，null时返回BigDecimal.ZERO
     @Override
-    public Double getUserBalance(Long userId) {
+    public BigDecimal getUserBalance(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
-        return user.getBalance() != null ? user.getBalance() : 0.0;
+        return user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO;
     }
     
     // 删除兑换码：仅允许删除未使用的，已使用的抛异常

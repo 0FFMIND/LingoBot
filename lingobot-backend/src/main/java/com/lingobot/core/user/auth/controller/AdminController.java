@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -159,9 +160,10 @@ public class AdminController {
         private String email;
         private String role;
         private String createdAt;
-        private Double balance;
+        private BigDecimal balance;
+        private BigDecimal frozenBalance;
         private boolean isCurrentAdmin;
-        
+
         public static UserAdminDTO fromEntity(User user, String currentAdminUsername) {
             return UserAdminDTO.builder()
                     .id(user.getId())
@@ -169,7 +171,8 @@ public class AdminController {
                     .email(user.getEmail())
                     .role(user.getRole() != null ? user.getRole().name() : User.Role.ROLE_USER.name())
                     .createdAt(user.getCreatedAt() != null ? user.getCreatedAt().toString() : null)
-                    .balance(user.getBalance() != null ? user.getBalance() : 0.0)
+                    .balance(user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO)
+                    .frozenBalance(user.getFrozenBalance() != null ? user.getFrozenBalance() : BigDecimal.ZERO)
                     .isCurrentAdmin(user.getUsername().equals(currentAdminUsername))
                     .build();
         }
@@ -236,9 +239,9 @@ public class AdminController {
     public ResponseEntity<ApiResponse<Void>> updateUserBalance(
             @PathVariable Long userId,
             @Valid @RequestBody UpdateBalanceRequest request) {
-        
+
         String currentAdmin = SecurityContextHolder.getContext().getAuthentication().getName();
-        
+
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             return ResponseEntity.badRequest()
@@ -247,13 +250,13 @@ public class AdminController {
 
         User user = userOpt.get();
 
-        Double newBalance = request.getNewBalance();
+        BigDecimal newBalance = request.getNewBalance();
         if (newBalance == null) {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "余额不能为空"));
         }
-        
-        if (newBalance < 0) {
+
+        if (newBalance.compareTo(BigDecimal.ZERO) < 0) {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "余额不能为负数"));
         }
@@ -262,15 +265,15 @@ public class AdminController {
         userRepository.save(user);
 
         log.info("管理员修改用户余额: userId={}, username={}, 旧余额={}, 新余额={}, 操作管理员: {}",
-                userId, user.getUsername(), 
-                user.getBalance() != null ? user.getBalance() : 0.0, 
+                userId, user.getUsername(),
+                user.getBalance() != null ? user.getBalance() : BigDecimal.ZERO,
                 newBalance, currentAdmin);
 
         return ResponseEntity.ok(ApiResponse.success("余额修改成功", null));
     }
-    
+
     @lombok.Data
     public static class UpdateBalanceRequest {
-        private Double newBalance;
+        private BigDecimal newBalance;
     }
 }

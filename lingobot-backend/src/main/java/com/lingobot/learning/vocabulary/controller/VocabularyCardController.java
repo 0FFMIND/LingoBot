@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,14 +129,22 @@ public class VocabularyCardController {
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> generateNextCard(
             @PathVariable Long conversationId,
             @RequestBody(required = false) Map<String, String> request) {
-        double cost = apiConfigProperties.getCost("vocabulary", "generate-card");
-        balanceService.deductBalanceWithLog(cost, "vocabulary", "generate-card", "生成词汇卡", conversationId);
-        log.info("扣除点数: {}，用于生成词汇卡", cost);
+        BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("vocabulary", "generate-card"));
+        Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "generate-card", "生成词汇卡", conversationId);
+        log.info("冻结点数: {}，用于生成词汇卡", cost);
         
-        String level = request != null ? request.get("level") : null;
-        VocabularyCardDTO card = vocabularyCardService.generateNextCard(conversationId, level);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("新词汇卡生成成功", card));
+        try {
+            String level = request != null ? request.get("level") : null;
+            VocabularyCardDTO card = vocabularyCardService.generateNextCard(conversationId, level);
+            balanceService.confirmTransaction(transactionId);
+            log.info("确认扣费: {}，生成词汇卡成功", cost);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success("新词汇卡生成成功", card));
+        } catch (Exception e) {
+            log.error("生成词汇卡失败，返还余额: {}", cost, e);
+            balanceService.cancelTransaction(transactionId);
+            throw e;
+        }
     }
 
     /**
@@ -148,14 +157,22 @@ public class VocabularyCardController {
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> regenerateCard(
             @PathVariable Long conversationId,
             @RequestBody(required = false) Map<String, String> request) {
-        double cost = apiConfigProperties.getCost("vocabulary", "regenerate-card");
-        balanceService.deductBalanceWithLog(cost, "vocabulary", "regenerate-card", "重新生成词汇卡", conversationId);
-        log.info("扣除点数: {}，用于重新生成词汇卡", cost);
+        BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("vocabulary", "regenerate-card"));
+        Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "regenerate-card", "重新生成词汇卡", conversationId);
+        log.info("冻结点数: {}，用于重新生成词汇卡", cost);
         
-        String level = request != null ? request.get("level") : null;
-        VocabularyCardDTO card = vocabularyCardService.regenerateCard(conversationId, level);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("词汇卡重新生成成功", card));
+        try {
+            String level = request != null ? request.get("level") : null;
+            VocabularyCardDTO card = vocabularyCardService.regenerateCard(conversationId, level);
+            balanceService.confirmTransaction(transactionId);
+            log.info("确认扣费: {}，重新生成词汇卡成功", cost);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.success("词汇卡重新生成成功", card));
+        } catch (Exception e) {
+            log.error("重新生成词汇卡失败，返还余额: {}", cost, e);
+            balanceService.cancelTransaction(transactionId);
+            throw e;
+        }
     }
 
     /**
@@ -171,13 +188,21 @@ public class VocabularyCardController {
         VocabularyCardDTO card = vocabularyCardService.getCardById(cardId);
         Long conversationId = card != null ? card.getConversationId() : null;
         
-        double cost = apiConfigProperties.getCost("vocabulary", "update-meaning");
-        balanceService.deductBalanceWithLog(cost, "vocabulary", "update-meaning", "释义检查", conversationId);
-        log.info("扣除点数: {}，用于释义检查", cost);
+        BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("vocabulary", "update-meaning"));
+        Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "update-meaning", "释义检查", conversationId);
+        log.info("冻结点数: {}，用于释义检查", cost);
         
-        String userMeaning = request.get("userMeaning");
-        VocabularyCardDTO updated = vocabularyCardService.updateUserMeaning(cardId, userMeaning);
-        return ResponseEntity.ok(ApiResponse.success("用户意思已更新", updated));
+        try {
+            String userMeaning = request.get("userMeaning");
+            VocabularyCardDTO updated = vocabularyCardService.updateUserMeaning(cardId, userMeaning);
+            balanceService.confirmTransaction(transactionId);
+            log.info("确认扣费: {}，释义检查成功", cost);
+            return ResponseEntity.ok(ApiResponse.success("用户意思已更新", updated));
+        } catch (Exception e) {
+            log.error("释义检查失败，返还余额: {}", cost, e);
+            balanceService.cancelTransaction(transactionId);
+            throw e;
+        }
     }
 
     /**

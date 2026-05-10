@@ -39,6 +39,10 @@ const AdminPage: React.FC = () => {
     setCurrentUser(null);
   };
 
+  const handleBackToChat = () => {
+    window.location.href = '/';
+  };
+
   if (initializing) {
     return (
       <div className="admin-page">
@@ -53,12 +57,16 @@ const AdminPage: React.FC = () => {
   return (
     <div className="admin-page">
       {!isAuthenticated ? (
-        <div className="admin-login-container">
-          <div className="admin-login-header">
-            <h1>管理员登录</h1>
-            <p>管理锁定用户和IP地址</p>
+        <div className="auth-modal-overlay">
+          <div className="auth-modal">
+            <div className="auth-modal-header">
+              <h2>管理员登录</h2>
+              <button className="auth-close-btn" onClick={handleBackToChat}>
+                ×
+              </button>
+            </div>
+            <AdminLogin onLoginSuccess={handleLoginSuccess} />
           </div>
-          <AdminLogin onLoginSuccess={handleLoginSuccess} />
         </div>
       ) : (
         currentUser && (

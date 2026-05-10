@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -16,5 +18,6 @@ public class AuthResponse {
     private Long userId;
     private String role;
     private String avatar;
-    private Double balance;
+    private BigDecimal balance;
+    private BigDecimal frozenBalance;
 }

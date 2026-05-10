@@ -11,4 +11,4 @@
 1.exception部分已经重构完成，需要前端利用error code和error message
 2.重构前端
 
-现在先开发支付功能把，via z-pay.cn
+等网站上线再开发支付功能，via z-pay.cn

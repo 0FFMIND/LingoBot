@@ -2,6 +2,7 @@ package com.lingobot.core.user.redemption.service;
 
 import com.lingobot.core.user.redemption.dto.RedemptionCodeDTO;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -29,7 +30,7 @@ public interface RedemptionCodeService {
     RedemptionCodeDTO getCodeById(Long id);
     
     // 查询当前用户余额
-    Double getUserBalance(Long userId);
+    BigDecimal getUserBalance(Long userId);
     
     // 管理员删除未使用的兑换码，已使用的不允许删除
     void deleteCode(Long id);

@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -47,13 +48,13 @@ public class RedemptionCodeController {
     
     // 查询当前登录用户的余额，需登录
     @GetMapping("/balance")
-    public ResponseEntity<ApiResponse<Double>> getBalance() {
+    public ResponseEntity<ApiResponse<BigDecimal>> getBalance() {
         Long userId = authService.getCurrentUserId();
         if (userId == null) {
             return ResponseEntity.badRequest()
                     .body(ApiResponse.error(ErrorCode.BAD_REQUEST, "用户未登录"));
         }
-        Double balance = redemptionCodeService.getUserBalance(userId);
+        BigDecimal balance = redemptionCodeService.getUserBalance(userId);
         return ResponseEntity.ok(ApiResponse.success("获取余额成功", balance));
     }
     

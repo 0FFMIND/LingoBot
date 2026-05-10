@@ -2,6 +2,7 @@ package com.lingobot.core.user.auth.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -14,6 +15,13 @@ public class BalanceTransaction {
 
     public enum TransactionType {
         CHARGE, RECHARGE
+    }
+
+    public enum TransactionStatus {
+        PENDING,
+        SUCCEEDED,
+        FAILED,
+        RELEASED
     }
 
     @Id
@@ -29,13 +37,21 @@ public class BalanceTransaction {
     private TransactionType type;
 
     @Column(nullable = false)
-    private Double amount;
+    private BigDecimal amount;
 
     @Column(name = "balance_before", nullable = false)
-    private Double balanceBefore;
+    private BigDecimal balanceBefore;
 
     @Column(name = "balance_after", nullable = false)
-    private Double balanceAfter;
+    private BigDecimal balanceAfter;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private TransactionStatus status = TransactionStatus.SUCCEEDED;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
 
     @Column(name = "api_category", length = 100)
     private String apiCategory;
@@ -55,5 +71,11 @@ public class BalanceTransaction {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        if (status == null) {
+            status = TransactionStatus.SUCCEEDED;
+        }
+        if (status == TransactionStatus.SUCCEEDED && completedAt == null) {
+            completedAt = LocalDateTime.now();
+        }
     }
 }
