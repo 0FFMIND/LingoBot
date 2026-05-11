@@ -26,11 +26,18 @@ export const vocabularyService = {
     return httpClient.get<VocabularyCardDTO | null>(`/vocabulary/conversations/${conversationId}/current`);
   },
 
-  getNextCard: async (conversationId: number, currentPosition?: number): Promise<VocabularyCardDTO | null> => {
-    const url = currentPosition !== undefined
-      ? `/vocabulary/conversations/${conversationId}/next?currentPosition=${currentPosition}`
-      : `/vocabulary/conversations/${conversationId}/next`;
-    return httpClient.get<VocabularyCardDTO | null>(url);
+  getNextCard: async (conversationId: number, currentPosition?: number, level?: string): Promise<VocabularyCardDTO | null> => {
+    const params = new URLSearchParams();
+    if (currentPosition !== undefined) {
+      params.set('currentPosition', String(currentPosition));
+    }
+    if (level) {
+      params.set('level', level);
+    }
+    const query = params.toString();
+    return httpClient.get<VocabularyCardDTO | null>(
+      `/vocabulary/conversations/${conversationId}/next${query ? `?${query}` : ''}`
+    );
   },
 
   getPrevCard: async (conversationId: number, currentPosition?: number): Promise<VocabularyCardDTO | null> => {

@@ -92,9 +92,10 @@ public class VocabularyCardController {
     @GetMapping("/conversations/{conversationId}/next")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> getNextCard(
             @PathVariable Long conversationId,
-            @RequestParam(required = false) Integer currentPosition) {
+            @RequestParam(required = false) Integer currentPosition,
+            @RequestParam(required = false) String level) {
         try {
-            VocabularyCardDTO card = vocabularyCardService.getNextCard(conversationId, currentPosition);
+            VocabularyCardDTO card = vocabularyCardService.getNextCard(conversationId, currentPosition, level);
             return ResponseEntity.ok(ApiResponse.success(card));
         } catch (Exception e) {
             return ResponseEntity.ok(ApiResponse.success(e.getMessage(), null));

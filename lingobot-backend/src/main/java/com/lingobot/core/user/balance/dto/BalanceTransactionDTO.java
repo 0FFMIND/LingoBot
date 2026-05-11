@@ -7,6 +7,12 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 交易记录传输对象。
+ *
+ * 用于将 BalanceTransaction 实体转换为 API 响应格式，
+ * 隐藏敏感信息（如用户关联），仅暴露前端所需字段。
+ */
 @Data
 @Builder
 public class BalanceTransactionDTO {
@@ -24,6 +30,7 @@ public class BalanceTransactionDTO {
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
 
+    // 将 BalanceTransaction 实体转换为 DTO，枚举字段转为字符串
     public static BalanceTransactionDTO fromEntity(BalanceTransaction t) {
         return BalanceTransactionDTO.builder()
                 .id(t.getId())

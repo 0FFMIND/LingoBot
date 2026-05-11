@@ -15,13 +15,16 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
   showPercentage = true,
   onDoubleClick,
 }) => {
+  const validPercentage = typeof percentage === 'number' && isFinite(percentage) ? percentage : 0;
+  const clampedPercentage = Math.max(0, Math.min(100, validPercentage));
+  
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const offset = circumference - (percentage / 100) * circumference;
+  const offset = circumference - (clampedPercentage / 100) * circumference;
 
   const getColor = () => {
-    if (percentage >= 90) return '#e74c3c';
-    if (percentage >= 70) return '#f39c12';
+    if (clampedPercentage >= 90) return '#e74c3c';
+    if (clampedPercentage >= 70) return '#f39c12';
     return '#3498db';
   };
 
@@ -74,7 +77,7 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
             color: '#333',
           }}
         >
-          {Math.round(percentage)}%
+          {Math.round(clampedPercentage)}%
         </span>
       )}
     </div>

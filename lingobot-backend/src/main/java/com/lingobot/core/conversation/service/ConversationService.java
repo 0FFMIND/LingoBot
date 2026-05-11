@@ -4,6 +4,7 @@ import com.lingobot.infrastructure.common.dto.PageResponseDTO;
 import com.lingobot.core.conversation.dto.ConversationDTO;
 import com.lingobot.core.conversation.dto.CreateConversationRequest;
 import com.lingobot.core.conversation.dto.MessageDTO;
+import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.entity.Message;
 
@@ -51,6 +52,10 @@ public interface ConversationService {
     MessageDTO addAssistantMessage(Long conversationId, String content);
     
     MessageDTO addAssistantMessage(Conversation conversation, String content);
+    
+    MessageDTO addAssistantMessage(Long conversationId, String content, TokenUsageDTO tokenUsage);
+    
+    MessageDTO addAssistantMessage(Conversation conversation, String content, TokenUsageDTO tokenUsage);
     
     void deleteMessage(Long messageId);
     

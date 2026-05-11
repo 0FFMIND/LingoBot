@@ -4,6 +4,7 @@ import com.lingobot.learning.chat.dto.StreamEvent;
 import com.lingobot.learning.chat.service.ToolLoopService.ToolLoopResult;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.dto.MessageDTO;
+import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
@@ -76,6 +77,7 @@ public class SseEmitterService {
                     if (toolLoopResult.hasToolCalls()) {
                         log.info("Tool calls were executed, returning tool results directly");
                         final String resultText = toolLoopResult.getToolResultText();
+                        TokenUsageDTO tokenUsage = toolLoopResult.getTokenUsage();
                         
                         try {
                             fullResponse.set(resultText);
@@ -85,7 +87,7 @@ public class SseEmitterService {
                             emitter.send(SseEmitter.event().data(contentJson));
                             
                             MessageDTO finalMessage = conversationService.addAssistantMessage(
-                                    conversationRef.get(), resultText);
+                                    conversationRef.get(), resultText, tokenUsage);
                             
                             StreamEvent doneEvent = StreamEvent.done(finalMessage);
                             String doneJson = objectMapper.writeValueAsString(doneEvent);
@@ -107,6 +109,7 @@ public class SseEmitterService {
                     } else if (toolLoopResult.hasTextResponse()) {
                         log.info("AI returned text response directly, using cached response");
                         final String textResponse = toolLoopResult.getTextResponse();
+                        TokenUsageDTO tokenUsage = toolLoopResult.getTokenUsage();
                         
                         try {
                             fullResponse.set(textResponse);
@@ -116,7 +119,7 @@ public class SseEmitterService {
                             emitter.send(SseEmitter.event().data(contentJson));
                             
                             MessageDTO finalMessage = conversationService.addAssistantMessage(
-                                    conversationRef.get(), textResponse);
+                                    conversationRef.get(), textResponse, tokenUsage);
                             
                             StreamEvent doneEvent = StreamEvent.done(finalMessage);
                             String doneJson = objectMapper.writeValueAsString(doneEvent);
@@ -411,6 +414,9 @@ public class SseEmitterService {
         try {
             int toolCallCount = 0;
             List<OpenAiChatMessage> currentMessages = new ArrayList<>(initialMessages);
+            int totalPromptTokens = 0;
+            int totalCompletionTokens = 0;
+            int totalTokens = 0;
             
             while (toolCallCount < MAX_TOOL_CALLS) {
                 log.info("=== Agent iteration {} with model {} ===", toolCallCount, model);
@@ -418,6 +424,22 @@ public class SseEmitterService {
                 sendSseEvent(emitter, StreamEvent.thinking("思考中..."));
                 
                 var response = modelRouterService.chatWithTools(model, currentMessages, tools);
+                
+                if (response.getUsage() != null) {
+                    if (response.getUsage().getPromptTokens() != null) {
+                        totalPromptTokens += response.getUsage().getPromptTokens();
+                    }
+                    if (response.getUsage().getCompletionTokens() != null) {
+                        totalCompletionTokens += response.getUsage().getCompletionTokens();
+                    }
+                    if (response.getUsage().getTotalTokens() != null) {
+                        totalTokens += response.getUsage().getTotalTokens();
+                    }
+                    log.info("LLM Response token usage: prompt={}, completion={}, total={}",
+                            response.getUsage().getPromptTokens(),
+                            response.getUsage().getCompletionTokens(),
+                            response.getUsage().getTotalTokens());
+                }
                 
                 if (response.getChoices() == null || response.getChoices().isEmpty()) {
                     throw ChatException.badRequest("AI 返回空响应");
@@ -467,8 +489,14 @@ public class SseEmitterService {
                         String contentJson = objectMapper.writeValueAsString(contentEvent);
                         emitter.send(SseEmitter.event().data(contentJson));
                         
+                        TokenUsageDTO tokenUsage = TokenUsageDTO.builder()
+                                .promptTokens(totalPromptTokens > 0 ? totalPromptTokens : null)
+                                .completionTokens(totalCompletionTokens > 0 ? totalCompletionTokens : null)
+                                .totalTokens(totalTokens > 0 ? totalTokens : null)
+                                .build();
+                        
                         MessageDTO finalMessage = conversationService.addAssistantMessage(
-                                conversation, fullResponse.get());
+                                conversation, fullResponse.get(), tokenUsage);
                         
                         StreamEvent doneEvent = StreamEvent.done(finalMessage);
                         String doneJson = objectMapper.writeValueAsString(doneEvent);

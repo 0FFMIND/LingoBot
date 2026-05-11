@@ -224,6 +224,9 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 .map(pos -> pos + 1)
                 .orElse(0);
 
+        ensureConversationStillExists(conversationId);
+        conversation = getConversation(conversationId);
+
         VocabularyCard card = VocabularyCard.builder()
                 .conversation(conversation)
                 .word(request.getWord())
@@ -292,12 +295,12 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
     @Override
     @Transactional
-    public VocabularyCardDTO getNextCard(Long conversationId, Integer currentPosition) {
+    public VocabularyCardDTO getNextCard(Long conversationId, Integer currentPosition, String level) {
         List<VocabularyCardDTO> cardDTOs = getAllCards(conversationId);
         
         if (cardDTOs.isEmpty()) {
             log.info("该对话没有词汇卡，自动生成第一张");
-            return generateNextCard(conversationId, null);
+            return generateNextCard(conversationId, level);
         }
 
         int currentIndex = -1;
@@ -317,7 +320,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
         if (nextIndex >= cardDTOs.size()) {
             log.info("已经是最后一个单词了，自动生成下一张");
-            return generateNextCard(conversationId, null);
+            return generateNextCard(conversationId, level);
         }
 
         VocabularyCardDTO nextCard = cardDTOs.get(nextIndex);
@@ -476,6 +479,9 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         // 防止在AI调用期间对话被删除导致外键约束错误
                 conversation = getConversation(conversationId);
 
+        ensureConversationStillExists(conversationId);
+        conversation = getConversation(conversationId);
+
         VocabularyCard card = VocabularyCard.builder()
                 .conversation(conversation)
                 .word(generated.getWord())
@@ -545,6 +551,9 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         // 双重检查：AI调用完成后，再次验证对话是否仍然存在
         // 防止在AI调用期间对话被删除导致外键约束错误
                 conversation = getConversation(conversationId);
+
+        ensureConversationStillExists(conversationId);
+        conversation = getConversation(conversationId);
 
         VocabularyCard newCard = VocabularyCard.builder()
                 .conversation(conversation)
@@ -622,6 +631,12 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
      * @param intent 意图（next_word/regenerate）
      * @return 生成的单词卡片数据
      */
+    private void ensureConversationStillExists(Long conversationId) {
+        if (!conversationRepository.existsById(conversationId)) {
+            throw ChatException.badRequest("Conversation was deleted while generating vocabulary card: " + conversationId);
+        }
+    }
+
     private WordCardData generateRandomWord(Long conversationId, String level, String intent) {
         try {
             log.info("=== 开始生成词汇卡（AI Agent 模式）===");
@@ -679,6 +694,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             log.info("调用 AI Agent 执行工具调用...");
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
                     conversationId, messages, tools, model);
+            recordVocabularyTokenUsage(conversationId, result);
 
             log.info("AI Agent 执行结果: hasToolCalls={}, hasTextResponse={}",
                     result.hasToolCalls(), result.hasTextResponse());
@@ -706,6 +722,23 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
     private boolean isNotBlank(String value) {
         return value != null && !value.trim().isEmpty();
+    }
+
+    private void recordVocabularyTokenUsage(Long conversationId, ToolLoopService.ToolLoopResult result) {
+        if (result == null || !result.hasTokenUsage()) {
+            return;
+        }
+        Integer total = result.getTokenUsage().getTotal();
+        if (total == null || total <= 0) {
+            return;
+        }
+        conversationRepository.findById(conversationId).ifPresent(conversation -> {
+            long current = conversation.getTotalTokensEstimate() != null ? conversation.getTotalTokensEstimate() : 0L;
+            conversation.setTotalTokensEstimate(current + total);
+            conversationRepository.save(conversation);
+            log.info("Recorded vocabulary token usage: conversationId={}, added={}, totalEstimate={}",
+                    conversationId, total, conversation.getTotalTokensEstimate());
+        });
     }
 
     /**

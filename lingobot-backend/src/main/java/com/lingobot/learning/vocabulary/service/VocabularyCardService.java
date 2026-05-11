@@ -39,7 +39,7 @@ public interface VocabularyCardService {
      * @param currentPosition 当前位置（可选）
      * @return 下一个词汇卡DTO
      */
-    VocabularyCardDTO getNextCard(Long conversationId, Integer currentPosition);
+    VocabularyCardDTO getNextCard(Long conversationId, Integer currentPosition, String level);
 
     /**
      * 获取上一个词汇卡

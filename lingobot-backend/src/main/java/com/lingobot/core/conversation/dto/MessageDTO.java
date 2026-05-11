@@ -24,6 +24,9 @@ public class MessageDTO {
     private Integer audioDuration;
     private String imageData;
     private String imageFormat;
+    private Integer promptTokens;
+    private Integer completionTokens;
+    private Integer totalTokens;
     
     public boolean isAudioMessage() {
         return "audio".equals(messageType);

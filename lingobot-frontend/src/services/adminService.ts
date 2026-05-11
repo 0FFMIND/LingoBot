@@ -46,6 +46,6 @@ export const adminService = {
 
   updateUserBalance: async (userId: number, newBalance: number): Promise<void> => {
     const request: UpdateBalanceRequest = { newBalance };
-    return httpClient.put<void>(`/admin/users/${userId}/balance`, request);
+    return httpClient.put<void>(`/balance/users/${userId}`, request);
   },
 };

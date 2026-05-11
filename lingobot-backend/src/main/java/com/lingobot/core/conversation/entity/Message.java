@@ -46,8 +46,17 @@ public class Message {
     @Column(name = "image_data", columnDefinition = "TEXT")
     private String imageData;
     
-    @Column(name = "image_format", length = 20)
+    @Column(name = "image_format", length = 16)
     private String imageFormat;
+    
+    @Column(name = "prompt_tokens")
+    private Integer promptTokens;
+    
+    @Column(name = "completion_tokens")
+    private Integer completionTokens;
+    
+    @Column(name = "total_tokens")
+    private Integer totalTokens;
     
     @Column(nullable = false, updatable = false)
     private LocalDateTime timestamp;

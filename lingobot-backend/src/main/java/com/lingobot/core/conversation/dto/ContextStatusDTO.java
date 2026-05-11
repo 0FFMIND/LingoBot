@@ -7,8 +7,13 @@ import lombok.Data;
 @Builder
 public class ContextStatusDTO {
 
-    private int totalMessages;
-    private int compactedMessages;
-    private boolean compactNeeded;
-    private String reason;
+    private Integer currentTokens;
+    private Integer maxTokens;
+    private Double tokenRatio;
+    private Integer wordCardsTotal;
+    private Integer wordCardsSinceCompact;
+    private Integer wordCardThreshold;
+    private Boolean shouldCompact;
+    private String compactReason;
+    private Integer compactedCount;
 }

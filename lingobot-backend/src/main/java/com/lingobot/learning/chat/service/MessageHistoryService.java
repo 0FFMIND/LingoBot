@@ -269,6 +269,9 @@ public class MessageHistoryService {
                 .audioDuration(message.getAudioDuration())
                 .imageData(message.getImageData())
                 .imageFormat(message.getImageFormat())
+                .promptTokens(message.getPromptTokens())
+                .completionTokens(message.getCompletionTokens())
+                .totalTokens(message.getTotalTokens())
                 .build();
     }
 }

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { vocabularyService } from '../services';
+import { useTokenUsageStore } from '../stores';
 import { 
   VocabularyCardDTO, 
   VocabularyCategory,
@@ -49,6 +50,18 @@ export function useVocabulary(
         setUserMeaningInput(existingCard.userMeaningGuess || '');
         setUserSentenceInput(existingCard.userSentence || '');
       }
+      try {
+        const totalCount = await vocabularyService.getCardCount(conversationId);
+        const usage = useTokenUsageStore.getState().usageByConversation[conversationId];
+        const currentLocalCount = usage?.wordCardsCount ?? 0;
+        if (totalCount > currentLocalCount) {
+          for (let i = currentLocalCount; i < totalCount; i++) {
+            useTokenUsageStore.getState().recordWordCard(conversationId);
+          }
+        }
+      } catch (e) {
+        console.log('同步词汇卡计数失败:', e);
+      }
     } catch (e) {
       console.log('没有找到已存在的词汇卡:', e);
     } finally {
@@ -84,7 +97,8 @@ export function useVocabulary(
     try {
       const card = await vocabularyService.getNextCard(
         conversationId,
-        currentVocabularyCard.position
+        currentVocabularyCard.position,
+        vocabularyDifficulty.toUpperCase()
       );
       if (card) {
         setCurrentVocabularyCard(card);
@@ -111,6 +125,8 @@ export function useVocabulary(
         setCurrentVocabularyCard(card);
         setUserMeaningInput('');
         setUserSentenceInput('');
+        useTokenUsageStore.getState().recordWordCard(conversationId);
+        console.log('✅ 已记录新词汇卡到本地状态，conversationId:', conversationId);
       }
     } catch (error) {
       console.error('生成新单词失败:', error);

@@ -96,6 +96,7 @@ const ChatWindow: React.FC = () => {
   const modeMenuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const previousConversationIdRef = useRef<number | null>(null)
 
   const learningConfig = LEARNING_MODES[learningMode]
 
@@ -366,6 +367,28 @@ const ChatWindow: React.FC = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent, agentStatus])
+
+  useEffect(() => {
+    const conversationId = currentConversation?.id ?? null
+    if (previousConversationIdRef.current !== conversationId) {
+      previousConversationIdRef.current = conversationId
+      useVocabularyStore.getState().reset()
+    }
+  }, [currentConversation?.id])
+
+  useEffect(() => {
+    if (
+      learningMode === 'vocabulary' &&
+      isAuthenticated &&
+      currentConversation &&
+      !currentVocabularyCard &&
+      !vocabularyCardLoading &&
+      !loading
+    ) {
+      console.log('📚 词汇学习模式：自动初始化词汇卡，难度:', vocabularyDifficulty)
+      useVocabularyStore.getState().loadCard(currentConversation.id, vocabularyDifficulty)
+    }
+  }, [learningMode, isAuthenticated, currentConversation, currentVocabularyCard, vocabularyCardLoading, loading, vocabularyDifficulty])
 
   const handleSend = useCallback(() => {
     if (!isAuthenticated) {

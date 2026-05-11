@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { chatService } from '../services';
+import { useTokenUsageStore } from '../stores';
 import { 
   MessageDTO, 
   ModelType,
@@ -73,6 +74,21 @@ export function useChat(
 
   const { mode, model, learningMode, vocabularyCategory, vocabularyDifficulty } = options;
 
+  const recordTokensFromMessage = useCallback((message: MessageDTO | undefined, convId: number | null) => {
+    if (!message || !convId) return;
+
+    const { promptTokens, completionTokens, totalTokens } = message;
+    if (promptTokens !== undefined || completionTokens !== undefined || totalTokens !== undefined) {
+      console.log('🔢 记录 Token 用量:', { convId, promptTokens, completionTokens, totalTokens });
+      useTokenUsageStore.getState().recordTokenUsage(
+        convId,
+        promptTokens || 0,
+        completionTokens || 0,
+        totalTokens || 0
+      );
+    }
+  }, []);
+
   const loadMessages = useCallback(async () => {
     if (!isAuthenticated || !conversationId) return;
     
@@ -116,6 +132,7 @@ export function useChat(
     try {
       const response = await chatService.sendMessage(request);
       console.log('✅ 非流式消息响应:', response);
+      recordTokensFromMessage(response, request.conversationId || null);
       loadMessages();
       setLoading(false);
       setAgentStatus({ thinking: '', toolCalls: [] });
@@ -126,7 +143,7 @@ export function useChat(
       setAgentStatus({ thinking: '', toolCalls: [] });
       alert('发送消息失败: ' + (error instanceof Error ? error.message : '未知错误'));
     }
-  }, [messages, loadMessages]);
+  }, [messages, loadMessages, recordTokensFromMessage]);
 
   const sendMessageStream = useCallback(async (request: ChatRequest) => {
     setLoading(true);
@@ -155,7 +172,8 @@ export function useChat(
         (chunk) => {
           setStreamingContent((prev) => prev + chunk);
         },
-        (_finalMessage) => {
+        (finalMessage) => {
+          recordTokensFromMessage(finalMessage, request.conversationId || null);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -209,7 +227,7 @@ export function useChat(
       setLoading(false);
       alert('发送消息失败');
     }
-  }, [messages, loadMessages]);
+  }, [messages, loadMessages, recordTokensFromMessage]);
 
   const sendMessage = useCallback(async (content: string, options?: SendMessageOptions) => {
     if (!isAuthenticated || !conversationId || loading) return;
@@ -320,7 +338,8 @@ export function useChat(
         (chunk) => {
           setStreamingContent((prev) => prev + chunk);
         },
-        (_finalMessage) => {
+        (finalMessage) => {
+          recordTokensFromMessage(finalMessage, conversationId);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -374,7 +393,7 @@ export function useChat(
       setLoading(false);
       alert('重试消息失败');
     }
-  }, [isAuthenticated, conversationId, loading, messages, model, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages]);
+  }, [isAuthenticated, conversationId, loading, messages, model, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
 
   const retryMessageWithModel = useCallback(async (assistantMessageId: number, targetModel: ModelType) => {
     if (!isAuthenticated || !conversationId || loading) return;
@@ -416,7 +435,8 @@ export function useChat(
         (chunk) => {
           setStreamingContent((prev) => prev + chunk);
         },
-        (_finalMessage) => {
+        (finalMessage) => {
+          recordTokensFromMessage(finalMessage, conversationId);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -470,7 +490,7 @@ export function useChat(
       setLoading(false);
       alert('重试消息失败');
     }
-  }, [isAuthenticated, conversationId, loading, messages, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages]);
+  }, [isAuthenticated, conversationId, loading, messages, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
 
   const editMessage = useCallback(async (userMessageId: number, newContent: string) => {
     if (!isAuthenticated || !conversationId || loading) return;
@@ -514,7 +534,8 @@ export function useChat(
         (chunk) => {
           setStreamingContent((prev) => prev + chunk);
         },
-        (_finalMessage) => {
+        (finalMessage) => {
+          recordTokensFromMessage(finalMessage, conversationId);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -568,7 +589,7 @@ export function useChat(
       setLoading(false);
       alert('编辑消息失败');
     }
-  }, [isAuthenticated, conversationId, loading, messages, loadMessages]);
+  }, [isAuthenticated, conversationId, loading, messages, loadMessages, recordTokensFromMessage]);
 
   const editAudioMessage = useCallback(async (
     userMessageId: number, 
@@ -630,7 +651,8 @@ export function useChat(
         (chunk) => {
           setStreamingContent((prev) => prev + chunk);
         },
-        (_finalMessage) => {
+        (finalMessage) => {
+          recordTokensFromMessage(finalMessage, request.conversationId || null);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -684,7 +706,7 @@ export function useChat(
       setLoading(false);
       alert('编辑消息失败');
     }
-  }, [isAuthenticated, conversationId, loading, messages, createBaseRequest, loadMessages]);
+  }, [isAuthenticated, conversationId, loading, messages, createBaseRequest, loadMessages, recordTokensFromMessage]);
 
   return {
     messages,

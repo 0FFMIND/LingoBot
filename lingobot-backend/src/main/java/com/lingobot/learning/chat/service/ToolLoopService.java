@@ -8,6 +8,7 @@ import com.lingobot.learning.llm.service.ModelRouterService;
 import com.lingobot.learning.llm.tool.dto.McpToolCall;
 import com.lingobot.learning.llm.tool.dto.McpToolResult;
 import com.lingobot.learning.llm.tool.service.McpService;
+import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -91,11 +92,30 @@ public class ToolLoopService {
         int retryCount = 0;
         List<OpenAiChatMessage> currentMessages = new ArrayList<>(messages);
         List<McpToolResult> toolResults = new ArrayList<>();
+        int totalPromptTokens = 0;
+        int totalCompletionTokens = 0;
+        int totalTokens = 0;
 
         while (retryCount < MAX_ONE_TIME_TOOL_CALLS) {
             log.info("=== One-time tool call attempt {} with model {} ===", retryCount + 1, model);
 
             OpenAiChatResponse response = modelRouterService.chatWithTools(model, currentMessages, tools);
+
+            if (response.getUsage() != null) {
+                if (response.getUsage().getPromptTokens() != null) {
+                    totalPromptTokens += response.getUsage().getPromptTokens();
+                }
+                if (response.getUsage().getCompletionTokens() != null) {
+                    totalCompletionTokens += response.getUsage().getCompletionTokens();
+                }
+                if (response.getUsage().getTotalTokens() != null) {
+                    totalTokens += response.getUsage().getTotalTokens();
+                }
+                log.info("LLM Response token usage: prompt={}, completion={}, total={}",
+                        response.getUsage().getPromptTokens(),
+                        response.getUsage().getCompletionTokens(),
+                        response.getUsage().getTotalTokens());
+            }
 
             if (response.getChoices() == null || response.getChoices().isEmpty()) {
                 retryCount++;
@@ -124,11 +144,21 @@ public class ToolLoopService {
                         }
                     }
                     log.info("One-time tool call completed successfully");
-                    return new ToolLoopResult(true, sb.toString(), currentMessages, null);
+                    TokenUsageDTO usage = TokenUsageDTO.builder()
+                            .promptTokens(totalPromptTokens > 0 ? totalPromptTokens : null)
+                            .completionTokens(totalCompletionTokens > 0 ? totalCompletionTokens : null)
+                            .totalTokens(totalTokens > 0 ? totalTokens : null)
+                            .build();
+                    return new ToolLoopResult(true, sb.toString(), currentMessages, null, usage);
                 }
             } else if (textContent != null && !textContent.isEmpty()) {
                 log.info("AI returned text response directly");
-                return new ToolLoopResult(false, null, currentMessages, textContent);
+                TokenUsageDTO usage = TokenUsageDTO.builder()
+                        .promptTokens(totalPromptTokens > 0 ? totalPromptTokens : null)
+                        .completionTokens(totalCompletionTokens > 0 ? totalCompletionTokens : null)
+                        .totalTokens(totalTokens > 0 ? totalTokens : null)
+                        .build();
+                return new ToolLoopResult(false, null, currentMessages, textContent, usage);
             } else {
                 retryCount++;
                 log.warn("AI returned empty response with no tool calls, retry count: {}", retryCount);
@@ -258,13 +288,21 @@ public class ToolLoopService {
         private final String toolResultText;
         private final List<OpenAiChatMessage> messages;
         private final String textResponse;
+        private final TokenUsageDTO tokenUsage;
         
         public ToolLoopResult(boolean hasToolCalls, String toolResultText, 
                                List<OpenAiChatMessage> messages, String textResponse) {
+            this(hasToolCalls, toolResultText, messages, textResponse, null);
+        }
+        
+        public ToolLoopResult(boolean hasToolCalls, String toolResultText, 
+                               List<OpenAiChatMessage> messages, String textResponse,
+                               TokenUsageDTO tokenUsage) {
             this.hasToolCalls = hasToolCalls;
             this.toolResultText = toolResultText;
             this.messages = messages;
             this.textResponse = textResponse;
+            this.tokenUsage = tokenUsage;
         }
         
         public boolean hasToolCalls() { return hasToolCalls; }
@@ -272,5 +310,7 @@ public class ToolLoopService {
         public List<OpenAiChatMessage> getMessages() { return messages; }
         public String getTextResponse() { return textResponse; }
         public boolean hasTextResponse() { return textResponse != null && !textResponse.isEmpty(); }
+        public TokenUsageDTO getTokenUsage() { return tokenUsage; }
+        public boolean hasTokenUsage() { return tokenUsage != null && !tokenUsage.isEmpty(); }
     }
 }

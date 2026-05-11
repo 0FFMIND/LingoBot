@@ -6,7 +6,7 @@ interface VocabularyStore {
   currentVocabularyCard: VocabularyCardDTO | null
   vocabularyCardLoading: boolean
 
-  loadCard: (conversationId: number) => Promise<void>
+  loadCard: (conversationId: number, vocabularyDifficulty?: string) => Promise<void>
   handlePrevWord: (conversationId: number, currentPosition: number, vocabularyDifficulty: string) => Promise<void>
   handleNextWord: (conversationId: number, currentPosition: number, vocabularyDifficulty: string) => Promise<void>
   handleRegenerateWord: (conversationId: number, vocabularyDifficulty: string) => Promise<void>
@@ -22,7 +22,7 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   currentVocabularyCard: null,
   vocabularyCardLoading: false,
 
-  loadCard: async (conversationId: number) => {
+  loadCard: async (conversationId: number, vocabularyDifficulty?: string) => {
     set({ vocabularyCardLoading: true })
     try {
       const existingCard = await vocabularyApi.getCurrentCard(conversationId)
@@ -30,11 +30,20 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
         set({ currentVocabularyCard: existingCard })
         console.log('已恢复词汇卡状态:', existingCard.word)
       } else {
-        console.log('该对话没有词汇卡')
-        set({ currentVocabularyCard: null })
+        console.log('该对话没有词汇卡，准备生成新词汇卡')
+        if (vocabularyDifficulty) {
+          const newCard = await vocabularyApi.generateNextCard(conversationId, vocabularyDifficulty.toUpperCase())
+          if (newCard) {
+            set({ currentVocabularyCard: newCard })
+            console.log('已生成新词汇卡:', newCard.word)
+          }
+        } else {
+          console.warn('没有提供难度级别，无法生成新词汇卡')
+          set({ currentVocabularyCard: null })
+        }
       }
     } catch (e) {
-      console.log('获取词汇卡失败:', e)
+      console.log('获取/生成词汇卡失败:', e)
       set({ currentVocabularyCard: null })
     } finally {
       set({ vocabularyCardLoading: false })
@@ -58,7 +67,7 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   handleNextWord: async (conversationId: number, currentPosition: number, vocabularyDifficulty: string) => {
     set({ vocabularyCardLoading: true })
     try {
-      const card = await vocabularyApi.getNextCard(conversationId, currentPosition)
+      const card = await vocabularyApi.getNextCard(conversationId, currentPosition, vocabularyDifficulty.toUpperCase())
       if (card) {
         set({ currentVocabularyCard: card })
       } else {

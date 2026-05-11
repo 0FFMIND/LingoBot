@@ -22,6 +22,18 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
+/**
+ * 余额服务实现类。
+ *
+ * 实现 BalanceService 接口，提供完整的余额管理功能：
+ * - 查询余额（可用/冻结）
+ * - 实时扣费
+ * - 冻结-确认模式（用于需要确认的交易场景）
+ * - 充值
+ * - 交易记录查询
+ *
+ * 所有余额变动操作使用 @Transactional + PESSIMISTIC_WRITE 锁保证并发安全。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -31,33 +43,38 @@ public class BalanceServiceImpl implements BalanceService {
     private final UserBalanceRepository userBalanceRepository;
     private final BalanceTransactionRepository transactionRepository;
 
+    // 获取当前登录用户的可用余额，不存在则创建记录
     @Override
     public BigDecimal getCurrentUserBalance() {
         UserBalance userBalance = getOrCreateCurrentUserBalance();
         return userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
     }
 
+    // 获取当前登录用户的冻结余额，不存在则创建记录
     @Override
     public BigDecimal getCurrentUserFrozenBalance() {
         UserBalance userBalance = getOrCreateCurrentUserBalance();
         return userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
     }
 
+    // 检查当前用户可用余额是否足够支付指定金额
     @Override
     public boolean hasSufficientBalance(BigDecimal cost) {
         BigDecimal currentBalance = getCurrentUserBalance();
         return currentBalance.compareTo(cost) >= 0;
     }
 
+    // 从当前用户可用余额中扣除指定金额
     @Override
     @Transactional
     public BigDecimal deductBalance(BigDecimal cost) {
-        return deductBalanceWithLog(cost, null, null, "扣费", null);
+        return deductBalance(cost, null, null, "扣费", null);
     }
 
+    // 从当前用户可用余额中扣除指定金额，并记录详细的审计信息
     @Override
     @Transactional
-    public BigDecimal deductBalanceWithLog(BigDecimal cost, String apiCategory, String apiEndpoint, String description, Long conversationId) {
+    public BigDecimal deductBalance(BigDecimal cost, String apiCategory, String apiEndpoint, String description, Long conversationId) {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
@@ -65,8 +82,8 @@ public class BalanceServiceImpl implements BalanceService {
         BigDecimal currentBalance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
 
         if (currentBalance.compareTo(cost) < 0) {
-            log.warn("用户余额不足。用户: {}, 当前余额: {}, 需要: {}",
-                    user.getUsername(), currentBalance, cost);
+            log.warn("用户余额不足。用户: {}, 当前余额: {}, 需要: {}, 类别: {}, 端点: {}",
+                    user.getUsername(), currentBalance, cost, apiCategory, apiEndpoint);
             throw BalanceException.insufficientBalance("余额不足。当前余额: " + currentBalance + "，需要: " + cost);
         }
 
@@ -84,17 +101,18 @@ public class BalanceServiceImpl implements BalanceService {
                 .completedAt(LocalDateTime.now())
                 .apiCategory(apiCategory)
                 .apiEndpoint(apiEndpoint)
-                .description(description)
+                .description(description != null ? description : "扣费")
                 .conversationId(conversationId)
                 .build();
         transactionRepository.save(transaction);
 
-        log.info("用户扣费成功。用户: {}, 扣除: {}, 剩余: {}, 类别: {}, 端点: {}",
-                user.getUsername(), cost, newBalance, apiCategory, apiEndpoint);
+        log.info("用户扣费成功。用户: {}, 扣除: {}, 剩余: {}, 类别: {}, 端点: {}, 会话ID: {}",
+                user.getUsername(), cost, newBalance, apiCategory, apiEndpoint, conversationId);
 
         return newBalance;
     }
 
+    // 冻结余额：将金额从可用余额移至冻结余额，创建 PENDING 状态的交易记录
     @Override
     @Transactional
     public Long freezeBalance(BigDecimal cost, String apiCategory, String apiEndpoint, String description, Long conversationId) {
@@ -137,6 +155,7 @@ public class BalanceServiceImpl implements BalanceService {
         return transaction.getId();
     }
 
+    // 确认冻结交易：从冻结余额扣除，交易状态更新为 SUCCEEDED
     @Override
     @Transactional
     public void confirmTransaction(Long transactionId) {
@@ -175,6 +194,7 @@ public class BalanceServiceImpl implements BalanceService {
                 transactionId, transactionUser.getUsername(), cost, newFrozenBalance);
     }
 
+    // 取消冻结交易：将金额从冻结余额返还至可用余额，交易状态更新为 RELEASED
     @Override
     @Transactional
     public void cancelTransaction(Long transactionId) {
@@ -216,12 +236,14 @@ public class BalanceServiceImpl implements BalanceService {
                 transactionId, transactionUser.getUsername(), cost, newBalance, newFrozenBalance);
     }
 
+    // 给指定用户充值（简单版，默认描述为"充值"）
     @Override
     @Transactional
     public BigDecimal addBalance(Long userId, BigDecimal amount) {
         return addBalanceWithLog(userId, amount, "充值");
     }
 
+    // 给指定用户充值，可自定义交易描述
     @Override
     @Transactional
     public BigDecimal addBalanceWithLog(Long userId, BigDecimal amount, String description) {
@@ -256,6 +278,7 @@ public class BalanceServiceImpl implements BalanceService {
         return newBalance;
     }
 
+    // 给当前登录用户充值
     @Override
     @Transactional
     public BigDecimal addCurrentUserBalance(BigDecimal amount) {
@@ -263,6 +286,7 @@ public class BalanceServiceImpl implements BalanceService {
         return addBalanceWithLog(user.getId(), amount, "充值");
     }
 
+    // 分页获取当前用户的交易记录（按创建时间倒序）
     @Override
     public Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable) {
         User user = getCurrentUser();
@@ -270,6 +294,7 @@ public class BalanceServiceImpl implements BalanceService {
                 .map(BalanceTransactionDTO::fromEntity);
     }
 
+    // 获取指定用户的可用余额，不存在记录则返回 0
     @Override
     public BigDecimal getUserBalance(Long userId) {
         UserBalance userBalance = userBalanceRepository.findByUserId(userId).orElse(null);
@@ -279,6 +304,7 @@ public class BalanceServiceImpl implements BalanceService {
         return userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
     }
 
+    // 获取指定用户的冻结余额，不存在记录则返回 0
     @Override
     public BigDecimal getUserFrozenBalance(Long userId) {
         UserBalance userBalance = userBalanceRepository.findByUserId(userId).orElse(null);
@@ -288,6 +314,7 @@ public class BalanceServiceImpl implements BalanceService {
         return userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
     }
 
+    // 管理员手动设置指定用户的余额（产生交易记录）
     @Override
     @Transactional
     public BigDecimal setUserBalance(Long userId, BigDecimal newBalance) {
@@ -303,8 +330,25 @@ public class BalanceServiceImpl implements BalanceService {
 
         UserBalance userBalance = getOrCreateUserBalanceForUpdate(userId);
         BigDecimal oldBalance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
-        userBalance.setBalance(newBalance);
-        userBalanceRepository.saveAndFlush(userBalance);
+        
+        // 只有余额有变化时才保存
+        if (oldBalance.compareTo(newBalance) != 0) {
+            userBalance.setBalance(newBalance);
+            userBalanceRepository.saveAndFlush(userBalance);
+
+            // 创建交易记录
+            BalanceTransaction transaction = BalanceTransaction.builder()
+                    .user(user)
+                    .type(BalanceTransaction.TransactionType.ADMIN_ADJUSTMENT)
+                    .amount(newBalance.subtract(oldBalance).abs())
+                    .balanceBefore(oldBalance)
+                    .balanceAfter(newBalance)
+                    .status(BalanceTransaction.TransactionStatus.SUCCEEDED)
+                    .completedAt(LocalDateTime.now())
+                    .description("管理员修改余额")
+                    .build();
+            transactionRepository.save(transaction);
+        }
 
         log.info("管理员修改用户余额: userId={}, username={}, 旧余额={}, 新余额={}",
                 userId, user.getUsername(), oldBalance, newBalance);
@@ -312,12 +356,14 @@ public class BalanceServiceImpl implements BalanceService {
         return newBalance;
     }
 
+    // 获取当前登录用户实体
     private User getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> AuthException.userNotFound("用户不存在"));
     }
 
+    // 获取或创建当前用户的余额记录（不带锁，用于查询场景）
     private UserBalance getOrCreateCurrentUserBalance() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsername(username)
@@ -325,6 +371,7 @@ public class BalanceServiceImpl implements BalanceService {
         return getOrCreateUserBalance(user.getId());
     }
 
+    // 获取或创建指定用户的余额记录（不带锁，用于查询场景）
     private UserBalance getOrCreateUserBalance(Long userId) {
         return userBalanceRepository.findByUserId(userId)
                 .orElseGet(() -> {
@@ -339,6 +386,7 @@ public class BalanceServiceImpl implements BalanceService {
                 });
     }
 
+    // 获取或创建指定用户的余额记录（加悲观写锁，用于余额更新场景）
     private UserBalance getOrCreateUserBalanceForUpdate(Long userId) {
         return userBalanceRepository.findByUserIdForUpdate(userId)
                 .orElseGet(() -> {

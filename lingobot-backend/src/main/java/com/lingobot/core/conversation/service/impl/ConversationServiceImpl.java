@@ -1,6 +1,8 @@
 package com.lingobot.core.conversation.service.impl;
 
 import com.lingobot.core.conversation.dto.ContextStatusDTO;
+import com.lingobot.core.conversation.dto.MessageDTO;
+import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
@@ -314,16 +316,37 @@ public class ConversationServiceImpl implements ConversationService {
     @Transactional
     public MessageDTO addAssistantMessage(Long conversationId, String content) {
         Conversation conversation = getConversationEntityById(conversationId);
-        return addAssistantMessage(conversation, content);
+        return addAssistantMessage(conversation, content, null);
     }
     
     @Override
     @Transactional
     public MessageDTO addAssistantMessage(Conversation conversation, String content) {
-        Message message = Message.builder()
+        return addAssistantMessage(conversation, content, null);
+    }
+    
+    @Override
+    @Transactional
+    public MessageDTO addAssistantMessage(Long conversationId, String content, TokenUsageDTO tokenUsage) {
+        Conversation conversation = getConversationEntityById(conversationId);
+        return addAssistantMessage(conversation, content, tokenUsage);
+    }
+    
+    @Override
+    @Transactional
+    public MessageDTO addAssistantMessage(Conversation conversation, String content, TokenUsageDTO tokenUsage) {
+        Message.MessageBuilder messageBuilder = Message.builder()
                 .content(content)
-                .role("assistant")
-                .build();
+                .role("assistant");
+        
+        if (tokenUsage != null) {
+            messageBuilder
+                    .promptTokens(tokenUsage.getPromptTokens())
+                    .completionTokens(tokenUsage.getCompletionTokens())
+                    .totalTokens(tokenUsage.getTotalTokens());
+        }
+        
+        Message message = messageBuilder.build();
         conversation.addMessage(message);
         messageRepository.save(message);
         return toMessageDTO(message);
@@ -386,6 +409,11 @@ public class ConversationServiceImpl implements ConversationService {
                 .audioData(message.getAudioData())
                 .audioFormat(message.getAudioFormat())
                 .audioDuration(message.getAudioDuration())
+                .imageData(message.getImageData())
+                .imageFormat(message.getImageFormat())
+                .promptTokens(message.getPromptTokens())
+                .completionTokens(message.getCompletionTokens())
+                .totalTokens(message.getTotalTokens())
                 .build();
     }
     

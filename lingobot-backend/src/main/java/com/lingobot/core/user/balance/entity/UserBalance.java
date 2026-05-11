@@ -10,6 +10,13 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 用户余额实体。
+ *
+ * 每个用户对应一条记录，存储可用余额和冻结余额。
+ * 冻结余额用于需要确认的交易场景（如 SSE 流式对话），
+ * 交易确认时从冻结余额扣除，取消时返还至可用余额。
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -40,6 +47,7 @@ public class UserBalance {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    // 首次持久化时自动设置创建时间、更新时间，并初始化余额为 0
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -52,6 +60,7 @@ public class UserBalance {
         }
     }
 
+    // 更新时自动刷新更新时间
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();

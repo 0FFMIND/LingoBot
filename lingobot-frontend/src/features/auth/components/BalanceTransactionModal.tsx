@@ -65,15 +65,66 @@ const BalanceTransactionModal: React.FC<BalanceTransactionModalProps> = ({
   };
 
   const getTransactionTypeLabel = (type: TransactionType) => {
-    return type === 'CHARGE' ? '扣费' : '充值';
+    switch (type) {
+      case 'CHARGE':
+        return '扣费';
+      case 'RECHARGE':
+        return '充值';
+      case 'ADMIN_ADJUSTMENT':
+        return '管理员调账';
+      default:
+        return type;
+    }
   };
 
   const getTransactionTypeColor = (type: TransactionType) => {
-    return type === 'CHARGE' ? '#e74c3c' : '#27ae60';
+    switch (type) {
+      case 'CHARGE':
+        return '#e74c3c';
+      case 'RECHARGE':
+        return '#27ae60';
+      case 'ADMIN_ADJUSTMENT':
+        return '#f39c12';
+      default:
+        return '#666';
+    }
   };
 
   const getTransactionIcon = (type: TransactionType) => {
-    return type === 'CHARGE' ? '➖' : '➕';
+    switch (type) {
+      case 'CHARGE':
+        return '➖';
+      case 'RECHARGE':
+        return '➕';
+      case 'ADMIN_ADJUSTMENT':
+        return '⚙️';
+      default:
+        return '📋';
+    }
+  };
+
+  const getTransactionBgColor = (transaction: BalanceTransactionDTO) => {
+    if (transaction.type === 'CHARGE') {
+      return '#fef2f2';
+    }
+    if (transaction.type === 'RECHARGE') {
+      return '#f0fdf4';
+    }
+    // ADMIN_ADJUSTMENT：根据余额变化判断背景色
+    const diff = transaction.balanceAfter - transaction.balanceBefore;
+    return diff >= 0 ? '#fff8e1' : '#fff5f5';
+  };
+
+  const getAmountSign = (transaction: BalanceTransactionDTO) => {
+    if (transaction.type === 'CHARGE') {
+      return '-';
+    }
+    if (transaction.type === 'RECHARGE') {
+      return '+';
+    }
+    // ADMIN_ADJUSTMENT：根据余额变化判断正负号
+    const diff = transaction.balanceAfter - transaction.balanceBefore;
+    return diff >= 0 ? '+' : '-';
   };
 
   if (!isOpen) return null;
@@ -146,8 +197,7 @@ const BalanceTransactionModal: React.FC<BalanceTransactionModalProps> = ({
                       width: '40px',
                       height: '40px',
                       borderRadius: '50%',
-                      background:
-                        transaction.type === 'CHARGE' ? '#fef2f2' : '#f0fdf4',
+                      background: getTransactionBgColor(transaction),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -173,7 +223,7 @@ const BalanceTransactionModal: React.FC<BalanceTransactionModalProps> = ({
                           fontSize: '16px',
                         }}
                       >
-                        {transaction.type === 'CHARGE' ? '-' : '+'}
+                        {getAmountSign(transaction)}
                         {transaction.amount}
                       </span>
                     </div>

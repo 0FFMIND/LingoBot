@@ -11,6 +11,7 @@ import com.lingobot.learning.chat.service.SseEmitterService;
 import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.dto.MessageDTO;
+import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.core.conversation.service.ConversationService;
@@ -107,17 +108,23 @@ public class ChatServiceImpl implements ChatService {
                 ctx.tools != null ? ctx.tools.size() : 0);
         
         String aiResponse;
+        TokenUsageDTO tokenUsage = null;
         if (useOnetimeExecution && ctx.tools != null && !ctx.tools.isEmpty()) {
             log.info("Executing one-time tool call");
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
                     ctx.conversationId, ctx.messages, ctx.tools, ctx.model);
             aiResponse = result.hasToolCalls() ? result.getToolResultText() : result.getTextResponse();
+            if (result.hasTokenUsage()) {
+                tokenUsage = result.getTokenUsage();
+                log.info("Token usage from tool loop: prompt={}, completion={}, total={}",
+                        tokenUsage.getPromptTokens(), tokenUsage.getCompletionTokens(), tokenUsage.getTotalTokens());
+            }
         } else {
             log.info("Executing loop tool call");
             aiResponse = toolLoopService.executeToolLoop(ctx.conversationId, ctx.messages, ctx.tools, ctx.mode, ctx.model);
         }
         
-        return conversationService.addAssistantMessage(ctx.conversationId, aiResponse);
+        return conversationService.addAssistantMessage(ctx.conversationId, aiResponse, tokenUsage);
     }
     
     private SseEmitter executeFlowStreamInternal(ChatRequest request, String forceMode, String forceLearningMode) {

@@ -14,6 +14,9 @@ export interface MessageDTO {
   audioDuration?: number;
   imageData?: string;
   imageFormat?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
 }
 
 export interface AudioAttachment {

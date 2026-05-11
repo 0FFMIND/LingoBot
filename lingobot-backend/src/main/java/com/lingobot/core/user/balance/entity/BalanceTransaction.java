@@ -7,6 +7,12 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 余额交易记录实体。
+ *
+ * 记录每一笔余额变动（扣费、充值、冻结等），包含交易类型、状态、
+ * 变动前后余额、关联 API 信息等，便于审计和追溯。
+ */
 @Data
 @Builder
 @NoArgsConstructor
@@ -15,10 +21,12 @@ import java.time.LocalDateTime;
 @Table(name = "balance_transactions")
 public class BalanceTransaction {
 
+    // 交易类型：CHARGE（扣费）、RECHARGE（充值）、ADMIN_ADJUSTMENT（管理员调账）
     public enum TransactionType {
-        CHARGE, RECHARGE
+        CHARGE, RECHARGE, ADMIN_ADJUSTMENT
     }
 
+    // 交易状态：PENDING（待确认）、SUCCEEDED（成功）、FAILED（失败）、RELEASED（已释放）
     public enum TransactionStatus {
         PENDING,
         SUCCEEDED,
@@ -70,6 +78,7 @@ public class BalanceTransaction {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    // 持久化前自动设置创建时间和默认状态，成功交易同时设置完成时间
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
