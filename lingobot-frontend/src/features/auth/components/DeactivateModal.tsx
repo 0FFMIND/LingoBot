@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { UserDTO } from '../types';
-import { authApi } from '../api';
+import { UserDTO } from '../../../types';
+import { authApi } from '../../../api';
 
 interface DeactivateModalProps {
   isOpen: boolean;
@@ -107,16 +107,16 @@ const DeactivateModal: React.FC<DeactivateModalProps> = ({ isOpen, user, onClose
             </div>
 
             <div className="deactivate-actions">
-              <button 
-                type="button" 
-                className="auth-cancel-btn" 
+              <button
+                type="button"
+                className="auth-cancel-btn"
                 onClick={handleClose}
               >
                 取消
               </button>
-              <button 
-                type="button" 
-                className="auth-deactivate-btn" 
+              <button
+                type="button"
+                className="auth-deactivate-btn"
                 onClick={handleStartDeactivate}
               >
                 继续注销
@@ -145,17 +145,17 @@ const DeactivateModal: React.FC<DeactivateModalProps> = ({ isOpen, user, onClose
             </div>
 
             <div className="deactivate-actions">
-              <button 
-                type="button" 
-                className="auth-cancel-btn" 
+              <button
+                type="button"
+                className="auth-cancel-btn"
                 onClick={() => setStep('confirm')}
                 disabled={loading}
               >
                 返回
               </button>
-              <button 
-                type="submit" 
-                className="auth-deactivate-confirm-btn" 
+              <button
+                type="submit"
+                className="auth-deactivate-confirm-btn"
                 disabled={loading}
               >
                 {loading ? '处理中...' : '确认注销'}

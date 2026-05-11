@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UserDTO } from '../types';
-import { authUtils, authApi, redemptionApi } from '../api';
-import { balanceService } from '../services';
+import { UserDTO } from '../../../types';
+import { authUtils, authApi, redemptionApi } from '../../../api';
+import { balanceService } from '../../../services';
 import ChangePasswordModal from './ChangePasswordModal';
 import DeactivateModal from './DeactivateModal';
 import BalanceTransactionModal from './BalanceTransactionModal';
@@ -48,7 +48,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
         setBalance(cachedUser?.balance ?? 0);
       }
     };
-    
+
     fetchUser();
   }, []);
 
@@ -58,13 +58,13 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
       const newBalance = fetchedUser.balance ?? 0;
       setBalance(newBalance);
       setUser(fetchedUser);
-      
+
       const existingUser = authUtils.getUser();
       if (existingUser) {
         const updatedUser = { ...existingUser, balance: newBalance };
         authUtils.setAuth(authUtils.getToken()!, updatedUser);
-        window.dispatchEvent(new CustomEvent('auth:balance-updated', { 
-          detail: { user: updatedUser } 
+        window.dispatchEvent(new CustomEvent('auth:balance-updated', {
+          detail: { user: updatedUser }
         }));
       }
     } catch (error) {
@@ -118,7 +118,7 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
     const reader = new FileReader();
     reader.onload = async (event) => {
       const result = event.target?.result as string;
-      
+
       setLoading(true);
       setSaveMessage(null);
 

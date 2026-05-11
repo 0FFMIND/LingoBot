@@ -23,10 +23,10 @@ interface RightPanelProps {
   }>;
 }
 
-const ProgressRing: React.FC<{ percent: number; size?: number; strokeWidth?: number }> = ({ 
-  percent, 
-  size = 120, 
-  strokeWidth = 8 
+const ProgressRing: React.FC<{ percent: number; size?: number; strokeWidth?: number }> = ({
+  percent,
+  size = 120,
+  strokeWidth = 8
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -164,8 +164,8 @@ const RightPanel: React.FC<RightPanelProps> = ({
         <h3 className="panel-title">今日推荐任务</h3>
         <div className="tasks-list">
           {recommendedTasks.map((task) => (
-            <div 
-              key={task.id} 
+            <div
+              key={task.id}
               className={`task-item ${task.completed ? 'completed' : ''}`}
             >
               <div className="task-icon">{task.icon}</div>

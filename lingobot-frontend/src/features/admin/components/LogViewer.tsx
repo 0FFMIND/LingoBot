@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { authUtils } from '../api';
+import { authUtils } from '../../../api';
 
 interface LogEntry {
   id: number;
@@ -140,7 +140,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
   const mergeResponseLogs = useCallback((headerLog: LogEntry, contentLog: LogEntry): LogEntry => {
     const mergedMessage = headerLog.message.replace('响应完整 JSON:', '响应完整 JSON:') + '\n' + contentLog.message;
     const { formatted, hasJson } = tryParseAndFormatJson(mergedMessage);
-    
+
     return {
       id: generateUniqueId(),
       timestamp: headerLog.timestamp,
@@ -158,7 +158,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
   const toggleFilter = useCallback((filter: LogFilter) => {
     setFilters(prev => {
       const allSelected = prev.has('request') && prev.has('response') && prev.has('other');
-      
+
       if (filter === 'all') {
         if (allSelected) {
           return new Set<LogFilter>();
@@ -166,7 +166,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
           return new Set<LogFilter>(['request', 'response', 'other']);
         }
       }
-      
+
       const newFilters = new Set(prev);
       if (newFilters.has(filter)) {
         newFilters.delete(filter);
@@ -183,13 +183,13 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
 
   const handleLogData = useCallback((data: string) => {
     const logEntry = parseLogEntry(data);
-    
+
     if (logEntry && !shouldFilterLog(logEntry.logger, logEntry.message)) {
       if (logEntry.logType === 'response' && logEntry.message.includes('响应完整 JSON:') && logEntry.message.trim() === '响应完整 JSON:') {
         pendingResponseHeaderRef.current = logEntry;
         return;
       }
-      
+
       if (pendingResponseHeaderRef.current) {
         const mergedLog = mergeResponseLogs(pendingResponseHeaderRef.current, logEntry);
         pendingResponseHeaderRef.current = null;
@@ -202,7 +202,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
         });
         return;
       }
-      
+
       setLogs(prev => {
         const newLogs = [...prev, logEntry];
         if (newLogs.length > 100) {
@@ -218,28 +218,28 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
       console.log('⚠️ [LogViewer] 已有连接正在建立中，跳过');
       return;
     }
-    
+
     const token = authUtils.getToken();
     if (!isDev && !token) {
       console.log('⚠️ [LogViewer] 未登录，跳过连接');
       return;
     }
-    
+
     console.log('🔌 [LogViewer] 尝试连接日志流 SSE: /api/logs/stream', isDev ? '(开发环境)' : '(生产环境)');
-    
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    
+
     if (eventSourceRef.current) {
       console.log('🔌 [LogViewer] 关闭现有 SSE 连接');
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-    
+
     isConnectingRef.current = true;
-    
+
     const url = isDev ? '/api/logs/stream' : `/api/logs/stream?token=${encodeURIComponent(token || '')}`;
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
@@ -265,7 +265,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
       isConnectingRef.current = false;
       setIsConnected(false);
       addLog('ERROR', 'LogViewer', '日志流连接错误，3秒后重试...');
-      
+
       reconnectTimeoutRef.current = window.setTimeout(() => {
         connectToLogStream(isDev);
       }, 3000);
@@ -274,7 +274,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
 
   useEffect(() => {
     let cancelled = false;
-    
+
     const init = async () => {
       try {
         const response = await fetch('/api/logs/dev-check');
@@ -291,7 +291,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
         setIsDevEnv(false);
       }
     };
-    
+
     init();
 
     return () => {
@@ -300,13 +300,13 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
-      
+
       if (eventSourceRef.current) {
         console.log('🔌 [LogViewer] 关闭现有 SSE 连接');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      
+
       isConnectingRef.current = false;
     };
   }, []);
@@ -348,11 +348,11 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
   const addLog = (level: string, logger: string, message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     const uniqueKey = generateLogKey(timestamp, level, logger, message);
-    
+
     if (isDuplicateLog(uniqueKey)) {
       return;
     }
-    
+
     const { formatted, hasJson } = tryParseAndFormatJson(message);
     const { type } = detectLogType(message);
     const newLog: LogEntry = {

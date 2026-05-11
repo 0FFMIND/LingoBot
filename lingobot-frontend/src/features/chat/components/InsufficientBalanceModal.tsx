@@ -32,12 +32,12 @@ const InsufficientBalanceModal: React.FC<InsufficientBalanceModalProps> = ({
           <p style={{ fontSize: '16px', marginBottom: '16px', color: '#666' }}>
             {message}
           </p>
-          
+
           {currentBalance !== undefined && (
-            <div style={{ 
-              background: '#fff3f3', 
-              padding: '16px', 
-              borderRadius: '8px', 
+            <div style={{
+              background: '#fff3f3',
+              padding: '16px',
+              borderRadius: '8px',
               marginBottom: '16px'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>

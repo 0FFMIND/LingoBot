@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { authApi } from '../api';
+import { authApi } from '../../../api';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -68,13 +68,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
 
     try {
       if (mode === 'login') {
-        await authApi.loginWithCode({ 
-          email: email.trim(), 
+        await authApi.loginWithCode({
+          email: email.trim(),
           password,
           verificationCode: verificationCode.trim()
         });
       } else {
-        await authApi.registerWithCode({ 
+        await authApi.registerWithCode({
           email: email.trim(),
           password,
           verificationCode: verificationCode.trim()
@@ -113,7 +113,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
     try {
       await authApi.sendLoginCode({ email: email.trim(), password });
       setLoginCodeButtonText('60秒后重新获取');
-      
+
       let count = 60;
       const timer = setInterval(() => {
         count--;
@@ -150,7 +150,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess }) => 
     try {
       await authApi.sendVerificationCode(email.trim());
       setCodeButtonText('60秒后重新获取');
-      
+
       let count = 60;
       const timer = setInterval(() => {
         count--;

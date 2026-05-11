@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { adminApi, authUtils, redemptionApi } from '../api';
-import { BlockedUserInfo, BlockedIpInfo, UserDTO, UserAdminDTO, RedemptionCodeDTO } from '../types';
+import { adminApi, authUtils, redemptionApi } from '../../../api';
+import { BlockedUserInfo, BlockedIpInfo, UserDTO, UserAdminDTO, RedemptionCodeDTO } from '../../../types';
 
 interface AdminDashboardProps {
   currentUser: UserDTO;
@@ -63,16 +63,16 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ user, onClose, onConf
         </div>
 
         <div className="delete-modal-actions">
-          <button 
-            type="button" 
-            className="delete-modal-cancel-btn" 
+          <button
+            type="button"
+            className="delete-modal-cancel-btn"
             onClick={onClose}
           >
             取消
           </button>
-          <button 
-            type="button" 
-            className="delete-modal-delete-btn" 
+          <button
+            type="button"
+            className="delete-modal-delete-btn"
             onClick={onConfirm}
           >
             删除
@@ -131,8 +131,8 @@ const EditUsernameModal: React.FC<EditUsernameModalProps> = ({ user, onClose, on
       <div className="reset-password-modal">
         <div className="reset-password-header">
           <h3>修改用户名</h3>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="reset-password-close"
             onClick={onClose}
           >
@@ -246,8 +246,8 @@ const EditBalanceModal: React.FC<EditBalanceModalProps> = ({ user, onClose, onSu
       <div className="reset-password-modal">
         <div className="reset-password-header">
           <h3>修改余额</h3>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="reset-password-close"
             onClick={onClose}
           >
@@ -361,8 +361,8 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ user, onClose, 
       <div className="reset-password-modal">
         <div className="reset-password-header">
           <h3>重置用户密码</h3>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="reset-password-close"
             onClick={onClose}
           >
@@ -470,7 +470,7 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
     setLoading(true);
     try {
       const result = await redemptionApi.createCode(
-        pointsNum, 
+        pointsNum,
         expireOption !== null ? expireOption : undefined
       );
       setCreatedCode(result);
@@ -495,8 +495,8 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
       <div className="reset-password-modal">
         <div className="reset-password-header">
           <h3>生成兑换码</h3>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="reset-password-close"
             onClick={handleClose}
           >
@@ -508,7 +508,7 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
           <div className="redemption-created-section">
             <div className="redemption-success-icon">✓</div>
             <h4 className="redemption-created-title">兑换码创建成功！</h4>
-            
+
             <div className="redemption-code-display">
               <label>兑换码</label>
               <div className="redemption-code-box">
@@ -711,7 +711,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
 
   const confirmDeleteUser = async () => {
     if (!deleteUser) return;
-    
+
     setActionLoading(deleteUser.id);
     try {
       await adminApi.deleteUser(deleteUser.id);

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { ContextStatusDTO } from '../types';
+import { ContextStatusDTO } from '../../../types';
 
 interface ContextStatusTooltipProps {
   status: ContextStatusDTO;

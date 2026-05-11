@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { authUtils, authApi } from '../api';
-import { UserDTO } from '../types';
+import { authUtils, authApi } from '../../../api';
+import { UserDTO } from '../../../types';
 import AdminLogin from './AdminLogin';
 import AdminDashboard from './AdminDashboard';
 

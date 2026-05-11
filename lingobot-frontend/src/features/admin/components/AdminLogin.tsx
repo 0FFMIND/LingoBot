@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { authApi, authUtils } from '../api';
-import { UserDTO } from '../types';
+import { authApi, authUtils } from '../../../api';
+import { UserDTO } from '../../../types';
 
 interface AdminLoginProps {
   onLoginSuccess: (user: UserDTO) => void;
@@ -39,7 +39,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
     try {
       await authApi.sendLoginCode({ email: email.trim(), password });
       setCodeButtonText('60秒后重新获取');
-      
+
       let count = 60;
       const timer = setInterval(() => {
         count--;
@@ -86,12 +86,12 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await authApi.loginWithCode({ 
-        email: email.trim(), 
+      const response = await authApi.loginWithCode({
+        email: email.trim(),
         password,
         verificationCode: verificationCode.trim()
       });
-      
+
       if (response.role !== 'ROLE_ADMIN') {
         authUtils.clearAuth();
         setError('该账户不是管理员账户');

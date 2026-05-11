@@ -168,14 +168,7 @@ public class AdminController {
 
         public static UserAdminDTO fromEntity(User user, BalanceService balanceService, String currentAdminUsername) {
             BigDecimal balance = balanceService.getUserBalance(user.getId());
-            if (balance == null) {
-                balance = BigDecimal.ZERO;
-            }
-
             BigDecimal frozenBalance = balanceService.getUserFrozenBalance(user.getId());
-            if (frozenBalance == null) {
-                frozenBalance = BigDecimal.ZERO;
-            }
             
             return UserAdminDTO.builder()
                     .id(user.getId())

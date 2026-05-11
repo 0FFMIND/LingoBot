@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { balanceService } from '../services';
-import { BalanceTransactionDTO, TransactionType } from '../types';
+import { balanceService } from '../../../services';
+import { BalanceTransactionDTO, TransactionType } from '../../../types';
 
 interface BalanceTransactionModalProps {
   isOpen: boolean;

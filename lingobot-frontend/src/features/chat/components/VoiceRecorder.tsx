@@ -186,19 +186,19 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       reader.onload = () => {
         const result = reader.result as string;
         const commaIndex = result.indexOf(',');
-        
+
         if (commaIndex === -1 || commaIndex === result.length - 1) {
           setError('音频数据格式错误，请重新录制');
           return;
         }
-        
+
         const base64 = result.substring(commaIndex + 1);
-        
+
         if (!base64 || base64.trim().length === 0) {
           setError('音频数据为空，请重新录制');
           return;
         }
-        
+
         const format = mimeTypeRef.current.split('/')[1] || 'webm';
         onRecordingComplete(base64, format, finalDuration);
       };

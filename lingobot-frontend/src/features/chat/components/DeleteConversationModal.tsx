@@ -35,16 +35,16 @@ const DeleteConversationModal: React.FC<DeleteConversationModalProps> = ({
         </div>
 
         <div className="delete-modal-actions">
-          <button 
-            type="button" 
-            className="delete-modal-cancel-btn" 
+          <button
+            type="button"
+            className="delete-modal-cancel-btn"
             onClick={onClose}
           >
             取消
           </button>
-          <button 
-            type="button" 
-            className="delete-modal-delete-btn" 
+          <button
+            type="button"
+            className="delete-modal-delete-btn"
             onClick={onConfirm}
           >
             删除

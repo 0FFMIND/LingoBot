@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ConversationDTO, UserDTO, LearningMode, LEARNING_MODES } from '../types';
-import { authUtils } from '../api';
-import ChangePasswordModal from './ChangePasswordModal';
+import { ConversationDTO, UserDTO, LearningMode, LEARNING_MODES } from '../../../types';
+import { authUtils } from '../../../api';
+import ChangePasswordModal from '../../auth/components/ChangePasswordModal';
 import DeleteConversationModal from './DeleteConversationModal';
-import CircularProgress from './CircularProgress';
+import CircularProgress from '../../../components/CircularProgress';
 import ContextStatusTooltip from './ContextStatusTooltip';
 
 interface SidebarProps {
@@ -60,10 +60,10 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const handleScroll = useCallback(() => {
     if (!conversationListRef.current || !onLoadMore || loadingMore || !hasMore) return;
-    
+
     const { scrollTop, scrollHeight, clientHeight } = conversationListRef.current;
     const scrollThreshold = 50;
-    
+
     if (scrollTop + clientHeight >= scrollHeight - scrollThreshold) {
       onLoadMore();
     }
@@ -171,7 +171,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleDelete = (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     if (disabled) return;
-    
+
     const conversation = conversations.find(c => c.id === id);
     if (conversation) {
       setDeletingConversationId(id);
@@ -286,9 +286,9 @@ const Sidebar: React.FC<SidebarProps> = ({
           conversations.map((conversation) => {
             const convLearningMode = getConversationLearningMode(conversation);
             const modeConfig = LEARNING_MODES[convLearningMode];
-            
+
             const hasContextStatus = conversation.contextStatus !== undefined;
-            
+
             return (
               <div
                 key={conversation.id}
@@ -336,7 +336,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                   </div>
                 </div>
-                
+
                 <button
                   className={`delete-btn-english compact ${disabled ? 'disabled' : ''}`}
                   onClick={(e) => handleDelete(e, conversation.id)}
@@ -352,7 +352,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             );
           })
         )}
-        
+
         {loadingMore && (
           <div className="load-more-indicator">
             <span>加载中...</span>
