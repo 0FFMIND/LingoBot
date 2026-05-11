@@ -4,7 +4,9 @@ import {
   BlockedIpInfo, 
   AdminStatus, 
   UserAdminDTO,
-  UpdateBalanceRequest
+  UpdateBalanceRequest,
+  LockedEmailInfo,
+  LockedEmailIpInfo
 } from '../types';
 
 export const adminService = {
@@ -16,12 +18,28 @@ export const adminService = {
     return httpClient.get<BlockedIpInfo[]>('/admin/blocked-ips');
   },
 
+  getLockedEmails: async (): Promise<LockedEmailInfo[]> => {
+    return httpClient.get<LockedEmailInfo[]>('/admin/locked-emails');
+  },
+
+  getLockedEmailIps: async (): Promise<LockedEmailIpInfo[]> => {
+    return httpClient.get<LockedEmailIpInfo[]>('/admin/locked-email-ips');
+  },
+
   unlockUser: async (userId: number): Promise<void> => {
     return httpClient.post<void>(`/admin/unlock-user/${userId}`);
   },
 
   unblockIp: async (ipAddress: string): Promise<void> => {
     return httpClient.post<void>(`/admin/unblock-ip/${encodeURIComponent(ipAddress)}`);
+  },
+
+  unlockEmail: async (email: string): Promise<void> => {
+    return httpClient.post<void>(`/admin/unlock-email/${encodeURIComponent(email)}`);
+  },
+
+  unlockEmailIp: async (ipAddress: string): Promise<void> => {
+    return httpClient.post<void>(`/admin/unlock-email-ip/${encodeURIComponent(ipAddress)}`);
   },
 
   getStatus: async (): Promise<AdminStatus> => {

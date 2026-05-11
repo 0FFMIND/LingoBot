@@ -22,3 +22,16 @@ export interface BalanceTransactionPageResponse {
   hasNext: boolean;
   hasPrevious: boolean;
 }
+
+export interface TransactionSummaryDTO {
+  totalIncome: number;
+  totalExpense: number;
+  netChange: number;
+  totalRecords: number;
+}
+
+export interface TransactionFilter {
+  startDate?: string;
+  endDate?: string;
+  type?: 'all' | 'income' | 'expense';
+}

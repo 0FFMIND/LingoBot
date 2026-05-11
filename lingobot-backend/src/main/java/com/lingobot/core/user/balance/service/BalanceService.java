@@ -1,6 +1,7 @@
 package com.lingobot.core.user.balance.service;
 
 import com.lingobot.core.user.balance.dto.BalanceTransactionDTO;
+import com.lingobot.core.user.balance.dto.TransactionSummaryDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -47,10 +48,14 @@ public interface BalanceService {
     // 给当前登录用户充值指定金额
     BigDecimal addCurrentUserBalance(BigDecimal amount);
 
-    // 分页获取当前用户的交易记录
     Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable);
 
-    // 获取指定用户的可用余额
+    Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable, java.time.LocalDateTime startDate, java.time.LocalDateTime endDate);
+
+    Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable, String type, java.time.LocalDateTime startDate, java.time.LocalDateTime endDate);
+
+    TransactionSummaryDTO getCurrentUserTransactionSummary(java.time.LocalDateTime startDate, java.time.LocalDateTime endDate);
+
     BigDecimal getUserBalance(Long userId);
 
     // 获取指定用户的冻结余额

@@ -3,6 +3,7 @@ package com.lingobot.core.user.balance.service.impl;
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
 import com.lingobot.core.user.balance.dto.BalanceTransactionDTO;
+import com.lingobot.core.user.balance.dto.TransactionSummaryDTO;
 import com.lingobot.core.user.balance.entity.BalanceTransaction;
 import com.lingobot.core.user.balance.entity.UserBalance;
 import com.lingobot.core.user.balance.repository.BalanceTransactionRepository;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 余额服务实现类。
@@ -286,12 +288,77 @@ public class BalanceServiceImpl implements BalanceService {
         return addBalanceWithLog(user.getId(), amount, "充值");
     }
 
-    // 分页获取当前用户的交易记录（按创建时间倒序）
     @Override
     public Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable) {
         User user = getCurrentUser();
         return transactionRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), pageable)
                 .map(BalanceTransactionDTO::fromEntity);
+    }
+
+    @Override
+    public Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable, LocalDateTime startDate, LocalDateTime endDate) {
+        User user = getCurrentUser();
+        return transactionRepository.findByUserIdAndDateRange(user.getId(), startDate, endDate, pageable)
+                .map(BalanceTransactionDTO::fromEntity);
+    }
+
+    @Override
+    public Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable, String type, LocalDateTime startDate, LocalDateTime endDate) {
+        User user = getCurrentUser();
+        boolean hasDateRange = startDate != null && endDate != null;
+
+        if ("income".equalsIgnoreCase(type)) {
+            return (hasDateRange
+                    ? transactionRepository.findIncomeByUserIdAndDateRange(user.getId(), startDate, endDate, pageable)
+                    : transactionRepository.findIncomeByUserId(user.getId(), pageable))
+                    .map(BalanceTransactionDTO::fromEntity);
+        }
+
+        if ("expense".equalsIgnoreCase(type)) {
+            return (hasDateRange
+                    ? transactionRepository.findExpenseByUserIdAndDateRange(user.getId(), startDate, endDate, pageable)
+                    : transactionRepository.findExpenseByUserId(user.getId(), pageable))
+                    .map(BalanceTransactionDTO::fromEntity);
+        }
+
+        return hasDateRange
+                ? getCurrentUserTransactions(pageable, startDate, endDate)
+                : getCurrentUserTransactions(pageable);
+    }
+
+    @Override
+    public TransactionSummaryDTO getCurrentUserTransactionSummary(LocalDateTime startDate, LocalDateTime endDate) {
+        User user = getCurrentUser();
+
+        List<BalanceTransaction> allTransactions;
+
+        if (startDate != null && endDate != null) {
+            allTransactions = transactionRepository.findByUserIdAndDateRangeList(user.getId(), startDate, endDate);
+        } else {
+            allTransactions = transactionRepository.findByUserIdOrderByCreatedAtDesc(user.getId(), org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE)).getContent();
+        }
+
+        BigDecimal totalIncome = BigDecimal.ZERO;
+        BigDecimal totalExpense = BigDecimal.ZERO;
+
+        for (BalanceTransaction t : allTransactions) {
+            if (t.getBalanceBefore() == null || t.getBalanceAfter() == null) {
+                continue;
+            }
+            BigDecimal diff = t.getBalanceAfter().subtract(t.getBalanceBefore());
+            if (diff.compareTo(BigDecimal.ZERO) > 0) {
+                totalIncome = totalIncome.add(diff);
+            } else if (diff.compareTo(BigDecimal.ZERO) < 0) {
+                totalExpense = totalExpense.add(diff.abs());
+            }
+        }
+
+        return TransactionSummaryDTO.builder()
+                .totalIncome(totalIncome)
+                .totalExpense(totalExpense)
+                .netChange(totalIncome.subtract(totalExpense))
+                .totalRecords(allTransactions.size())
+                .build();
     }
 
     // 获取指定用户的可用余额，不存在记录则返回 0

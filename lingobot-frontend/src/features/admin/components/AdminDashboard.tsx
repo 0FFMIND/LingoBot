@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { adminApi, authUtils, redemptionApi } from '../../../api';
-import { BlockedUserInfo, BlockedIpInfo, UserDTO, UserAdminDTO, RedemptionCodeDTO } from '../../../types';
+import { BlockedUserInfo, BlockedIpInfo, UserDTO, UserAdminDTO, RedemptionCodeDTO, LockedEmailInfo, LockedEmailIpInfo } from '../../../types';
 
 interface AdminDashboardProps {
   currentUser: UserDTO;
@@ -438,9 +438,20 @@ const EXPIRE_OPTIONS = [
   { label: '7天', value: 604800 },
 ] as const;
 
+const MAX_USAGE_OPTIONS = [
+  { label: '无限使用', value: null },
+  { label: '1次（单人）', value: 1 },
+  { label: '5次', value: 5 },
+  { label: '10次', value: 10 },
+  { label: '20次', value: 20 },
+  { label: '50次', value: 50 },
+  { label: '100次', value: 100 },
+] as const;
+
 const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [points, setPoints] = useState<string>('');
   const [expireOption, setExpireOption] = useState<number | null>(null);
+  const [maxUsagesOption, setMaxUsagesOption] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [createdCode, setCreatedCode] = useState<RedemptionCodeDTO | null>(null);
@@ -449,6 +460,7 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
     if (isOpen) {
       setPoints('');
       setExpireOption(null);
+      setMaxUsagesOption(null);
       setError('');
       setCreatedCode(null);
     }
@@ -471,7 +483,8 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
     try {
       const result = await redemptionApi.createCode(
         pointsNum,
-        expireOption !== null ? expireOption : undefined
+        expireOption !== null ? expireOption : undefined,
+        maxUsagesOption !== null ? maxUsagesOption : undefined
       );
       setCreatedCode(result);
     } catch (err) {
@@ -525,6 +538,10 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
                 <span>创建时间:</span>
                 <strong>{new Date(createdCode.createdAt).toLocaleString('zh-CN')}</strong>
               </div>
+              <div className="code-info-item">
+                <span>最大使用次数:</span>
+                <strong>{createdCode.maxUsages ? createdCode.maxUsages + ' 次' : '无限次'}</strong>
+              </div>
               {createdCode.expiresAt && (
                 <div className="code-info-item">
                   <span>到期时间:</span>
@@ -553,6 +570,8 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
                 onClick={() => {
                   setCreatedCode(null);
                   setPoints('');
+                  setExpireOption(null);
+                  setMaxUsagesOption(null);
                 }}
               >
                 继续创建
@@ -600,6 +619,25 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
               </select>
             </div>
 
+            <div className="reset-password-field">
+              <label htmlFor="max-usages-option">最大使用次数</label>
+              <select
+                id="max-usages-option"
+                value={maxUsagesOption ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setMaxUsagesOption(value === '' ? null : parseInt(value));
+                }}
+                disabled={loading}
+              >
+                {MAX_USAGE_OPTIONS.map((option) => (
+                  <option key={option.value ?? 'unlimited'} value={option.value ?? ''}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="reset-password-actions">
               <button
                 type="button"
@@ -627,10 +665,12 @@ const CreateRedemptionCodeModal: React.FC<CreateRedemptionCodeModalProps> = ({ i
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }) => {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUserInfo[]>([]);
   const [blockedIps, setBlockedIps] = useState<BlockedIpInfo[]>([]);
+  const [lockedEmails, setLockedEmails] = useState<LockedEmailInfo[]>([]);
+  const [lockedEmailIps, setLockedEmailIps] = useState<LockedEmailIpInfo[]>([]);
   const [allUsers, setAllUsers] = useState<UserAdminDTO[]>([]);
   const [redemptionCodes, setRedemptionCodes] = useState<RedemptionCodeDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'users' | 'ips' | 'manage' | 'redemption'>('manage');
+  const [activeTab, setActiveTab] = useState<'users' | 'ips' | 'manage' | 'redemption' | 'lockedEmails' | 'lockedEmailIps'>('manage');
   const [actionLoading, setActionLoading] = useState<number | string | null>(null);
   const [refreshInterval, setRefreshInterval] = useState<number | null>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<UserAdminDTO | null>(null);
@@ -641,14 +681,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
 
   const loadData = useCallback(async () => {
     try {
-      const [users, ips, allUsersList, codes] = await Promise.all([
+      const [users, ips, lockedEmailsList, lockedEmailIpsList, allUsersList, codes] = await Promise.all([
         adminApi.getBlockedUsers(),
         adminApi.getBlockedIps(),
+        adminApi.getLockedEmails(),
+        adminApi.getLockedEmailIps(),
         adminApi.getAllUsers(),
         redemptionApi.getAllCodes()
       ]);
       setBlockedUsers(users);
       setBlockedIps(ips);
+      setLockedEmails(lockedEmailsList);
+      setLockedEmailIps(lockedEmailIpsList);
       setAllUsers(allUsersList);
       setRedemptionCodes(codes);
     } catch (error) {
@@ -696,6 +740,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
     } catch (error) {
       console.error('解除IP封锁失败:', error);
       alert('解除封锁失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleUnlockEmail = async (email: string) => {
+    if (!confirm(`确定要解锁邮箱 "${email}" 的验证码限制吗？`)) {
+      return;
+    }
+    setActionLoading(email);
+    try {
+      await adminApi.unlockEmail(email);
+      await loadData();
+    } catch (error) {
+      console.error('解锁邮箱失败:', error);
+      alert('解锁失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleUnlockEmailIp = async (ipAddress: string) => {
+    if (!confirm(`确定要解锁 IP "${ipAddress}" 的验证码限制吗？`)) {
+      return;
+    }
+    setActionLoading(ipAddress);
+    try {
+      await adminApi.unlockEmailIp(ipAddress);
+      await loadData();
+    } catch (error) {
+      console.error('解锁IP失败:', error);
+      alert('解锁失败: ' + (error instanceof Error ? error.message : '未知错误'));
     } finally {
       setActionLoading(null);
     }
@@ -774,6 +850,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
     return role === 'ROLE_ADMIN' ? 'role-badge-admin' : 'role-badge-user';
   };
 
+  const getLockTypeDisplay = (lockType: string) => {
+    switch (lockType) {
+      case 'DAY_LOCK':
+        return '24小时锁定';
+      case 'WINDOW_LOCK':
+        return '临时锁定';
+      default:
+        return lockType;
+    }
+  };
+
   const handleDeleteRedemptionCode = async (codeId: number, codeValue: string) => {
     if (!confirm(`确定要删除兑换码 "${codeValue}" 吗？\n删除后该兑换码将无法使用。`)) {
       return;
@@ -792,8 +879,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
     }
   };
 
-  const usedCount = redemptionCodes.filter(c => c.isUsed).length;
-  const unusedCount = redemptionCodes.length - usedCount;
+  const usedCount = redemptionCodes.filter(c => c.usageCount > 0).length;
+  const unusedCount = redemptionCodes.filter(c => c.usageCount === 0).length;
+  const fullyUsedCount = redemptionCodes.filter(c => c.isFullyUsed).length;
 
   return (
     <div className="admin-dashboard">
@@ -801,7 +889,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
         <div className="admin-header-left">
           <h1>管理面板</h1>
           <span className="admin-status-badge">
-            用户总数: {allUsers.length} | 锁定用户: {blockedUsers.length} | 封锁IP: {blockedIps.length}
+            用户总数: {allUsers.length} | 登录锁定: {blockedUsers.length} | 验证码锁定邮箱: {lockedEmails.length} | 验证码锁定IP: {lockedEmailIps.length}
           </span>
         </div>
         <div className="admin-header-right">
@@ -831,13 +919,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
           className={`admin-tab-btn ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
         >
-          锁定用户 ({blockedUsers.length})
+          登录锁定用户 ({blockedUsers.length})
         </button>
         <button
           className={`admin-tab-btn ${activeTab === 'ips' ? 'active' : ''}`}
           onClick={() => setActiveTab('ips')}
         >
-          封锁IP ({blockedIps.length})
+          登录封锁IP ({blockedIps.length})
+        </button>
+        <button
+          className={`admin-tab-btn ${activeTab === 'lockedEmails' ? 'active' : ''}`}
+          onClick={() => setActiveTab('lockedEmails')}
+        >
+          验证码锁定邮箱 ({lockedEmails.length})
+        </button>
+        <button
+          className={`admin-tab-btn ${activeTab === 'lockedEmailIps' ? 'active' : ''}`}
+          onClick={() => setActiveTab('lockedEmailIps')}
+        >
+          验证码锁定IP ({lockedEmailIps.length})
         </button>
       </div>
 
@@ -974,6 +1074,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
                       <span className="stat-label">未使用:</span>
                       <span className="stat-value unused">{unusedCount}</span>
                     </span>
+                    <span className="stat-item">
+                      <span className="stat-label">已用完:</span>
+                      <span className="stat-value used">{fullyUsedCount}</span>
+                    </span>
                   </div>
                   <button
                     className="create-redemption-btn"
@@ -995,17 +1099,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
                       <tr>
                         <th>兑换码</th>
                         <th>点数</th>
+                        <th>使用次数</th>
                         <th>状态</th>
                         <th>创建时间</th>
                         <th>到期时间</th>
-                        <th>使用者</th>
-                        <th>使用时间</th>
                         <th>操作</th>
                       </tr>
                     </thead>
                     <tbody>
                       {redemptionCodes.map((code) => {
-                        const isExpired = code.isExpired && !code.isUsed;
+                        const isExpired = code.isExpired && !code.isFullyUsed;
+                        const canDelete = code.usageCount === 0 && !isExpired && !code.isFullyUsed;
+                        
+                        let statusBadge: React.ReactNode;
+                        let statusText: string;
+                        
+                        if (code.isFullyUsed) {
+                          statusBadge = <span className="status-badge-used">已用完</span>;
+                          statusText = '已用完';
+                        } else if (code.isExpired) {
+                          statusBadge = <span className="status-badge-expired">已过期</span>;
+                          statusText = '已过期';
+                        } else if (code.usageCount > 0) {
+                          statusBadge = <span className="status-badge-unused">使用中</span>;
+                          statusText = '使用中';
+                        } else {
+                          statusBadge = <span className="status-badge-unused">未使用</span>;
+                          statusText = '未使用';
+                        }
+                        
                         return (
                           <tr key={code.id} className={isExpired ? 'expired-code-row' : ''}>
                             <td className="redemption-code-cell">
@@ -1015,13 +1137,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
                               <span className="points-badge">{code.points} 点</span>
                             </td>
                             <td>
-                              {code.isUsed ? (
-                                <span className="status-badge-used">已使用</span>
-                              ) : isExpired ? (
-                                <span className="status-badge-expired">已过期</span>
-                              ) : (
-                                <span className="status-badge-unused">未使用</span>
-                              )}
+                              <span className="usage-count-badge">
+                                {code.usageCount} / {code.maxUsages || '∞'}
+                              </span>
+                            </td>
+                            <td>
+                              {statusBadge}
                             </td>
                             <td>{formatTime(code.createdAt)}</td>
                             <td>
@@ -1033,15 +1154,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
                                 <span>永不过期</span>
                               )}
                             </td>
-                            <td className="admin-username">
-                              {code.usedByUsername || '-'}
-                            </td>
-                            <td>
-                              {code.usedAt ? formatTime(code.usedAt) : '-'}
-                            </td>
                             <td>
                               <div className="redemption-actions">
-                                {!code.isUsed && !isExpired && (
+                                {canDelete && (
                                   <button
                                     className="delete-redemption-btn"
                                     onClick={() => handleDeleteRedemptionCode(code.id, code.code)}
@@ -1148,6 +1263,112 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }
                               disabled={actionLoading === ip.ipAddress}
                             >
                               {actionLoading === ip.ipAddress ? '处理中...' : '解除封锁'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'lockedEmails' && (
+              <div className="admin-table-container">
+                {lockedEmails.length === 0 ? (
+                  <div className="admin-empty-state">
+                    <div className="admin-empty-icon">✓</div>
+                    <h3>暂无验证码锁定邮箱</h3>
+                    <p>所有邮箱验证码发送正常</p>
+                  </div>
+                ) : (
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>邮箱</th>
+                        <th>锁定类型</th>
+                        <th>锁定时间</th>
+                        <th>解锁时间</th>
+                        <th>剩余时间</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lockedEmails.map((email) => (
+                        <tr key={email.email + email.lockType}>
+                          <td className="admin-email">{email.email}</td>
+                          <td>
+                            <span className={`status-badge-${email.lockType === 'DAY_LOCK' ? 'locked' : 'normal'}`}>
+                              {getLockTypeDisplay(email.lockType)}
+                            </span>
+                          </td>
+                          <td>{formatTime(email.lockedAt)}</td>
+                          <td>{formatTime(email.expiresAt)}</td>
+                          <td>
+                            <span className="admin-time-remaining">
+                              {formatDuration(email.remainingSeconds)}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              className="admin-unlock-btn"
+                              onClick={() => handleUnlockEmail(email.email)}
+                              disabled={actionLoading === email.email}
+                            >
+                              {actionLoading === email.email ? '处理中...' : '解锁'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'lockedEmailIps' && (
+              <div className="admin-table-container">
+                {lockedEmailIps.length === 0 ? (
+                  <div className="admin-empty-state">
+                    <div className="admin-empty-icon">✓</div>
+                    <h3>暂无验证码锁定IP</h3>
+                    <p>所有IP验证码发送正常</p>
+                  </div>
+                ) : (
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>IP地址</th>
+                        <th>锁定类型</th>
+                        <th>锁定时间</th>
+                        <th>解锁时间</th>
+                        <th>剩余时间</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lockedEmailIps.map((ip) => (
+                        <tr key={ip.ipAddress + ip.lockType}>
+                          <td className="admin-ip">{ip.ipAddress}</td>
+                          <td>
+                            <span className={`status-badge-${ip.lockType === 'DAY_LOCK' ? 'locked' : 'normal'}`}>
+                              {getLockTypeDisplay(ip.lockType)}
+                            </span>
+                          </td>
+                          <td>{formatTime(ip.lockedAt)}</td>
+                          <td>{formatTime(ip.expiresAt)}</td>
+                          <td>
+                            <span className="admin-time-remaining">
+                              {formatDuration(ip.remainingSeconds)}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              className="admin-unlock-btn"
+                              onClick={() => handleUnlockEmailIp(ip.ipAddress)}
+                              disabled={actionLoading === ip.ipAddress}
+                            >
+                              {actionLoading === ip.ipAddress ? '处理中...' : '解锁'}
                             </button>
                           </td>
                         </tr>

@@ -1,6 +1,7 @@
 package com.lingobot.infrastructure.common.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lingobot.core.user.auth.filter.DevAutoLoginFilter;
 import com.lingobot.core.user.auth.filter.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -40,6 +41,9 @@ public class SecurityConfig {
     // JWT 认证过滤器，用于从请求头中提取和验证 JWT Token
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     
+    // 开发环境自动登录过滤器
+    private final DevAutoLoginFilter devAutoLoginFilter;
+    
     // 应用配置属性
     private final AppProperties appProperties;
     
@@ -69,10 +73,9 @@ public class SecurityConfig {
                 auth.requestMatchers("/api/tts/**").permitAll();
                 // 日志环境检查接口：任何环境下都可访问
                 auth.requestMatchers("/api/logs/dev-check").permitAll();
-                // 开发环境下：所有日志接口无需认证
-                if (appProperties.isDev()) {
-                    auth.requestMatchers("/api/logs/**").permitAll();
-                }
+                // 管理员环境检查接口：任何环境下都可访问
+                auth.requestMatchers("/api/admin/dev-check").permitAll();
+
                 // 其他所有请求需要认证
                 auth.anyRequest().authenticated();
             })
@@ -96,7 +99,10 @@ public class SecurityConfig {
             // 禁用 X-Frame-Options 以允许 H2 控制台在 iframe 中显示
             .headers(headers -> headers.frameOptions(frame -> frame.disable()))
             // 在 UsernamePasswordAuthenticationFilter 之前添加 JWT 认证过滤器
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            // 在 JWT 认证过滤器之后添加开发环境自动登录过滤器
+            // 执行顺序：先尝试 JWT 认证，如果失败且是开发环境，则自动登录为 admin
+            .addFilterAfter(devAutoLoginFilter, JwtAuthenticationFilter.class);
         
         return http.build();
     }

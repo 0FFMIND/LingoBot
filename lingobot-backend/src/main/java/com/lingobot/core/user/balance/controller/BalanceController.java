@@ -1,6 +1,7 @@
 package com.lingobot.core.user.balance.controller;
 
 import com.lingobot.core.user.balance.dto.BalanceTransactionDTO;
+import com.lingobot.core.user.balance.dto.TransactionSummaryDTO;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.infrastructure.common.response.ErrorCode;
@@ -15,6 +16,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -38,13 +42,22 @@ public class BalanceController {
         return ResponseEntity.ok(ApiResponse.success("获取余额成功", balance));
     }
 
-    // 分页获取当前用户的交易记录
     @GetMapping("/transactions")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getTransactions(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Page<BalanceTransactionDTO> result = balanceService.getCurrentUserTransactions(
-                PageRequest.of(page, size));
+            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(defaultValue = "all") String type,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
+
+        Page<BalanceTransactionDTO> result;
+        if (startDate != null && endDate != null) {
+            LocalDateTime start = startDate.atStartOfDay();
+            LocalDateTime end = endDate.atTime(LocalTime.MAX);
+            result = balanceService.getCurrentUserTransactions(PageRequest.of(page, size), type, start, end);
+        } else {
+            result = balanceService.getCurrentUserTransactions(PageRequest.of(page, size), type, null, null);
+        }
 
         Map<String, Object> response = new HashMap<>();
         response.put("content", result.getContent());
@@ -56,6 +69,23 @@ public class BalanceController {
         response.put("hasPrevious", result.hasPrevious());
 
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/transactions/summary")
+    public ResponseEntity<ApiResponse<TransactionSummaryDTO>> getTransactionSummary(
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
+
+        TransactionSummaryDTO summary;
+        if (startDate != null && endDate != null) {
+            LocalDateTime start = startDate.atStartOfDay();
+            LocalDateTime end = endDate.atTime(LocalTime.MAX);
+            summary = balanceService.getCurrentUserTransactionSummary(start, end);
+        } else {
+            summary = balanceService.getCurrentUserTransactionSummary(null, null);
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(summary));
     }
 
     // 管理员手动调整指定用户的余额（仅 ADMIN 角色可访问）

@@ -2,8 +2,10 @@ package com.lingobot.core.user.auth.controller;
 
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
+import com.lingobot.core.user.auth.service.EmailVerificationService;
 import com.lingobot.core.user.auth.service.LoginAttemptService;
 import com.lingobot.core.user.balance.service.BalanceService;
+import com.lingobot.infrastructure.common.config.AppProperties;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.infrastructure.common.response.ErrorCode;
 import jakarta.validation.Valid;
@@ -29,9 +31,16 @@ import java.util.stream.Collectors;
 public class AdminController {
     
     private final LoginAttemptService loginAttemptService;
+    private final EmailVerificationService emailVerificationService;
     private final UserRepository userRepository;
     private final BalanceService balanceService;
     private final PasswordEncoder passwordEncoder;
+    private final AppProperties appProperties;
+
+    @GetMapping("/dev-check")
+    public boolean isDev() {
+        return appProperties.isDev();
+    }
     
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/blocked-users")
@@ -237,5 +246,35 @@ public class AdminController {
         @NotBlank(message = "新用户名不能为空")
         @Size(min = 2, max = 50, message = "用户名长度必须在2-50个字符之间")
         private String newUsername;
+    }
+    
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/locked-emails")
+    public ResponseEntity<ApiResponse<List<EmailVerificationService.LockedEmailInfo>>> getLockedEmails() {
+        List<EmailVerificationService.LockedEmailInfo> lockedEmails = emailVerificationService.getAllLockedEmails();
+        return ResponseEntity.ok(ApiResponse.success("获取锁定邮箱列表成功", lockedEmails));
+    }
+    
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/locked-email-ips")
+    public ResponseEntity<ApiResponse<List<EmailVerificationService.LockedIpInfo>>> getLockedEmailIps() {
+        List<EmailVerificationService.LockedIpInfo> lockedIps = emailVerificationService.getAllLockedIps();
+        return ResponseEntity.ok(ApiResponse.success("获取锁定IP列表成功", lockedIps));
+    }
+    
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/unlock-email/{email}")
+    public ResponseEntity<ApiResponse<Void>> unlockEmail(@PathVariable String email) {
+        log.info("管理员解锁邮箱验证码限制: email={}", email);
+        emailVerificationService.unlockEmail(email);
+        return ResponseEntity.ok(ApiResponse.success("邮箱解锁成功", null));
+    }
+    
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/unlock-email-ip/{ipAddress}")
+    public ResponseEntity<ApiResponse<Void>> unlockEmailIp(@PathVariable String ipAddress) {
+        log.info("管理员解锁IP验证码限制: ip={}", ipAddress);
+        emailVerificationService.unlockEmailCodeIp(ipAddress);
+        return ResponseEntity.ok(ApiResponse.success("IP解锁成功", null));
     }
 }

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserDTO } from '../../../types';
 import { authUtils, authApi, redemptionApi } from '../../../api';
-import { balanceService } from '../../../services';
 import ChangePasswordModal from './ChangePasswordModal';
 import DeactivateModal from './DeactivateModal';
-import BalanceTransactionModal from './BalanceTransactionModal';
+import BalanceHistoryPanel from './BalanceHistoryPanel';
 
 interface AccountSettingsProps {
   onClose: () => void;
@@ -31,7 +30,6 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
   const [redemptionCode, setRedemptionCode] = useState('');
   const [redeemLoading, setRedeemLoading] = useState(false);
   const [redeemMessage, setRedeemMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [showBalanceModal, setShowBalanceModal] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -358,14 +356,10 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
                       <p className="balance-unit">点</p>
                     </div>
                   </div>
-                  <button
-                    className="balance-detail-btn"
-                    onClick={() => setShowBalanceModal(true)}
-                  >
-                    💰 余额明细
-                  </button>
                 </div>
               </div>
+
+              <BalanceHistoryPanel />
 
               <div className="redeem-section">
                 <h3 className="redeem-title">兑换码兑换</h3>
@@ -457,12 +451,6 @@ const AccountSettings: React.FC<AccountSettingsProps> = ({ onClose, onLogout }) 
         user={user}
         onClose={() => setShowDeactivateModal(false)}
         onSuccess={handleDeactivateSuccess}
-      />
-
-      <BalanceTransactionModal
-        isOpen={showBalanceModal}
-        onClose={() => setShowBalanceModal(false)}
-        currentBalance={balance}
       />
     </div>
   );

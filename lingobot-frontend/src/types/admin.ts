@@ -13,6 +13,22 @@ export interface BlockedIpInfo {
   remainingSeconds: number;
 }
 
+export interface LockedEmailInfo {
+  email: string;
+  lockedAt: string;
+  expiresAt: string;
+  remainingSeconds: number;
+  lockType: string;
+}
+
+export interface LockedEmailIpInfo {
+  ipAddress: string;
+  lockedAt: string;
+  expiresAt: string;
+  remainingSeconds: number;
+  lockType: string;
+}
+
 export interface AdminStatus {
   blockedUserCount: number;
   blockedIpCount: number;

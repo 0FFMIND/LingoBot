@@ -38,7 +38,8 @@
       "Bash(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\features\\\\vocabulary\\\\components\")",
       "Bash(Write-Output \"Directories created\")",
       "Bash(npx tsc *)",
-      "PowerShell(cd \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\"; @\\(\"App.tsx\", \"features\\\\chat\\\\components\\\\ChatWindow.tsx\", \"stores\\\\useChatStore.ts\", \"stores\\\\useConversationStore.ts\", \"stores\\\\useAuthStore.ts\", \"stores\\\\useVocabularyStore.ts\", \"features\\\\vocabulary\\\\components\\\\VocabularyFlashcard.tsx\", \"features\\\\chat\\\\components\\\\MessageContent.tsx\", \"features\\\\chat\\\\components\\\\WelcomeMessage.tsx\", \"features\\\\chat\\\\components\\\\LearningModeSelector.tsx\", \"features\\\\admin\\\\components\\\\LogPage.tsx\"\\) | ForEach-Object { $lines = \\(Get-Content $_\\).Count; \"$lines`t$_\" })"
+      "PowerShell(cd \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\"; @\\(\"App.tsx\", \"features\\\\chat\\\\components\\\\ChatWindow.tsx\", \"stores\\\\useChatStore.ts\", \"stores\\\\useConversationStore.ts\", \"stores\\\\useAuthStore.ts\", \"stores\\\\useVocabularyStore.ts\", \"features\\\\vocabulary\\\\components\\\\VocabularyFlashcard.tsx\", \"features\\\\chat\\\\components\\\\MessageContent.tsx\", \"features\\\\chat\\\\components\\\\WelcomeMessage.tsx\", \"features\\\\chat\\\\components\\\\LearningModeSelector.tsx\", \"features\\\\admin\\\\components\\\\LogPage.tsx\"\\) | ForEach-Object { $lines = \\(Get-Content $_\\).Count; \"$lines`t$_\" })",
+      "Bash(Select-Object Name, PSIsContainer)"
     ],
     "additionalDirectories": [
       "c:\\Users\\ALIENWARE\\Downloads\\�½��ļ��� (2)\\lingobot-backend\\src\\main\\java\\com"

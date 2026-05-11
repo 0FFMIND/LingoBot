@@ -263,7 +263,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
             throw AuthException.usernameOrPasswordError("邮箱或密码错误");
         }
         
-        emailVerificationService.sendLoginVerificationCode(email);
+        emailVerificationService.sendLoginVerificationCode(email, clientIp);
         log.info("登录验证码已发送 - 用户: {}, IP: {}", user.getUsername(), clientIp);
     }
     

@@ -18,7 +18,7 @@ public class LogController {
     private final LogPushService logPushService;
     private final AppProperties appProperties;
 
-    @PreAuthorize("@appProperties.isDev() or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamLogs() {
         return logPushService.createEmitter();

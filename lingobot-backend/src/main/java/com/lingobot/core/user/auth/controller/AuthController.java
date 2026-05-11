@@ -11,8 +11,13 @@ import com.lingobot.core.user.auth.dto.SendVerificationCodeRequest;
 import com.lingobot.core.user.auth.dto.UpdateAvatarRequest;
 import com.lingobot.core.user.auth.dto.UpdateUsernameRequest;
 import com.lingobot.core.user.auth.dto.UserDTO;
+import com.lingobot.core.user.auth.entity.User;
+import com.lingobot.core.user.auth.repository.UserRepository;
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.auth.service.EmailVerificationService;
+import com.lingobot.core.user.auth.service.JwtService;
+import com.lingobot.core.user.balance.repository.UserBalanceRepository;
+import com.lingobot.infrastructure.common.config.AppProperties;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.infrastructure.util.IpUtils;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,6 +26,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -28,6 +35,10 @@ public class AuthController {
     
     private final AuthService authService;
     private final EmailVerificationService emailVerificationService;
+    private final AppProperties appProperties;
+    private final UserRepository userRepository;
+    private final JwtService jwtService;
+    private final UserBalanceRepository userBalanceRepository;
     
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(
@@ -104,8 +115,11 @@ public class AuthController {
     }
     
     @PostMapping("/send-verification-code")
-    public ResponseEntity<ApiResponse<Void>> sendVerificationCode(@RequestBody SendVerificationCodeRequest request) {
-        emailVerificationService.sendVerificationCode(request);
+    public ResponseEntity<ApiResponse<Void>> sendVerificationCode(
+            @RequestBody SendVerificationCodeRequest request,
+            HttpServletRequest httpRequest) {
+        String clientIp = IpUtils.getClientIp(httpRequest);
+        emailVerificationService.sendVerificationCode(request, clientIp);
         return ResponseEntity.ok(ApiResponse.success("验证码已发送", null));
     }
     
@@ -117,5 +131,43 @@ public class AuthController {
         AuthResponse response = authService.registerWithCode(request, clientIp);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("注册成功", response));
+    }
+    
+    @GetMapping("/dev-auto-login")
+    public ResponseEntity<ApiResponse<AuthResponse>> devAutoLogin() {
+        if (!appProperties.isDev()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.error(com.lingobot.infrastructure.common.response.ErrorCode.FORBIDDEN, "仅开发环境可用"));
+        }
+        
+        User adminUser = userRepository.findByRole(User.Role.ROLE_ADMIN).stream().findFirst().orElse(null);
+        
+        if (adminUser == null) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error(com.lingobot.infrastructure.common.response.ErrorCode.INTERNAL_ERROR, "未找到管理员用户"));
+        }
+        
+        String token = jwtService.generateToken(adminUser.getUsername(), adminUser.getId());
+        
+        BigDecimal balance = BigDecimal.ZERO;
+        BigDecimal frozenBalance = BigDecimal.ZERO;
+        com.lingobot.core.user.balance.entity.UserBalance userBalance = userBalanceRepository.findByUserId(adminUser.getId()).orElse(null);
+        if (userBalance != null) {
+            balance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
+            frozenBalance = userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
+        }
+        
+        AuthResponse response = AuthResponse.builder()
+                .token(token)
+                .username(adminUser.getUsername())
+                .email(adminUser.getEmail())
+                .userId(adminUser.getId())
+                .role(adminUser.getRole().name())
+                .avatar(adminUser.getAvatar())
+                .balance(balance)
+                .frozenBalance(frozenBalance)
+                .build();
+        
+        return ResponseEntity.ok(ApiResponse.success("开发环境自动登录成功", response));
     }
 }
