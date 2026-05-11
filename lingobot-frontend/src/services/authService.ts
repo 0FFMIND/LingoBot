@@ -148,5 +148,37 @@ export const authService = {
     window.dispatchEvent(new CustomEvent('auth:username-updated', { detail: { user: updatedUser } }));
     
     return data;
+  },
+  
+  devAutoLogin: async (): Promise<AuthResponse | null> => {
+    try {
+      const response = await httpClient.getRaw('/auth/dev-auto-login');
+      if (!response.ok) {
+        return null;
+      }
+      const result = await response.json();
+      if (!result.data) {
+        return null;
+      }
+      const data: AuthResponse = result.data;
+      
+      const user: UserDTO = {
+        id: data.userId,
+        username: data.username,
+        email: data.email,
+        role: data.role,
+        avatar: data.avatar,
+        createdAt: new Date().toISOString(),
+        balance: data.balance ? Number(data.balance) : 0
+      };
+      
+      authUtils.setAuth(data.token, user);
+      window.dispatchEvent(new CustomEvent('auth:login', { detail: { user } }));
+      
+      return data;
+    } catch (error) {
+      console.warn('开发环境自动登录失败:', error);
+      return null;
+    }
   }
 };

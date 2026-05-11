@@ -35,6 +35,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
   insufficientBalanceData: { message: '你的余额不足' },
 
   initAuth: async () => {
+    const tryDevAutoLogin = async (): Promise<boolean> => {
+      const devAuthResult = await authApi.devAutoLogin()
+      if (!devAuthResult) {
+        return false
+      }
+
+      const user: UserDTO = {
+        id: devAuthResult.userId,
+        username: devAuthResult.username,
+        email: devAuthResult.email,
+        role: devAuthResult.role,
+        avatar: devAuthResult.avatar,
+        createdAt: new Date().toISOString(),
+        balance: devAuthResult.balance ? Number(devAuthResult.balance) : 0
+      }
+      authUtils.setUser(user)
+      set({ isAuthenticated: true, currentUser: user, initializing: false, showAuthModal: false })
+      return true
+    }
+
     const urlParams = new URLSearchParams(window.location.search)
     const token = urlParams.get('token')
     const userId = urlParams.get('userId')
@@ -51,7 +71,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       authUtils.setAuth(token, user)
       ;['token', 'userId', 'username', 'email', 'avatar'].forEach(k => urlParams.delete(k))
       window.history.replaceState({}, '', window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : ''))
-      set({ isAuthenticated: true, currentUser: user, initializing: false })
+      set({ isAuthenticated: true, currentUser: user, initializing: false, showAuthModal: false })
       return
     }
 
@@ -60,14 +80,23 @@ export const useAuthStore = create<AuthStore>((set) => ({
       try {
         const fetchedUser = await authApi.getCurrentUser()
         authUtils.setUser(fetchedUser)
-        set({ isAuthenticated: true, currentUser: fetchedUser, initializing: false })
+        set({ isAuthenticated: true, currentUser: fetchedUser, initializing: false, showAuthModal: false })
       } catch {
         authUtils.clearAuth()
-        set({ isAuthenticated: false, currentUser: null, initializing: false })
+        const devLoggedIn = await tryDevAutoLogin()
+        if (!devLoggedIn) {
+          set({ isAuthenticated: false, currentUser: null, initializing: false })
+        }
       }
-    } else {
-      set({ isAuthenticated: false, currentUser: null, initializing: false })
+      return
     }
+
+    const devLoggedIn = await tryDevAutoLogin()
+    if (devLoggedIn) {
+      return
+    }
+
+    set({ isAuthenticated: false, currentUser: null, initializing: false })
   },
 
   setCurrentUser: (user) => set({ currentUser: user }),
