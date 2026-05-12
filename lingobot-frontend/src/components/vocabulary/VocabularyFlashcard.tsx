@@ -37,8 +37,8 @@ interface VocabularyFlashcardProps {
   onPrevWord?: () => void
   onRegenerate?: () => void
   onSaveMeaning?: (meaning: string) => void
-  onSaveEnglishSentence?: (sentence: string) => void
-  onAnalyzeSentence?: () => void
+  onSaveEnglishSentence?: (sentence: string) => void | Promise<void>
+  onAnalyzeSentence?: () => void | Promise<void>
   cardId?: number
   isStandalone?: boolean
   hasPrev?: boolean
@@ -65,30 +65,16 @@ const cleanPhonetic = (phonetic: string): string => {
 }
 
 export const isVocabularyJson = (content: string): VocabularyData | null => {
-  console.log('🔍 [isVocabularyJson - VocabularyFlashcard] 尝试解析内容:', {
-    contentLength: content?.length,
-    contentPreview: content?.substring(0, 100),
-  })
   try {
     const parsed = JSON.parse(content)
-    console.log('🔍 [isVocabularyJson - VocabularyFlashcard] 解析成功:', {
-      action: parsed.action,
-      word: parsed.word,
-      phonetic: parsed.phonetic,
-      is_correct: parsed.is_correct,
-    })
     if (parsed.action === 'check_meaning_accuracy' && parsed.word) {
-      console.log('🔍 [isVocabularyJson - VocabularyFlashcard] 匹配 check_meaning_accuracy 模式')
       return parsed as VocabularyData
     }
     if (parsed.action && parsed.word && parsed.phonetic) {
-      console.log('🔍 [isVocabularyJson - VocabularyFlashcard] 匹配标准词汇卡模式')
       return parsed as VocabularyData
     }
-    console.log('🔍 [isVocabularyJson - VocabularyFlashcard] 不匹配任何模式，返回 null')
     return null
-  } catch (e) {
-    console.warn('🔍 [isVocabularyJson - VocabularyFlashcard] 解析失败:', e)
+  } catch {
     return null
   }
 }
@@ -117,8 +103,8 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
   meaningCheckResult,
   chineseSentenceForTranslation: propChineseSentence,
   sentenceAnalysisCompleted,
-  sentenceHasNewWord,
-  sentenceMeaningMatches,
+  sentenceHasNewWord: _sentenceHasNewWord,
+  sentenceMeaningMatches: _sentenceMeaningMatches,
   sentenceAnalysis,
 }) => {
   const isLastWord = !hasNext && totalCount !== undefined && currentIndex !== undefined
@@ -137,16 +123,6 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
   const effectiveMeaningCheckResult =
     meaningCheckResult !== undefined ? meaningCheckResult : (data.check_feedback ?? '')
 
-  console.log('🔍 [VocabularyFlashcard] 词汇检查状态:', {
-    dataAction: data.action,
-    dataIsCorrect: data.is_correct,
-    propMeaningCheckCompleted: meaningCheckCompleted,
-    hasMeaningCheckResultFromData,
-    effectiveMeaningCheckCompleted,
-    propMeaningIsCorrect: meaningIsCorrect,
-    effectiveMeaningIsCorrect,
-  })
-
   const effectiveUserMeaning = userMeaningGuess || data.user_meaning || ''
 
   const effectiveMeaning = data.meaning || data.correct_meaning || ''
@@ -155,9 +131,6 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
 
   const effectiveSentenceAnalysisCompleted = sentenceAnalysisCompleted ?? false
   const effectiveSentenceAnalysis = sentenceAnalysis || ''
-  const effectiveHasNewWord = sentenceHasNewWord
-  const effectiveMeaningMatches = sentenceMeaningMatches
-
   const getInitialStep = (): 1 | 2 | 3 => {
     if (isCompleted) return 3
     if (savedUserEnglishSentence) return 3
@@ -274,14 +247,14 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
     setStep(2)
   }
 
-  const handleSubmitEnglishSentence = () => {
+  const handleSubmitEnglishSentence = async () => {
     if (!englishSentenceInput.trim()) return
     if (onSaveEnglishSentence) {
-      onSaveEnglishSentence(englishSentenceInput.trim())
+      await onSaveEnglishSentence(englishSentenceInput.trim())
     }
     setStep(3)
     if (onAnalyzeSentence) {
-      onAnalyzeSentence()
+      await onAnalyzeSentence()
     }
   }
 
@@ -407,7 +380,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
             <div className="flashcard-content synonyms-content expanded">
               <div className="content-title">
                 <span className="title-icon">🔗</span>
-                <span>Synonyms</span>
+                <span>同义词</span>
               </div>
               <div className="synonyms-list">
                 {data.synonyms.map((synonym, index) => (
@@ -419,8 +392,8 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
           {meaningInput.trim() && (
             effectiveMeaningCheckCompleted ? (
               <div className={`meaning-check-result ${effectiveMeaningIsCorrect ? 'correct' : 'incorrect'}`}>
-                <span className="meaning-check-icon">{effectiveMeaningIsCorrect ? 'OK' : '!'}</span>
-                <span className="meaning-check-label">{effectiveMeaningIsCorrect ? 'Meaning understood' : 'Needs review'}</span>
+                <span className="meaning-check-icon">{effectiveMeaningIsCorrect ? '✅' : '❌'}</span>
+                <span className="meaning-check-label">{effectiveMeaningIsCorrect ? '理解正确' : '需要复习'}</span>
                 {effectiveMeaningCheckResult && <p className="meaning-check-feedback">{effectiveMeaningCheckResult}</p>}
               </div>
             ) : (
@@ -485,7 +458,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
             <div className="flashcard-content synonyms-content expanded">
               <div className="content-title">
                 <span className="title-icon">🔗</span>
-                <span>Synonyms</span>
+                <span>同义词</span>
               </div>
               <div className="synonyms-list">
                 {data.synonyms.map((synonym, index) => (
@@ -498,8 +471,8 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
           {effectiveUserMeaning && (
             effectiveMeaningCheckCompleted ? (
               <div className={`meaning-check-result ${effectiveMeaningIsCorrect ? 'correct' : 'incorrect'}`}>
-                <span className="meaning-check-icon">{effectiveMeaningIsCorrect ? 'OK' : '!'}</span>
-                <span className="meaning-check-label">{effectiveMeaningIsCorrect ? 'Meaning understood' : 'Needs review'}</span>
+                <span className="meaning-check-icon">{effectiveMeaningIsCorrect ? '✅' : '❌'}</span>
+                <span className="meaning-check-label">{effectiveMeaningIsCorrect ? '理解正确' : '需要复习'}</span>
                 {effectiveMeaningCheckResult && <p className="meaning-check-feedback">{effectiveMeaningCheckResult}</p>}
               </div>
             ) : (
@@ -507,6 +480,16 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
                 <span className="typing-english">⏳ 正在检查你的理解...</span>
               </div>
             )
+          )}
+
+          {effectiveChineseSentence && (
+            <div className="flashcard-content sentence-content expanded">
+              <div className="content-title">
+                <span className="title-icon">📝</span>
+                <span>中文例句</span>
+              </div>
+              <div className="sentence-text">"{effectiveChineseSentence}"</div>
+            </div>
           )}
 
           {savedUserEnglishSentence && (
@@ -533,19 +516,8 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
             <div className="sentence-waiting">
               <span className="typing-english">⏳ 正在分析你的英文句子...</span>
             </div>
-          ) : effectiveSentenceAnalysisCompleted && (
+          ) : (
             <>
-              <div className="sentence-check-results" style={{ marginBottom: '12px' }}>
-                <div className={`check-result-item ${effectiveHasNewWord ? 'correct' : 'incorrect'}`}>
-                  <span className="check-icon">{effectiveHasNewWord ? 'OK' : '!'}</span>
-                  <span>{effectiveHasNewWord ? 'Uses new word' : 'Missing new word'}</span>
-                </div>
-                <div className={`check-result-item ${effectiveMeaningMatches ? 'correct' : 'incorrect'}`}>
-                  <span className="check-icon">{effectiveMeaningMatches ? 'OK' : '!'}</span>
-                  <span>{effectiveMeaningMatches ? 'Meaning matches' : 'Meaning mismatch'}</span>
-                </div>
-              </div>
-
               {effectiveSentenceAnalysis && (
                 <div className="flashcard-content feedback-content expanded">
                   <div className="content-title">

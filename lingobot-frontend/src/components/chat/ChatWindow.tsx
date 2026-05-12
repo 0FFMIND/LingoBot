@@ -324,30 +324,14 @@ const ChatWindow: React.FC = () => {
 
   // 从聊天消息中提取 check_meaning_accuracy 结果并更新词汇卡状态
   useEffect(() => {
-    console.log('🔍 [ChatWindow] 检查消息以提取 check_meaning_accuracy 结果:', {
-      hasCurrentCard: !!currentVocabularyCard,
-      messagesCount: messages.length,
-      cardId: currentVocabularyCard?.id,
-    })
     if (!currentVocabularyCard) return
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
-      console.log('🔍 [ChatWindow] 检查消息', i, ':', { role: msg.role, contentPreview: msg.content.substring(0, 100) })
       if (msg.role !== 'assistant') continue
       const vocabData = isVocabularyJson(msg.content)
-      console.log('🔍 [ChatWindow] 解析结果:', {
-        hasVocabData: !!vocabData,
-        action: vocabData?.action,
-        isCorrect: vocabData?.is_correct,
-      })
       if (vocabData?.action === 'check_meaning_accuracy' && vocabData.is_correct !== undefined) {
         const needsUpdate = !currentVocabularyCard.meaningCheckCompleted ||
           (!currentVocabularyCard.chineseSentenceForTranslation && vocabData.chineseSentenceForTranslation)
-        console.log('🔍 [ChatWindow] 找到 check_meaning_accuracy 结果:', {
-          vocabData,
-          currentCardMeaningCheckCompleted: currentVocabularyCard.meaningCheckCompleted,
-          needsUpdate,
-        })
         if (needsUpdate) {
           useVocabularyStore.getState().setCard({
             ...currentVocabularyCard,
@@ -356,7 +340,6 @@ const ChatWindow: React.FC = () => {
             meaningCheckResult: (vocabData.check_feedback as string) || '',
             chineseSentenceForTranslation: (vocabData.chineseSentenceForTranslation as string) || currentVocabularyCard.chineseSentenceForTranslation,
           })
-          console.log('🔍 [ChatWindow] 已更新词汇卡状态')
         }
         break
       }

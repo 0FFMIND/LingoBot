@@ -831,12 +831,13 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 difficulty = defaultDifficulty != null ? defaultDifficulty : "b2";
             }
 
-            log.info("成功解析词汇卡数据: word={}, phonetic={}, meaning={}, category={}, difficulty={}",
-                    word, parsed.get("phonetic"), parsed.get("meaning"), category, difficulty);
+            log.info("成功解析词汇卡数据: word={}, phonetic={}, partOfSpeech={}, meaning={}, category={}, difficulty={}",
+                    word, parsed.get("phonetic"), parsed.get("partOfSpeech"), parsed.get("meaning"), category, difficulty);
 
             return WordCardData.builder()
                     .word(word)
                     .phonetic((String) parsed.get("phonetic"))
+                    .partOfSpeech((String) parsed.get("partOfSpeech"))
                     .meaning((String) parsed.get("meaning"))
                     .example((String) parsed.get("example"))
                     .exampleTranslation((String) parsed.get("exampleTranslation"))

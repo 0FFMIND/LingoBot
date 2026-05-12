@@ -98,9 +98,14 @@ public class SentenceAnalysisService {
             }
 
             Long conversationId = card.getConversation() != null ? card.getConversation().getId() : null;
+            // Capture lazy relation ids before tool execution; native tool updates can detach this entity.
+            Long vocabularyWordId = card.getVocabularyWordId();
+            Long userId = card.getConversation() != null && card.getConversation().getUser() != null
+                    ? card.getConversation().getUser().getId()
+                    : null;
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
                     conversationId, messages, tools, DEFAULT_MODEL);
-            persistSentenceAnalysisResult(card, result);
+            persistSentenceAnalysisResult(cardId, conversationId, vocabularyWordId, userId, result);
             log.info("Sentence analysis completed for cardId={}", cardId);
         } catch (Exception e) {
             log.error("Sentence analysis failed for cardId={}", cardId, e);
@@ -110,9 +115,10 @@ public class SentenceAnalysisService {
     /**
      * 持久化句子分析结果
      */
-    private void persistSentenceAnalysisResult(VocabularyCard card, ToolLoopService.ToolLoopResult result) {
+    private void persistSentenceAnalysisResult(Long cardId, Long conversationId, Long vocabularyWordId, Long userId,
+                                               ToolLoopService.ToolLoopResult result) {
         if (result == null || !result.hasToolCalls() || result.getToolResultText() == null) {
-            log.warn("Sentence analysis returned no tool result for cardId={}", card.getId());
+            log.warn("Sentence analysis returned no tool result for cardId={}", cardId);
             return;
         }
 
@@ -128,32 +134,23 @@ public class SentenceAnalysisService {
             Boolean meaningMatches = meaningMatchesValue instanceof Boolean v ? v : null;
             Boolean hasNewWord = hasNewWordValue instanceof Boolean v ? v : null;
 
-            card.setSentenceMeaningMatches(meaningMatches);
-            card.setSentenceHasNewWord(hasNewWord);
-            card.setSentenceAnalysisCompleted(true);
+            String finalAnalysis = !feedback.isEmpty() ? feedback : analysis;
 
-            if (!feedback.isEmpty()) {
-                card.setSentenceAnalysis(feedback);
-            } else if (!analysis.isEmpty()) {
-                card.setSentenceAnalysis(analysis);
-            }
+            // Keep sentence status updates on the same direct-update path as meaning checks.
+            int updatedRows = vocabularyCardRepository.updateSentenceAnalysisResult(
+                    cardId,
+                    meaningMatches,
+                    hasNewWord,
+                    finalAnalysis != null ? finalAnalysis : "");
+            evictCardAndConversationCache(cardId, conversationId);
+            log.info("Persisted sentence analysis by cardId={}, rows={}", cardId, updatedRows);
 
-            VocabularyCard saved = vocabularyCardRepository.save(card);
-            Long conversationId = saved.getConversation() != null ? saved.getConversation().getId() : null;
-            evictCardAndConversationCache(saved.getId(), conversationId);
-
-            if (saved.getVocabularyWordId() != null
-                    && saved.getConversation() != null
-                    && saved.getConversation().getUser() != null
-                    && saved.getConversation().getUser().getId() != null) {
+            if (userId != null && vocabularyWordId != null) {
                 boolean overallCorrect = Boolean.TRUE.equals(meaningMatches) && Boolean.TRUE.equals(hasNewWord);
-                userVocabularyService.updateProgress(
-                        saved.getConversation().getUser().getId(),
-                        saved.getVocabularyWordId(),
-                        overallCorrect);
+                userVocabularyService.updateProgress(userId, vocabularyWordId, overallCorrect);
             }
         } catch (Exception e) {
-            log.error("Failed to persist sentence analysis result for cardId={}", card.getId(), e);
+            log.error("Failed to persist sentence analysis result for cardId={}", cardId, e);
         }
     }
 

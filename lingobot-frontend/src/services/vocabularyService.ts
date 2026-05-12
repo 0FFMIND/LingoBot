@@ -17,6 +17,27 @@ export type AIModifyVocabularyRequest = Partial<Pick<
   'word' | 'phonetic' | 'partOfSpeech' | 'meaning' | 'example' | 'exampleTranslation' | 'synonyms' | 'category' | 'difficulty'
 >> & { id: number };
 
+type MeaningCheckStatus = {
+  cardId: number;
+  word: string;
+  userMeaningGuess: string;
+  meaningCheckCompleted: boolean;
+  meaningIsCorrect?: boolean;
+  meaningCheckResult: string;
+  chineseSentenceForTranslation?: string;
+};
+
+type SentenceAnalysisStatus = {
+  cardId: number;
+  word: string;
+  chineseSentenceForTranslation: string;
+  userEnglishSentence: string;
+  sentenceAnalysisCompleted: boolean;
+  sentenceHasNewWord?: boolean;
+  sentenceMeaningMatches?: boolean;
+  sentenceAnalysis: string;
+};
+
 const refreshCurrentUserBalance = async (): Promise<void> => {
   try {
     const user = await httpClient.get<UserDTO>('/auth/me');
@@ -136,26 +157,23 @@ export const vocabularyService = {
     );
   },
 
-  getSentenceAnalysisStatus: async (cardId: number): Promise<{
-    cardId: number;
-    word: string;
-    chineseSentenceForTranslation: string;
-    userEnglishSentence: string;
-    sentenceAnalysisCompleted: boolean;
-    sentenceHasNewWord?: boolean;
-    sentenceMeaningMatches?: boolean;
-    sentenceAnalysis: string;
-  }> => {
-    return httpClient.get<{
-      cardId: number;
-      word: string;
-      chineseSentenceForTranslation: string;
-      userEnglishSentence: string;
-      sentenceAnalysisCompleted: boolean;
-      sentenceHasNewWord?: boolean;
-      sentenceMeaningMatches?: boolean;
-      sentenceAnalysis: string;
-    }>(`/vocabulary/cards/${cardId}/sentence-analysis`);
+  getSentenceAnalysisStatus: async (cardId: number): Promise<SentenceAnalysisStatus> => {
+    const status = await httpClient.get<SentenceAnalysisStatus>(`/vocabulary/cards/${cardId}/sentence-analysis`);
+    if (status && Object.keys(status).length > 0) {
+      return status;
+    }
+
+    const card = await vocabularyService.getCardById(cardId);
+    return {
+      cardId: card.id,
+      word: card.word,
+      chineseSentenceForTranslation: card.chineseSentenceForTranslation || card.exampleTranslation || '',
+      userEnglishSentence: card.userEnglishSentence || '',
+      sentenceAnalysisCompleted: Boolean(card.sentenceAnalysisCompleted),
+      sentenceHasNewWord: card.sentenceHasNewWord,
+      sentenceMeaningMatches: card.sentenceMeaningMatches,
+      sentenceAnalysis: card.sentenceAnalysis || '',
+    };
   },
 
   markAsCompleted: async (cardId: number): Promise<VocabularyCardDTO> => {
@@ -170,24 +188,22 @@ export const vocabularyService = {
     return httpClient.get<number>(`/vocabulary/conversations/${conversationId}/count`);
   },
 
-  getMeaningCheckStatus: async (cardId: number): Promise<{
-    cardId: number;
-    word: string;
-    userMeaningGuess: string;
-    meaningCheckCompleted: boolean;
-    meaningIsCorrect?: boolean;
-    meaningCheckResult: string;
-    chineseSentenceForTranslation?: string;
-  }> => {
-    return httpClient.get<{
-      cardId: number;
-      word: string;
-      userMeaningGuess: string;
-      meaningCheckCompleted: boolean;
-      meaningIsCorrect?: boolean;
-      meaningCheckResult: string;
-      chineseSentenceForTranslation?: string;
-    }>(`/vocabulary/cards/${cardId}/meaning-check`);
+  getMeaningCheckStatus: async (cardId: number): Promise<MeaningCheckStatus> => {
+    const status = await httpClient.get<MeaningCheckStatus>(`/vocabulary/cards/${cardId}/meaning-check`);
+    if (status && Object.keys(status).length > 0) {
+      return status;
+    }
+
+    const card = await vocabularyService.getCardById(cardId);
+    return {
+      cardId: card.id,
+      word: card.word,
+      userMeaningGuess: card.userMeaningGuess || '',
+      meaningCheckCompleted: Boolean(card.meaningCheckCompleted),
+      meaningIsCorrect: card.meaningIsCorrect,
+      meaningCheckResult: card.meaningCheckResult || '',
+      chineseSentenceForTranslation: card.chineseSentenceForTranslation || card.exampleTranslation,
+    };
   },
 
   getVocabularyStats: async (): Promise<VocabularyStatsDTO> => {

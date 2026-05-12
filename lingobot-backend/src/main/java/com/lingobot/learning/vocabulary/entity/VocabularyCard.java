@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lingobot.core.conversation.entity.Conversation;
 
 import jakarta.persistence.Column;
@@ -33,6 +34,8 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "vocabulary_cards")
 public class VocabularyCard {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -185,8 +188,7 @@ public class VocabularyCard {
             return new ArrayList<>();
         }
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.readValue(synonymsJson, List.class);
+            return OBJECT_MAPPER.readValue(synonymsJson, List.class);
         } catch (Exception e) {
             return new ArrayList<>();
         }
@@ -199,8 +201,7 @@ public class VocabularyCard {
             return;
         }
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            this.synonymsJson = mapper.writeValueAsString(synonyms);
+            this.synonymsJson = OBJECT_MAPPER.writeValueAsString(synonyms);
         } catch (Exception e) {
             this.synonymsJson = null;
         }

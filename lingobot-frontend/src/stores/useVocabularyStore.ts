@@ -30,22 +30,17 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
       const existingCard = await vocabularyApi.getCurrentCard(conversationId)
       if (existingCard) {
         set({ currentVocabularyCard: existingCard })
-        console.log('已恢复词汇卡状态:', existingCard.word)
       } else {
-        console.log('该对话没有词汇卡，准备生成新词汇卡')
         if (vocabularyDifficulty) {
           const newCard = await vocabularyApi.generateNextCard(conversationId, vocabularyCategory, vocabularyDifficulty)
           if (newCard) {
             set({ currentVocabularyCard: newCard })
-            console.log('已生成新词汇卡:', newCard.word)
           }
         } else {
-          console.warn('没有提供难度级别，无法生成新词汇卡')
           set({ currentVocabularyCard: null })
         }
       }
-    } catch (e) {
-      console.log('获取/生成词汇卡失败:', e)
+    } catch {
       set({ currentVocabularyCard: null })
     } finally {
       set({ vocabularyCardLoading: false })
@@ -101,17 +96,14 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   },
 
   saveUserMeaning: async (cardId: number, meaning: string) => {
-    console.log('🔍 [useVocabularyStore] saveUserMeaning 被调用:', { cardId, meaning })
     try {
       const updated = await vocabularyApi.updateUserMeaning(cardId, meaning)
-      console.log('🔍 [useVocabularyStore] 保存用户意思响应:', updated)
       if (updated) {
         set({ currentVocabularyCard: updated })
       }
     } catch (error) {
       console.error('保存用户意思失败:', error)
     }
-    console.log('🔍 [useVocabularyStore] 开始轮询释义检查结果，cardId:', cardId)
     get().pollMeaningCheckResult(cardId)
   },
 
@@ -177,15 +169,11 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   pollMeaningCheckResult: async (cardId: number) => {
     const maxAttempts = 20
     const intervalMs = 1500
-    console.log('🔍 [useVocabularyStore] 开始轮询释义检查结果:', { cardId, maxAttempts, intervalMs })
     for (let i = 0; i < maxAttempts; i++) {
-      console.log('🔍 [useVocabularyStore] 轮询第', i + 1, '次，等待', intervalMs, 'ms...')
       await new Promise(resolve => setTimeout(resolve, intervalMs))
       try {
         const result = await vocabularyApi.getMeaningCheckStatus(cardId)
-        console.log('🔍 [useVocabularyStore] 轮询结果:', { attempt: i + 1, result })
         if (result.meaningCheckCompleted) {
-          console.log('🔍 [useVocabularyStore] 释义检查完成，更新状态:', result)
           set(s => ({
             currentVocabularyCard: s.currentVocabularyCard && s.currentVocabularyCard.id === cardId
               ? {
@@ -203,7 +191,6 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
         console.warn('轮询释义检查结果失败:', e)
       }
     }
-    console.log('🔍 [useVocabularyStore] 轮询超时，未收到结果')
   },
 
   setCard: (card) => set({ currentVocabularyCard: card }),

@@ -4,15 +4,9 @@ import { BalanceTransactionDTO, TransactionSummaryDTO, TransactionType } from '.
 
 const PAGE_SIZE = 5;
 const BATCH_PAGES = 10;
-const BATCH_SIZE = PAGE_SIZE * BATCH_PAGES;
 
 type FilterTab = 'all' | 'income' | 'expense';
 type QuickFilterType = 'none' | 'week' | 'month' | 'custom';
-
-interface LoadedBatch {
-  startPage: number;
-  endPage: number;
-}
 
 const BalanceHistoryPanel: React.FC = () => {
   const [allTransactions, setAllTransactions] = useState<BalanceTransactionDTO[]>([]);
@@ -23,13 +17,14 @@ const BalanceHistoryPanel: React.FC = () => {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
+  const [loadedBatches, setLoadedBatches] = useState(1);
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [quickFilter, setQuickFilter] = useState<QuickFilterType>('none');
-  const loadedBatchesRef = useRef<LoadedBatch[]>([]);
   
   const today = new Date();
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const isInitialLoad = useRef(true);
+  const preloadingBatchRef = useRef<number | null>(null);
   
   const formatDateForInput = (date: Date) => {
     return date.toISOString().split('T')[0];
@@ -64,7 +59,6 @@ const BalanceHistoryPanel: React.FC = () => {
     const responses = await Promise.all(pageRequests);
     const allContent = responses.flatMap(r => r.content);
     const firstResponse = responses[0];
-    const lastResponse = responses[responses.length - 1];
 
     return {
       transactions: allContent,
@@ -76,7 +70,9 @@ const BalanceHistoryPanel: React.FC = () => {
   const loadInitialData = useCallback(async (start?: string, end?: string) => {
     setLoading(true);
     setError(null);
-    loadedBatchesRef.current = [];
+    setLoadedBatches(1);
+    setPage(0);
+    preloadingBatchRef.current = null;
     
     try {
       const [batchData, summaryData] = await Promise.all([
@@ -90,7 +86,6 @@ const BalanceHistoryPanel: React.FC = () => {
       setAllTransactions(batchData.transactions);
       setTotalPages(batchData.totalPages);
       setTotalElements(batchData.totalElements);
-      loadedBatchesRef.current = [{ startPage: 0, endPage: BATCH_PAGES - 1 }];
       setSummary(summaryData);
     } catch (err) {
       setError('加载交易记录失败，请稍后重试');
@@ -100,45 +95,48 @@ const BalanceHistoryPanel: React.FC = () => {
     }
   }, [loadBatch, useDateFilter]);
 
-  const loadNextBatchIfNeeded = useCallback(async (targetPage: number, start?: string, end?: string) => {
-    const batchIndex = Math.floor(targetPage / BATCH_PAGES);
-    const batchStart = batchIndex * BATCH_PAGES;
-    const batchEnd = batchStart + BATCH_PAGES - 1;
-
-    const alreadyLoaded = loadedBatchesRef.current.some(
-      batch => batch.startPage <= batchStart && batch.endPage >= batchEnd
-    );
-
-    if (alreadyLoaded) {
-      return;
+  const loadNextBatchInternal = useCallback(async (
+    batchNum: number,
+    start?: string,
+    end?: string
+  ): Promise<boolean> => {
+    const nextBatchStart = batchNum * BATCH_PAGES;
+    if (nextBatchStart >= totalPages) {
+      return false;
     }
 
-    if (batchStart >= totalPages && totalPages > 0) {
-      return;
-    }
-
+    preloadingBatchRef.current = batchNum;
     setLoadingBatch(true);
+    
     try {
-      const batchData = await loadBatch(batchStart, start, end);
+      const batchData = await loadBatch(nextBatchStart, start, end);
       
-      setAllTransactions(prev => {
-        const newTransactions = [...prev];
-        batchData.transactions.forEach((tx, index) => {
-          const globalIndex = batchStart * PAGE_SIZE + index;
-          newTransactions[globalIndex] = tx;
-        });
-        return newTransactions.filter(Boolean);
-      });
-
+      setAllTransactions(prev => [...prev, ...batchData.transactions]);
       setTotalPages(batchData.totalPages);
       setTotalElements(batchData.totalElements);
-      loadedBatchesRef.current.push({ startPage: batchStart, endPage: batchEnd });
+      setLoadedBatches(batchNum + 1);
+      return true;
     } catch (err) {
       console.error('加载更多记录失败:', err);
+      return false;
     } finally {
+      preloadingBatchRef.current = null;
       setLoadingBatch(false);
     }
   }, [loadBatch, totalPages]);
+
+  const triggerPreload = useCallback((batchNum: number) => {
+    if (preloadingBatchRef.current === batchNum) {
+      return;
+    }
+    
+    const nextBatchStart = batchNum * BATCH_PAGES;
+    if (nextBatchStart >= totalPages) {
+      return;
+    }
+    
+    loadNextBatchInternal(batchNum, startDate, endDate);
+  }, [loadNextBatchInternal, totalPages, startDate, endDate]);
 
   useEffect(() => {
     if (isInitialLoad.current) {
@@ -147,19 +145,43 @@ const BalanceHistoryPanel: React.FC = () => {
       return;
     }
     
-    setPage(0);
-    setAllTransactions([]);
     loadInitialData(startDate, endDate);
   }, [useDateFilter, startDate, endDate, loadInitialData]);
 
   const handlePageChange = useCallback(async (newPage: number) => {
-    if (newPage === page || newPage < 0 || (totalPages > 0 && newPage >= totalPages)) {
+    const visiblePages = loadedBatches * BATCH_PAGES;
+    
+    if (newPage < 0) {
       return;
     }
     
-    setPage(newPage);
-    await loadNextBatchIfNeeded(newPage, startDate, endDate);
-  }, [page, totalPages, loadNextBatchIfNeeded, startDate, endDate]);
+    if (newPage < visiblePages) {
+      setPage(newPage);
+      
+      const currentBatch = Math.floor(newPage / BATCH_PAGES);
+      const pageInBatch = newPage % BATCH_PAGES;
+      
+      if (pageInBatch === BATCH_PAGES - 1) {
+        const nextBatch = currentBatch + 1;
+        triggerPreload(nextBatch);
+      }
+      return;
+    }
+    
+    if (newPage >= totalPages) {
+      return;
+    }
+    
+    if (loadingBatch) {
+      return;
+    }
+    
+    const nextBatchNum = Math.floor(newPage / BATCH_PAGES);
+    const loaded = await loadNextBatchInternal(nextBatchNum, startDate, endDate);
+    if (loaded) {
+      setPage(newPage);
+    }
+  }, [page, loadedBatches, totalPages, loadingBatch, loadNextBatchInternal, triggerPreload, startDate, endDate]);
 
   const applyQuickFilter = (type: 'week' | 'month') => {
     const now = new Date();
@@ -221,10 +243,18 @@ const BalanceHistoryPanel: React.FC = () => {
     return allTransactions.slice(startIndex, endIndex);
   }, [allTransactions, page]);
 
+  const visiblePages = useMemo(() => {
+    return Math.min(totalPages, loadedBatches * BATCH_PAGES);
+  }, [totalPages, loadedBatches]);
+
+  const hasMoreBatches = useMemo(() => {
+    return loadedBatches * BATCH_PAGES < totalPages;
+  }, [totalPages, loadedBatches]);
+
   const paginationButtons = useMemo(() => {
     const buttons: (number | string)[] = [];
     const currentPage = page + 1;
-    const total = totalPages;
+    const total = visiblePages;
     
     if (total <= 7) {
       for (let i = 1; i <= total; i++) {
@@ -242,7 +272,7 @@ const BalanceHistoryPanel: React.FC = () => {
     }
     
     return buttons;
-  }, [page, totalPages]);
+  }, [page, visiblePages]);
 
   const displayTotalRecords = summary?.totalRecords ?? totalElements;
 
@@ -447,7 +477,7 @@ const BalanceHistoryPanel: React.FC = () => {
               </div>
             )}
 
-            {totalPages > 1 && (
+            {visiblePages > 1 && (
               <div className="pagination-section">
                 <button
                   className="pagination-btn"
@@ -477,7 +507,7 @@ const BalanceHistoryPanel: React.FC = () => {
                 <button
                   className="pagination-btn"
                   onClick={() => handlePageChange(page + 1)}
-                  disabled={page >= totalPages - 1 || loadingBatch}
+                  disabled={(!hasMoreBatches && page >= visiblePages - 1) || loadingBatch}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="9 18 15 12 9 6" />

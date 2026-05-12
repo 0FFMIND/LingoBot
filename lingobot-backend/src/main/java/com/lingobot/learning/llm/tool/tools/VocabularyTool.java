@@ -8,6 +8,7 @@ import com.lingobot.learning.llm.tool.service.ToolCategory;
 import com.lingobot.learning.llm.tool.service.ToolMode;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
+import com.lingobot.learning.vocabulary.service.UserVocabularyService;
 import com.lingobot.learning.vocabulary.service.VocabularyStateService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +44,7 @@ public class VocabularyTool implements McpToolHandler {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final VocabularyStateService vocabularyStateService;
     private final VocabularyCardRepository vocabularyCardRepository;
+    private final UserVocabularyService userVocabularyService;
     private final StringRedisTemplate stringRedisTemplate;
 
     @Override
@@ -360,17 +362,24 @@ public class VocabularyTool implements McpToolHandler {
                 }
                 if (target.isPresent()) {
                     VocabularyCard card = target.get();
-                    card.setMeaningIsCorrect(isCorrect);
-                    card.setMeaningCheckCompleted(true);
-                    if (!checkFeedback.isEmpty()) {
-                        card.setMeaningCheckResult(checkFeedback);
+                    int updatedRows = chineseSentenceForTranslation.isEmpty()
+                            ? vocabularyCardRepository.updateMeaningCheckResult(
+                                    card.getId(), isCorrect, checkFeedback)
+                            : vocabularyCardRepository.updateMeaningCheckResultWithChineseSentence(
+                                    card.getId(), isCorrect, checkFeedback, chineseSentenceForTranslation);
+                    evictCardAndConversationCache(card.getId(), conversationId);
+                    log.info("Persisted meaning check for cardId={}, word={}, isCorrect={}, rows={}",
+                            card.getId(), card.getWord(), isCorrect, updatedRows);
+
+                    Long userId = card.getConversation() != null && card.getConversation().getUser() != null
+                            ? card.getConversation().getUser().getId()
+                            : null;
+                    Long vocabularyWordId = card.getVocabularyWordId();
+                    if (userId != null && vocabularyWordId != null) {
+                        userVocabularyService.updateProgress(userId, vocabularyWordId, isCorrect);
+                        log.info("Updated UserVocabulary progress for userId={}, vocabularyWordId={}, isCorrect={}",
+                                userId, vocabularyWordId, isCorrect);
                     }
-                    if (!chineseSentenceForTranslation.isEmpty()) {
-                        card.setChineseSentenceForTranslation(chineseSentenceForTranslation);
-                    }
-                    VocabularyCard saved = vocabularyCardRepository.save(card);
-                    evictCardAndConversationCache(saved.getId(), conversationId);
-                    log.info("Persisted meaning check for cardId={}, word={}, isCorrect={}", saved.getId(), saved.getWord(), isCorrect);
                 } else {
                     log.warn("No vocabulary card found to persist meaning check for conversation={}", conversationId);
                 }
@@ -413,16 +422,25 @@ public class VocabularyTool implements McpToolHandler {
                 }
                 if (target.isPresent()) {
                     com.lingobot.learning.vocabulary.entity.VocabularyCard card = target.get();
-                    card.setSentenceMeaningMatches(meaningMatches);
-                    card.setSentenceHasNewWord(hasNewWord);
-                    card.setSentenceAnalysisCompleted(true);
-                    if (!feedback.isEmpty()) {
-                        card.setSentenceAnalysis(feedback);
+                    int updatedRows = vocabularyCardRepository.updateSentenceAnalysisResult(
+                            card.getId(),
+                            meaningMatches,
+                            hasNewWord,
+                            feedback != null ? feedback : "");
+                    evictCardAndConversationCache(card.getId(), conversationId);
+                    log.info("Persisted sentence analysis for cardId={}, word={}, rows={}",
+                            card.getId(), card.getWord(), updatedRows);
+
+                    Long userId = card.getConversation() != null && card.getConversation().getUser() != null
+                            ? card.getConversation().getUser().getId()
+                            : null;
+                    Long vocabularyWordId = card.getVocabularyWordId();
+                    if (userId != null && vocabularyWordId != null && meaningMatches != null && hasNewWord != null) {
+                        boolean overallCorrect = meaningMatches && hasNewWord;
+                        userVocabularyService.updateProgress(userId, vocabularyWordId, overallCorrect);
+                        log.info("Updated UserVocabulary progress for userId={}, vocabularyWordId={}, overallCorrect={}",
+                                userId, vocabularyWordId, overallCorrect);
                     }
-                    com.lingobot.learning.vocabulary.entity.VocabularyCard saved =
-                            vocabularyCardRepository.save(card);
-                    evictCardAndConversationCache(saved.getId(), conversationId);
-                    log.info("Persisted sentence analysis for cardId={}, word={}", saved.getId(), saved.getWord());
                 } else {
                     log.warn("No vocabulary card found to persist sentence analysis for conversation={}", conversationId);
                 }

@@ -4,7 +4,10 @@ import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.learning.vocabulary.dto.CreateVocabularyCardRequest;
+import com.lingobot.learning.vocabulary.dto.MeaningCheckStatusDTO;
+import com.lingobot.learning.vocabulary.dto.SentenceAnalysisStatusDTO;
 import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
+import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import com.lingobot.learning.vocabulary.service.VocabularyCardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +32,7 @@ import java.util.Map;
 public class VocabularyCardController {
 
     private final VocabularyCardService vocabularyCardService;
+    private final VocabularyCardRepository vocabularyCardRepository;
     private final BalanceService balanceService;
     private final ApiConfigProperties apiConfigProperties;
 
@@ -290,17 +294,24 @@ public class VocabularyCardController {
      * @return 释义检查状态
      */
     @GetMapping("/cards/{cardId}/meaning-check")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getMeaningCheckStatus(
+    public ResponseEntity<ApiResponse<MeaningCheckStatusDTO>> getMeaningCheckStatus(
             @PathVariable Long cardId) {
-        VocabularyCardDTO card = vocabularyCardService.getCardByIdFromDb(cardId);
-        Map<String, Object> status = new HashMap<>();
-        status.put("cardId", card.getId());
-        status.put("word", card.getWord() != null ? card.getWord() : "");
-        status.put("userMeaningGuess", card.getUserMeaningGuess() != null ? card.getUserMeaningGuess() : "");
-        status.put("meaningCheckCompleted", Boolean.TRUE.equals(card.getMeaningCheckCompleted()));
-        status.put("meaningIsCorrect", card.getMeaningIsCorrect());
-        status.put("meaningCheckResult", card.getMeaningCheckResult() != null ? card.getMeaningCheckResult() : "");
-        status.put("chineseSentenceForTranslation", card.getChineseSentenceForTranslation() != null ? card.getChineseSentenceForTranslation() : "");
+        // This endpoint is polled immediately after async native updates.
+        // Use a native projection so the response reflects the database row, not a stale JPA entity.
+        VocabularyCardRepository.MeaningCheckStatusProjection card = vocabularyCardRepository
+                .findMeaningCheckStatusByCardId(cardId)
+                .orElseThrow(() -> com.lingobot.infrastructure.common.exception.ChatException.badRequest("Vocabulary card not found: " + cardId));
+        MeaningCheckStatusDTO status = MeaningCheckStatusDTO.builder()
+                .cardId(card.getCardId())
+                .word(card.getWord() != null ? card.getWord() : "")
+                .userMeaningGuess(card.getUserMeaningGuess() != null ? card.getUserMeaningGuess() : "")
+                .meaningCheckCompleted(Boolean.TRUE.equals(card.getMeaningCheckCompleted()))
+                .meaningIsCorrect(card.getMeaningIsCorrect())
+                .meaningCheckResult(card.getMeaningCheckResult() != null ? card.getMeaningCheckResult() : "")
+                .chineseSentenceForTranslation(card.getChineseSentenceForTranslation() != null ? card.getChineseSentenceForTranslation() : "")
+                .build();
+        log.info("Meaning check status: cardId={}, completed={}, correct={}",
+                status.getCardId(), status.getMeaningCheckCompleted(), status.getMeaningIsCorrect());
         return ResponseEntity.ok(ApiResponse.success(status));
     }
 
@@ -310,18 +321,22 @@ public class VocabularyCardController {
      * @return 句子分析状态
      */
     @GetMapping("/cards/{cardId}/sentence-analysis")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> getSentenceAnalysisStatus(
+    public ResponseEntity<ApiResponse<SentenceAnalysisStatusDTO>> getSentenceAnalysisStatus(
             @PathVariable Long cardId) {
         VocabularyCardDTO card = vocabularyCardService.getCardByIdFromDb(cardId);
-        Map<String, Object> status = new HashMap<>();
-        status.put("cardId", card.getId());
-        status.put("word", card.getWord() != null ? card.getWord() : "");
-        status.put("chineseSentenceForTranslation", card.getChineseSentenceForTranslation() != null ? card.getChineseSentenceForTranslation() : "");
-        status.put("userEnglishSentence", card.getUserEnglishSentence() != null ? card.getUserEnglishSentence() : "");
-        status.put("sentenceAnalysisCompleted", Boolean.TRUE.equals(card.getSentenceAnalysisCompleted()));
-        status.put("sentenceHasNewWord", card.getSentenceHasNewWord());
-        status.put("sentenceMeaningMatches", card.getSentenceMeaningMatches());
-        status.put("sentenceAnalysis", card.getSentenceAnalysis() != null ? card.getSentenceAnalysis() : "");
+        SentenceAnalysisStatusDTO status = SentenceAnalysisStatusDTO.builder()
+                .cardId(card.getId())
+                .word(card.getWord() != null ? card.getWord() : "")
+                .chineseSentenceForTranslation(card.getChineseSentenceForTranslation() != null ? card.getChineseSentenceForTranslation() : "")
+                .userEnglishSentence(card.getUserEnglishSentence() != null ? card.getUserEnglishSentence() : "")
+                .sentenceAnalysisCompleted(Boolean.TRUE.equals(card.getSentenceAnalysisCompleted()))
+                .sentenceHasNewWord(card.getSentenceHasNewWord())
+                .sentenceMeaningMatches(card.getSentenceMeaningMatches())
+                .sentenceAnalysis(card.getSentenceAnalysis() != null ? card.getSentenceAnalysis() : "")
+                .build();
+        log.info("Sentence analysis status: cardId={}, completed={}, hasNewWord={}, meaningMatches={}",
+                status.getCardId(), status.getSentenceAnalysisCompleted(),
+                status.getSentenceHasNewWord(), status.getSentenceMeaningMatches());
         return ResponseEntity.ok(ApiResponse.success(status));
     }
 }

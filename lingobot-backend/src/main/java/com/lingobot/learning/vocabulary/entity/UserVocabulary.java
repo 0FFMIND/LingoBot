@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 /**
  * 用户词汇实体类。
  *
@@ -26,6 +28,8 @@ import java.util.List;
         @UniqueConstraint(columnNames = {"user_id", "vocabulary_word_id"})
 })
 public class UserVocabulary {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -151,8 +155,7 @@ public class UserVocabulary {
             return new ArrayList<>();
         }
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.readValue(synonymsJson, List.class);
+            return OBJECT_MAPPER.readValue(synonymsJson, List.class);
         } catch (Exception e) {
             return new ArrayList<>();
         }
@@ -164,8 +167,7 @@ public class UserVocabulary {
             return;
         }
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            this.synonymsJson = mapper.writeValueAsString(synonyms);
+            this.synonymsJson = OBJECT_MAPPER.writeValueAsString(synonyms);
         } catch (Exception e) {
             this.synonymsJson = null;
         }

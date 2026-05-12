@@ -11,8 +11,8 @@ import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,12 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 释义检查服务。
- *
- * 异步调用 AI Agent 检查用户输入的单词释义是否正确，
- * 并将结果持久化到词汇卡，同时更新用户学习进度。
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -39,16 +33,11 @@ public class MeaningCheckService {
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
 
-    // 默认使用的AI模型
     private static final String DEFAULT_MODEL = "qwen";
-    // Redis 缓存键前缀 - 单个词汇卡
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
-    // Redis 缓存键前缀 - 对话的词汇卡列表
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
-    // Redis 缓存键前缀 - 对话的词汇卡数量
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
 
-    // 异步检查用户释义（使用 meaningCheckExecutor 线程池）
     @Async("meaningCheckExecutor")
     @Transactional
     public void checkUserMeaningAsync(Long conversationId, Long cardId, String userMeaning) {
@@ -60,6 +49,13 @@ public class MeaningCheckService {
 
             String word = card.getWord();
             String correctMeaning = card.getMeaning();
+            // Capture lazy relation ids before tool execution. The vocabulary tool uses native updates
+            // that clear the persistence context, so accessing card.getConversation().getUser() later can fail.
+            Long vocabularyWordId = card.getVocabularyWordId();
+            Long userId = card.getConversation() != null && card.getConversation().getUser() != null
+                    ? card.getConversation().getUser().getId()
+                    : null;
+
             if (word == null || word.isBlank()) {
                 log.warn("No word on vocabulary card id={}, skipping meaning check", cardId);
                 return;
@@ -84,17 +80,17 @@ public class MeaningCheckService {
 
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
                     conversationId, messages, tools, DEFAULT_MODEL);
-            persistMeaningCheckResult(card, result);
+            persistMeaningCheckResult(cardId, conversationId, vocabularyWordId, userId, result);
             log.info("Meaning check completed for cardId={}", cardId);
         } catch (Exception e) {
             log.error("Meaning check failed for cardId={}, conversationId={}", cardId, conversationId, e);
         }
     }
 
-    // 持久化释义检查结果到词汇卡，并更新用户学习进度
-    private void persistMeaningCheckResult(VocabularyCard card, ToolLoopService.ToolLoopResult result) {
+    private void persistMeaningCheckResult(Long cardId, Long conversationId, Long vocabularyWordId, Long userId,
+                                           ToolLoopService.ToolLoopResult result) {
         if (result == null || !result.hasToolCalls() || result.getToolResultText() == null) {
-            log.warn("Meaning check returned no tool result for cardId={}", card.getId());
+            log.warn("Meaning check returned no tool result for cardId={}", cardId);
             return;
         }
 
@@ -104,35 +100,29 @@ public class MeaningCheckService {
             Object isCorrectValue = payload.get("is_correct");
             if (!(isCorrectValue instanceof Boolean isCorrect)) {
                 log.warn("Meaning check result has no boolean is_correct for cardId={}: {}",
-                        card.getId(), result.getToolResultText());
+                        cardId, result.getToolResultText());
                 return;
             }
 
             String feedback = payload.get("check_feedback") instanceof String value ? value : "";
-            card.setMeaningIsCorrect(isCorrect);
-            card.setMeaningCheckCompleted(true);
-            if (!feedback.isEmpty()) {
-                card.setMeaningCheckResult(feedback);
-            }
+            // Write by card id instead of saving the previously loaded entity. Otherwise an old
+            // managed VocabularyCard can overwrite meaning_check_completed back to false.
+            int updatedRows = vocabularyCardRepository.updateMeaningCheckResult(
+                    cardId,
+                    isCorrect,
+                    feedback != null ? feedback : "");
+            evictCardAndConversationCache(cardId, conversationId);
+            log.info("Persisted meaning check by cardId={}, rows={}, isCorrect={}",
+                    cardId, updatedRows, isCorrect);
 
-            VocabularyCard saved = vocabularyCardRepository.save(card);
-            Long conversationId = saved.getConversation() != null ? saved.getConversation().getId() : null;
-            evictCardAndConversationCache(saved.getId(), conversationId);
-            if (saved.getVocabularyWordId() != null
-                    && saved.getConversation() != null
-                    && saved.getConversation().getUser() != null
-                    && saved.getConversation().getUser().getId() != null) {
-                userVocabularyService.updateProgress(
-                        saved.getConversation().getUser().getId(),
-                        saved.getVocabularyWordId(),
-                        isCorrect);
+            if (userId != null && vocabularyWordId != null) {
+                userVocabularyService.updateProgress(userId, vocabularyWordId, isCorrect);
             }
         } catch (Exception e) {
-            log.error("Failed to persist meaning check result for cardId={}", card.getId(), e);
+            log.error("Failed to persist meaning check result for cardId={}", cardId, e);
         }
     }
 
-    // 清除词汇卡及其所属对话的Redis缓存
     private void evictCardAndConversationCache(Long cardId, Long conversationId) {
         if (cardId != null) {
             stringRedisTemplate.delete(CACHE_KEY_CARD + cardId);
