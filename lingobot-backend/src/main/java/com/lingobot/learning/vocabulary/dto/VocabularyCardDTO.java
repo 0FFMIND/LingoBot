@@ -28,6 +28,8 @@ public class VocabularyCardDTO {
     private String word;
     // 音标
     private String phonetic;
+    // 词性（如 n., v., adj., adv. 等）
+    private String partOfSpeech;
     // 中文释义
     private String meaning;
     // 英文例句
@@ -38,7 +40,7 @@ public class VocabularyCardDTO {
     private List<String> synonyms;
     // 词汇类别（如 cefr, ielts, toefl）
     private String category;
-    // 难度级别（如 A1, B2, C1, beginner, intermediate 等）
+    // 难度级别（如 a1, b2, 5.5-6.5, 81-100 等）
     private String difficulty;
     // 在对话中的位置顺序
     private Integer position;
@@ -50,10 +52,18 @@ public class VocabularyCardDTO {
     private Boolean meaningIsCorrect;
     // 释义检查是否已完成
     private Boolean meaningCheckCompleted;
-    // 用户造的句子
-    private String userSentence;
-    // AI对用户造句的反馈
-    private String aiFeedback;
+    // 中文例句（供用户翻译用）
+    private String chineseSentenceForTranslation;
+    // 用户写的英文句子（根据中文例句翻译）
+    private String userEnglishSentence;
+    // AI对用户英文句子的分析结果
+    private String sentenceAnalysis;
+    // 句子分析是否已完成
+    private Boolean sentenceAnalysisCompleted;
+    // 用户句子是否包含新单词
+    private Boolean sentenceHasNewWord;
+    // 用户句子的意思是否与中文例句匹配
+    private Boolean sentenceMeaningMatches;
     // 是否已完成学习
     private Boolean isCompleted;
     // 创建时间

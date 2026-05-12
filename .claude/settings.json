@@ -39,10 +39,20 @@
       "Bash(Write-Output \"Directories created\")",
       "Bash(npx tsc *)",
       "PowerShell(cd \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\"; @\\(\"App.tsx\", \"features\\\\chat\\\\components\\\\ChatWindow.tsx\", \"stores\\\\useChatStore.ts\", \"stores\\\\useConversationStore.ts\", \"stores\\\\useAuthStore.ts\", \"stores\\\\useVocabularyStore.ts\", \"features\\\\vocabulary\\\\components\\\\VocabularyFlashcard.tsx\", \"features\\\\chat\\\\components\\\\MessageContent.tsx\", \"features\\\\chat\\\\components\\\\WelcomeMessage.tsx\", \"features\\\\chat\\\\components\\\\LearningModeSelector.tsx\", \"features\\\\admin\\\\components\\\\LogPage.tsx\"\\) | ForEach-Object { $lines = \\(Get-Content $_\\).Count; \"$lines`t$_\" })",
-      "Bash(Select-Object Name, PSIsContainer)"
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\" -Recurse -Directory)",
+      "Bash(Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\" -Recurse | Where-Object { $_.PSIsContainer } | Select-Object -ExpandProperty FullName | Sort-Object)",
+      "Bash(Remove-Item \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\components\\\\chat\\\\CircularProgress.tsx\")",
+      "Bash(Remove-Item \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\components\\\\chat\\\\DeleteConversationModal.tsx\")",
+      "Bash(Remove-Item \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\components\\\\chat\\\\InsufficientBalanceModal.tsx\")",
+      "PowerShell(Get-ChildItem -Recurse \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\components\" | Where-Object { !$_.PSIsContainer } | ForEach-Object { $_.FullName.Replace\\(\"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\components\\\\\", \"\"\\) } | Sort-Object)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c \"s = '麼腊汦绳旀'; b = s.encode\\('utf-8'\\); print\\('bytes:', b.hex\\(\\)\\); [print\\(enc, b.decode\\(enc, errors='replace'\\)\\) for enc in ['gbk','gb2312','big5','latin-1']]\")"
     ],
     "additionalDirectories": [
-      "c:\\Users\\ALIENWARE\\Downloads\\�½��ļ��� (2)\\lingobot-backend\\src\\main\\java\\com"
+      "c:\\Users\\ALIENWARE\\Downloads\\�½��ļ��� (2)\\lingobot-backend\\src\\main\\java\\com",
+      "c:\\Users\\ALIENWARE\\Downloads\\�½��ļ��� (2)\\lingobot-frontend\\src\\components\\chat"
     ]
   }
 }

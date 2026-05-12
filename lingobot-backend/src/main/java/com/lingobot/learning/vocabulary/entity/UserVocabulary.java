@@ -8,6 +8,8 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 用户词汇实体类。
@@ -36,6 +38,34 @@ public class UserVocabulary {
     // 关联的标准化单词ID
     @Column(name = "vocabulary_word_id", nullable = false)
     private Long vocabularyWordId;
+
+    // 单词
+    @Column(nullable = false, length = 100)
+    private String word;
+
+    // 音标
+    @Column(length = 100)
+    private String phonetic;
+
+    // 词性（如 n., v., adj., adv. 等）
+    @Column(name = "part_of_speech", length = 20)
+    private String partOfSpeech;
+
+    // 中文释义
+    @Column(columnDefinition = "TEXT")
+    private String meaning;
+
+    // 同义词列表（JSON格式存储）
+    @Column(name = "synonyms_json", columnDefinition = "TEXT")
+    private String synonymsJson;
+
+    // 词汇类别（如 cefr, ielts, toefl）
+    @Column(name = "category", length = 20)
+    private String category;
+
+    // 难度级别（如 a1, b2, 5.5-6.5, 81-100 等）
+    @Column(name = "difficulty", length = 20)
+    private String difficulty;
 
     // 学习状态（NEW/LEARNING/REVIEWING/MASTERED/IGNORED）
     @Enumerated(EnumType.STRING)
@@ -114,5 +144,30 @@ public class UserVocabulary {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    public List<String> getSynonyms() {
+        if (synonymsJson == null || synonymsJson.isEmpty()) {
+            return new ArrayList<>();
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(synonymsJson, List.class);
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    public void setSynonyms(List<String> synonyms) {
+        if (synonyms == null || synonyms.isEmpty()) {
+            this.synonymsJson = null;
+            return;
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            this.synonymsJson = mapper.writeValueAsString(synonyms);
+        } catch (Exception e) {
+            this.synonymsJson = null;
+        }
     }
 }

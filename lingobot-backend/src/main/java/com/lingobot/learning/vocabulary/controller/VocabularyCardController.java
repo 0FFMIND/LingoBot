@@ -18,8 +18,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 词汇卡管理控制器
- * 提供词汇卡的增删改查、导航、AI生成等功能 */
+ * 词汇卡管理控制器。
+ *
+ * 提供词汇卡的增删改查、导航、AI生成等功能。
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/vocabulary")
@@ -210,33 +212,41 @@ public class VocabularyCardController {
     }
 
     /**
-     * 更新用户用单词造的句子
+     * 更新用户根据中文例句写的英文句子
      * @param cardId 词汇卡ID
-     * @param request 包含用户造句
+     * @param request 包含用户写的英文句子
      * @return 更新后的词汇卡
      */
-    @PutMapping("/cards/{cardId}/sentence")
-    public ResponseEntity<ApiResponse<VocabularyCardDTO>> updateUserSentence(
+    @PutMapping("/cards/{cardId}/english-sentence")
+    public ResponseEntity<ApiResponse<VocabularyCardDTO>> updateUserEnglishSentence(
             @PathVariable Long cardId,
             @RequestBody Map<String, String> request) {
-        String userSentence = request.get("userSentence");
-        VocabularyCardDTO updated = vocabularyCardService.updateUserSentence(cardId, userSentence);
-        return ResponseEntity.ok(ApiResponse.success("用户造句已更新", updated));
+        String userEnglishSentence = request.get("userEnglishSentence");
+        VocabularyCardDTO updated = vocabularyCardService.updateUserEnglishSentence(cardId, userEnglishSentence);
+        return ResponseEntity.ok(ApiResponse.success("用户英文句子已更新", updated));
     }
 
-    /**
-     * 更新AI对用户造句的反馈
-     * @param cardId 词汇卡ID
-     * @param request 包含AI反馈
-     * @return 更新后的词汇卡
-     */
-    @PutMapping("/cards/{cardId}/feedback")
-    public ResponseEntity<ApiResponse<VocabularyCardDTO>> updateAIFeedback(
-            @PathVariable Long cardId,
-            @RequestBody Map<String, String> request) {
-        String feedback = request.get("feedback");
-        VocabularyCardDTO updated = vocabularyCardService.updateAIFeedback(cardId, feedback);
-        return ResponseEntity.ok(ApiResponse.success("AI反馈已更新", updated));
+    @PostMapping("/cards/{cardId}/analyze-sentence")
+    public ResponseEntity<ApiResponse<VocabularyCardDTO>> analyzeUserSentence(
+            @PathVariable Long cardId) {
+        VocabularyCardDTO card = vocabularyCardService.getCardById(cardId);
+        Long conversationId = card != null ? card.getConversationId() : null;
+        
+        BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("vocabulary", "analyze-sentence"));
+        Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "analyze-sentence", "句子分析", conversationId);
+        log.info("冻结点数: {}，用于句子分析", cost);
+        
+        try {
+            vocabularyCardService.analyzeUserSentenceAsync(cardId);
+            balanceService.confirmTransaction(transactionId);
+            log.info("确认扣费: {}，句子分析已触发", cost);
+            VocabularyCardDTO updated = vocabularyCardService.getCardById(cardId);
+            return ResponseEntity.ok(ApiResponse.success("句子分析已触发", updated));
+        } catch (Exception e) {
+            log.error("句子分析触发失败，返还余额: {}", cost, e);
+            balanceService.cancelTransaction(transactionId);
+            throw e;
+        }
     }
 
     /**
@@ -282,7 +292,7 @@ public class VocabularyCardController {
     @GetMapping("/cards/{cardId}/meaning-check")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMeaningCheckStatus(
             @PathVariable Long cardId) {
-        VocabularyCardDTO card = vocabularyCardService.getCardById(cardId);
+        VocabularyCardDTO card = vocabularyCardService.getCardByIdFromDb(cardId);
         Map<String, Object> status = new HashMap<>();
         status.put("cardId", card.getId());
         status.put("word", card.getWord() != null ? card.getWord() : "");
@@ -290,6 +300,28 @@ public class VocabularyCardController {
         status.put("meaningCheckCompleted", Boolean.TRUE.equals(card.getMeaningCheckCompleted()));
         status.put("meaningIsCorrect", card.getMeaningIsCorrect());
         status.put("meaningCheckResult", card.getMeaningCheckResult() != null ? card.getMeaningCheckResult() : "");
+        status.put("chineseSentenceForTranslation", card.getChineseSentenceForTranslation() != null ? card.getChineseSentenceForTranslation() : "");
+        return ResponseEntity.ok(ApiResponse.success(status));
+    }
+
+    /**
+     * 获取句子分析状态（用于前端轮询异步分析结果）
+     * @param cardId 词汇卡ID
+     * @return 句子分析状态
+     */
+    @GetMapping("/cards/{cardId}/sentence-analysis")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getSentenceAnalysisStatus(
+            @PathVariable Long cardId) {
+        VocabularyCardDTO card = vocabularyCardService.getCardByIdFromDb(cardId);
+        Map<String, Object> status = new HashMap<>();
+        status.put("cardId", card.getId());
+        status.put("word", card.getWord() != null ? card.getWord() : "");
+        status.put("chineseSentenceForTranslation", card.getChineseSentenceForTranslation() != null ? card.getChineseSentenceForTranslation() : "");
+        status.put("userEnglishSentence", card.getUserEnglishSentence() != null ? card.getUserEnglishSentence() : "");
+        status.put("sentenceAnalysisCompleted", Boolean.TRUE.equals(card.getSentenceAnalysisCompleted()));
+        status.put("sentenceHasNewWord", card.getSentenceHasNewWord());
+        status.put("sentenceMeaningMatches", card.getSentenceMeaningMatches());
+        status.put("sentenceAnalysis", card.getSentenceAnalysis() != null ? card.getSentenceAnalysis() : "");
         return ResponseEntity.ok(ApiResponse.success(status));
     }
 }

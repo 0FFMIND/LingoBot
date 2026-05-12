@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 用户词汇数据传输对象。
@@ -28,12 +29,18 @@ public class UserVocabularyDTO {
     private Long userId;
     // 标准化单词ID
     private Long vocabularyWordId;
+    // 最新词汇卡ID
+    private Long latestCardId;
     // 单词（从最新词汇卡获取）
     private String word;
     // 音标（从最新词汇卡获取）
     private String phonetic;
+    // 词性（从最新词汇卡获取）
+    private String partOfSpeech;
     // 释义（从最新词汇卡获取）
     private String meaning;
+    // 同义词列表（从最新词汇卡获取）
+    private List<String> synonyms;
     // 词汇类别（从最新词汇卡获取）
     private String category;
     // 难度级别（从最新词汇卡获取）

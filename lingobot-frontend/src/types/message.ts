@@ -36,7 +36,7 @@ export interface ImageAttachment {
   alt?: string;
 }
 
-export type IntentType = 'answer_meaning' | 'make_sentence' | 'view_meaning' | 'view_example' | 'next_word';
+export type IntentType = 'answer_meaning' | 'view_meaning' | 'view_example' | 'next_word';
 
 export type ExecutionMode = 'loop' | 'onetime';
 

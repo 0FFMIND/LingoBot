@@ -2,7 +2,8 @@ export type VocabularyCategory = 'cefr' | 'ielts' | 'toefl';
 
 export type VocabularyDifficulty = 
   | 'a1' | 'a2' | 'b1' | 'b2' | 'c1' | 'c2'
-  | 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  | '4.0-5.0' | '5.5-6.5' | '7.0-8.0' | '8.5-9.0'
+  | '60-80' | '81-100' | '101-110' | '111-120';
 
 export type ModelType = 'qwen' | 'xiaomi';
 
@@ -60,14 +61,14 @@ export const VOCABULARY_DIFFICULTIES: VocabularyDifficultyConfig[] = [
   { difficulty: 'b2', label: 'B2', category: 'cefr' },
   { difficulty: 'c1', label: 'C1', category: 'cefr' },
   { difficulty: 'c2', label: 'C2', category: 'cefr' },
-  { difficulty: 'beginner', label: '4.0-5.0 分', category: 'ielts', scoreRange: '初级' },
-  { difficulty: 'intermediate', label: '5.5-6.5 分', category: 'ielts', scoreRange: '中级' },
-  { difficulty: 'advanced', label: '7.0-8.0 分', category: 'ielts', scoreRange: '高级' },
-  { difficulty: 'expert', label: '8.5-9.0 分', category: 'ielts', scoreRange: '专家级' },
-  { difficulty: 'beginner', label: '60-80 分', category: 'toefl', scoreRange: '初级' },
-  { difficulty: 'intermediate', label: '81-100 分', category: 'toefl', scoreRange: '中级' },
-  { difficulty: 'advanced', label: '101-110 分', category: 'toefl', scoreRange: '高级' },
-  { difficulty: 'expert', label: '111-120 分', category: 'toefl', scoreRange: '专家级' },
+  { difficulty: '4.0-5.0', label: '4.0-5.0', category: 'ielts' },
+  { difficulty: '5.5-6.5', label: '5.5-6.5', category: 'ielts' },
+  { difficulty: '7.0-8.0', label: '7.0-8.0', category: 'ielts' },
+  { difficulty: '8.5-9.0', label: '8.5-9.0', category: 'ielts' },
+  { difficulty: '60-80', label: '60-80', category: 'toefl' },
+  { difficulty: '81-100', label: '81-100', category: 'toefl' },
+  { difficulty: '101-110', label: '101-110', category: 'toefl' },
+  { difficulty: '111-120', label: '111-120', category: 'toefl' },
 ];
 
 export const MODELS: ModelConfig[] = [

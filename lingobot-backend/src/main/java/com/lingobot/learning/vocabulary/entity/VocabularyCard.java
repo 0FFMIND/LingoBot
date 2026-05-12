@@ -1,15 +1,26 @@
 package com.lingobot.learning.vocabulary.entity;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.lingobot.core.conversation.entity.Conversation;
-import jakarta.persistence.*;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 词汇卡实体类
@@ -44,6 +55,10 @@ public class VocabularyCard {
     @Column(length = 100)
     private String phonetic;
 
+    /** 词性（如 n., v., adj., adv. 等） */
+    @Column(name = "part_of_speech", length = 20)
+    private String partOfSpeech;
+
     /** 中文释义 */
     @Column(columnDefinition = "TEXT")
     private String meaning;
@@ -64,7 +79,7 @@ public class VocabularyCard {
     @Column(name = "category", length = 20)
     private String category;
 
-    /** 难度级别（如 A1, B2, C1, beginner, intermediate 等） */
+    /** 难度级别（如 a1, b2, 5.5-6.5, 81-100 等） */
     @Column(name = "difficulty", length = 20)
     private String difficulty;
 
@@ -89,13 +104,34 @@ public class VocabularyCard {
     @Builder.Default
     private Boolean meaningCheckCompleted = false;
 
-    /** 用户造的句子 */
+    /** 中文例句（供用户翻译用） */
+    @Column(name = "chinese_sentence_for_translation", columnDefinition = "TEXT")
+    private String chineseSentenceForTranslation;
+
+    /** 用户写的英文句子（根据中文例句翻译） */
+    @Column(name = "user_english_sentence", columnDefinition = "TEXT")
+    private String userEnglishSentence;
+
+    /** AI对用户英文句子的分析结果 */
+    @Column(name = "sentence_analysis", columnDefinition = "TEXT")
+    private String sentenceAnalysis;
+
+    /** 用户造的句子（简化版本，与userEnglishSentence保持一致） */
     @Column(name = "user_sentence", columnDefinition = "TEXT")
     private String userSentence;
 
-    /** AI对用户造句的反馈*/
-    @Column(name = "ai_feedback", columnDefinition = "TEXT")
-    private String aiFeedback;
+    /** 句子分析是否已完成 */
+    @Column(name = "sentence_analysis_completed")
+    @Builder.Default
+    private Boolean sentenceAnalysisCompleted = false;
+
+    /** 用户句子是否包含新单词 */
+    @Column(name = "sentence_has_new_word")
+    private Boolean sentenceHasNewWord;
+
+    /** 用户句子的意思是否与中文例句匹配 */
+    @Column(name = "sentence_meaning_matches")
+    private Boolean sentenceMeaningMatches;
 
     /** 是否已完成学习*/
     @Column(name = "is_completed", nullable = false)

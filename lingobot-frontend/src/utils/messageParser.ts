@@ -109,9 +109,6 @@ export const parseMessageContent = (content: string): ParsedMessage => {
 export const isVocabularyJson = (content: string): VocabularyData | null => {
   try {
     const parsed = JSON.parse(content);
-    if (parsed.action === 'display_sentence_feedback' && parsed.sentence) {
-      return parsed as VocabularyData;
-    }
     if (parsed.action && parsed.word && parsed.phonetic) {
       return parsed as VocabularyData;
     }

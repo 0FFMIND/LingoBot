@@ -12,7 +12,11 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 词汇学习状态服务 * 使用Redis缓存当前学习的单词信息，用于AI生成造句反馈时的上下文参数 */
+ * 词汇学习状态服务。
+ *
+ * 使用 Redis 缓存当前学习的单词信息，
+ * 用于 AI 生成造句反馈时的上下文参数。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -107,7 +111,7 @@ public class VocabularyStateService {
         
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n## 当前学习的单词信息\n");
-        sb.append("用户当前正在学习以下单词，请在生成造句反馈时参考这些信息：\n");
+        sb.append("用户当前正在学习以下单词：\n");
         sb.append("- 单词: ").append(state.getOrDefault("word", "")).append("\n");
         sb.append("- 音标: ").append(state.getOrDefault("phonetic", "")).append("\n");
         sb.append("- 词性 ").append(state.getOrDefault("partOfSpeech", "")).append("\n");
@@ -115,9 +119,6 @@ public class VocabularyStateService {
         sb.append("- 同义词: ").append(state.getOrDefault("synonyms", List.of())).append("\n");
         sb.append("- 词汇标准: ").append(state.getOrDefault("vocabularyCategory", "")).append("\n");
         sb.append("- 难度级别: ").append(state.getOrDefault("vocabularyDifficulty", "")).append("\n");
-        sb.append("\n**重要提示**：当调用 display_sentence_feedback 工具时，只需要传入 sentence、current_word、feedback、example、exampleTranslation 这几个参数，\n");
-        sb.append("**不需要**重复传入 word、phonetic、partOfSpeech、meaning、synonyms、vocabularyCategory、vocabularyDifficulty。\n");
-        sb.append("系统会自动从会话状态中获取这些信息。\n");
         
         return sb.toString();
     }

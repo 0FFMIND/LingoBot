@@ -68,4 +68,45 @@ public interface UserVocabularyRepository extends JpaRepository<UserVocabulary, 
     @Query("SELECT COUNT(uv) FROM UserVocabulary uv WHERE uv.userId = :userId " +
            "AND uv.masteryScore <= 0.40")
     long countDifficultByUserId(@Param("userId") Long userId);
+
+    // 分页查询用户词汇（支持按单词搜索，通过关联 VocabularyWord）
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
+           "AND (LOWER(COALESCE(uv.word, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(COALESCE(uv.meaning, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    Page<UserVocabulary> findByUserIdAndKeyword(
+            @Param("userId") Long userId,
+            @Param("keyword") String keyword,
+            Pageable pageable);
+
+    // 分页查询用户某个状态的词汇（支持搜索）
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
+           "AND uv.status = :status " +
+           "AND (LOWER(COALESCE(uv.word, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(COALESCE(uv.meaning, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    Page<UserVocabulary> findByUserIdAndStatusAndKeyword(
+            @Param("userId") Long userId,
+            @Param("status") VocabularyStatus status,
+            @Param("keyword") String keyword,
+            Pageable pageable);
+
+    // 分页查询用户待复习的词汇（支持搜索）
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
+           "AND uv.nextReviewAt IS NOT NULL AND uv.nextReviewAt <= :now " +
+           "AND (LOWER(COALESCE(uv.word, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(COALESCE(uv.meaning, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    Page<UserVocabulary> findToReviewByUserIdAndKeyword(
+            @Param("userId") Long userId,
+            @Param("now") LocalDateTime now,
+            @Param("keyword") String keyword,
+            Pageable pageable);
+
+    // 分页查询用户困难词汇（支持搜索）
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
+           "AND uv.masteryScore <= 0.40 " +
+           "AND (LOWER(COALESCE(uv.word, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
+           "OR LOWER(COALESCE(uv.meaning, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    Page<UserVocabulary> findDifficultByUserIdAndKeyword(
+            @Param("userId") Long userId,
+            @Param("keyword") String keyword,
+            Pageable pageable);
 }

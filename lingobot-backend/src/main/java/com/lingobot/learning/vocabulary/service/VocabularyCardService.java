@@ -68,20 +68,29 @@ public interface VocabularyCardService {
     VocabularyCardDTO updateUserMeaning(Long cardId, String userMeaning);
 
     /**
-     * 更新用户用单词造的句子
+     * 更新用户写的英文句子（根据中文例句翻译）
      * @param cardId 词汇卡ID
-     * @param userSentence 用户造的句子
+     * @param userEnglishSentence 用户写的英文句子
      * @return 更新后的词汇卡DTO
      */
-    VocabularyCardDTO updateUserSentence(Long cardId, String userSentence);
+    VocabularyCardDTO updateUserEnglishSentence(Long cardId, String userEnglishSentence);
 
     /**
-     * 更新AI对用户造句的反馈
+     * 触发AI分析用户的英文句子（异步）
+     * 分析内容：1）是否与中文例句意思匹配；2）是否包含新单词
      * @param cardId 词汇卡ID
-     * @param feedback AI反馈内容
+     */
+    void analyzeUserSentenceAsync(Long cardId);
+
+    /**
+     * 更新AI对句子的分析结果
+     * @param cardId 词汇卡ID
+     * @param analysis 分析结果（JSON）
+     * @param hasNewWord 是否包含新单词
+     * @param meaningMatches 意思是否匹配
      * @return 更新后的词汇卡DTO
      */
-    VocabularyCardDTO updateAIFeedback(Long cardId, String feedback);
+    VocabularyCardDTO updateSentenceAnalysis(Long cardId, String analysis, Boolean hasNewWord, Boolean meaningMatches);
 
     /**
      * 标记词汇卡为已完成
@@ -94,7 +103,7 @@ public interface VocabularyCardService {
      * 通过AI生成下一个新词汇卡
      * @param conversationId 对话ID
      * @param category 词汇类别（如 cefr, ielts, toefl）
-     * @param difficulty 难度级别（如 A1, B2, beginner 等）
+     * @param difficulty 难度级别（如 b2, 5.5-6.5, 81-100 等）
      * @return 生成的词汇卡DTO
      */
     VocabularyCardDTO generateNextCard(Long conversationId, String category, String difficulty);
@@ -121,4 +130,10 @@ public interface VocabularyCardService {
      * @return 词汇卡数量
      */
     long getCardCount(Long conversationId);
+
+    /**
+     * 直接从数据库读取词汇卡（跳过 Redis 缓存），用于状态轮询接口，
+     * 避免事务提交前缓存被污染导致前端长期看到过时状态。
+     */
+    VocabularyCardDTO getCardByIdFromDb(Long cardId);
 }

@@ -22,6 +22,8 @@ public class WordCardData {
     private String word;
     // 音标
     private String phonetic;
+    // 词性（如 n., v., adj., adv. 等）
+    private String partOfSpeech;
     // 中文释义
     private String meaning;
     // 英文例句
@@ -32,6 +34,6 @@ public class WordCardData {
     private List<String> synonyms;
     // 词汇类别（如 cefr, ielts, toefl）
     private String category;
-    // 难度级别（如 A1, B2, C1, beginner, intermediate 等）
+    // 难度级别（如 a1, b2, 5.5-6.5, 81-100 等）
     private String difficulty;
 }

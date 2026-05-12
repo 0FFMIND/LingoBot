@@ -1,27 +1,41 @@
 package com.lingobot.learning.vocabulary.controller;
 
 import com.lingobot.core.user.auth.service.AuthService;
+import com.lingobot.core.user.balance.service.BalanceService;
+import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.dto.PageResponseDTO;
 import com.lingobot.infrastructure.common.response.ApiResponse;
+import com.lingobot.infrastructure.common.response.ErrorCode;
+import com.lingobot.learning.vocabulary.dto.AIModifyVocabularyRequest;
+import com.lingobot.learning.vocabulary.dto.UpdateUserVocabularyRequest;
 import com.lingobot.learning.vocabulary.dto.UserVocabularyDTO;
 import com.lingobot.learning.vocabulary.dto.VocabularyStatsDTO;
 import com.lingobot.learning.vocabulary.entity.VocabularyStatus;
 import com.lingobot.learning.vocabulary.service.UserVocabularyService;
+import com.lingobot.learning.vocabulary.service.VocabularyAIModifyService;
+
+import java.math.BigDecimal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 用户词汇本控制器。
+ * 用户词汇管理控制器。
  *
- * 提供用户个人词汇的统计查询、列表查询和忽略管理等接口。
- * 所有接口统一挂载在 /api/user-vocabulary 路径下，响应体通过 ApiResponse<T> 包装。
+ * 提供用户词汇本的管理接口，包括学习统计查询、词汇列表分页查询、
+ * 手动更新词汇信息、AI智能完善、删除词汇等功能。
+ *
+ * 所有接口均在 /api/user-vocabulary 路径下，
+ * 返回统一的 ApiResponse<T> 响应格式。
  */
 @Slf4j
 @RestController
@@ -31,8 +45,11 @@ public class UserVocabularyController {
 
     private final UserVocabularyService userVocabularyService;
     private final AuthService authService;
+    private final VocabularyAIModifyService vocabularyAIModifyService;
+    private final BalanceService balanceService;
+    private final ApiConfigProperties apiConfigProperties;
 
-    // 获取当前用户的词汇学习统计数据（总数、各状态数量、待复习数量）
+    // 获取用户词汇学习统计
     @GetMapping("/stats")
     public ResponseEntity<ApiResponse<VocabularyStatsDTO>> getStats() {
         Long userId = authService.getCurrentUserId();
@@ -44,12 +61,13 @@ public class UserVocabularyController {
         return ResponseEntity.ok(ApiResponse.success(stats));
     }
 
-    // 分页查询用户词汇列表，支持按状态、筛选类型和排序方式过滤
+    // 分页查询用户词汇列表（支持状态筛选、类型筛选、排序和搜索）
     @GetMapping("/list")
     public ResponseEntity<ApiResponse<PageResponseDTO<UserVocabularyDTO>>> getVocabularies(
             @RequestParam(required = false) VocabularyStatus status,
             @RequestParam(required = false) String filterType,
             @RequestParam(required = false, defaultValue = "last_seen") String sortBy,
+            @RequestParam(required = false) String search,
             @RequestParam(required = false, defaultValue = "0") int page,
             @RequestParam(required = false, defaultValue = "20") int size) {
 
@@ -68,6 +86,7 @@ public class UserVocabularyController {
                 status,
                 filterType,
                 sortBy,
+                search,
                 page,
                 size
         );
@@ -75,7 +94,7 @@ public class UserVocabularyController {
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
-    // 忽略某个词汇（将其状态标记为 IGNORED，不再参与学习和复习）
+    // 忽略词汇（将学习状态标记为 IGNORED，不再参与学习和复习）
     @PutMapping("/{id}/ignore")
     public ResponseEntity<ApiResponse<Void>> ignoreVocabulary(@PathVariable Long id) {
         Long userId = authService.getCurrentUserId();
@@ -87,7 +106,48 @@ public class UserVocabularyController {
         return ResponseEntity.ok(ApiResponse.success("Operation succeeded", null));
     }
 
-    // 返回空的统计数据（用户未登录时使用）
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<UserVocabularyDTO>> updateVocabulary(
+            @PathVariable Long id,
+            @RequestBody UpdateUserVocabularyRequest request) {
+        Long userId = authService.getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.ok(ApiResponse.success("Please login first", null));
+        }
+
+        UserVocabularyDTO updated = userVocabularyService.updateVocabulary(userId, id, request);
+        return ResponseEntity.ok(ApiResponse.success("Vocabulary updated", updated));
+    }
+
+    @PostMapping("/ai-modify")
+    public ResponseEntity<ApiResponse<UserVocabularyDTO>> aiModifyVocabulary(
+            @RequestBody AIModifyVocabularyRequest request) {
+        Long userId = authService.getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.ok(ApiResponse.success("Please login first", null));
+        }
+
+        BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("user-vocabulary", "ai-modify"));
+        Long transactionId = balanceService.freezeBalance(cost, "user-vocabulary", "ai-modify", "AI完善词汇信息", null);
+        try {
+            UserVocabularyDTO updated = vocabularyAIModifyService.modifyWithAI(request);
+            balanceService.confirmTransaction(transactionId);
+            return ResponseEntity.ok(ApiResponse.success("AI modify succeeded", updated));
+        } catch (Exception e) {
+            balanceService.cancelTransaction(transactionId);
+            return ResponseEntity.ok(ApiResponse.error(ErrorCode.BAD_REQUEST, "AI modify failed: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteVocabulary(@PathVariable Long id) {
+        Long userId = authService.getCurrentUserId();
+        if (userId != null) {
+            userVocabularyService.deleteVocabulary(userId, id);
+        }
+        return ResponseEntity.noContent().build();
+    }
+
     private VocabularyStatsDTO emptyStats() {
         return VocabularyStatsDTO.builder()
                 .totalCount(0)

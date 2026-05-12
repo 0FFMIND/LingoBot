@@ -11,8 +11,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 词汇卡数据访问层
- * 提供词汇卡的增删改查、导航查询等数据库操作 */
+ * 词汇卡数据访问层。
+ *
+ * 提供词汇卡的增删改查、导航查询等数据库操作。
+ */
 @Repository
 public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, Long> {
 

@@ -17,6 +17,7 @@ import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.entity.VocabularyWord;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import com.lingobot.learning.vocabulary.service.MeaningCheckService;
+import com.lingobot.learning.vocabulary.service.SentenceAnalysisService;
 import com.lingobot.learning.vocabulary.service.UserVocabularyService;
 import com.lingobot.learning.vocabulary.service.VocabularyCardService;
 import com.lingobot.learning.vocabulary.service.VocabularyWordService;
@@ -36,9 +37,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * 词汇卡服务实现类
- * 实现词汇卡的核心业务逻辑，包括AI生成单词、导航、状态管理等
- * 使用 Redis 缓存减少数据库访问 */
+ * 词汇卡服务实现类。
+ *
+ * 实现词汇卡的核心业务逻辑，包括 AI 生成单词、导航、状态管理等，
+ * 使用 Redis 缓存减少数据库访问。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -53,6 +56,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final MeaningCheckService meaningCheckService;
+    private final SentenceAnalysisService sentenceAnalysisService;
     private final VocabularyWordService vocabularyWordService;
     private final UserVocabularyService userVocabularyService;
 
@@ -234,20 +238,16 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(request.getWord());
         log.info("Using VocabularyWord: id={}, normalizedWord={}", vocabularyWord.getId(), vocabularyWord.getNormalizedWord());
 
-        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-            userVocabularyService.upsertProgress(conversation.getUser().getId(), vocabularyWord.getId());
-            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}", 
-                    conversation.getUser().getId(), vocabularyWord.getId());
-        }
-
         VocabularyCard card = VocabularyCard.builder()
                 .conversation(conversation)
                 .vocabularyWordId(vocabularyWord.getId())
                 .word(request.getWord())
                 .phonetic(request.getPhonetic())
+                .partOfSpeech(request.getPartOfSpeech())
                 .meaning(request.getMeaning())
                 .example(request.getExample())
                 .exampleTranslation(request.getExampleTranslation())
+                .chineseSentenceForTranslation(request.getExampleTranslation())
                 .category(request.getCategory())
                 .difficulty(request.getDifficulty())
                 .position(nextPosition)
@@ -261,6 +261,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
 
         VocabularyCard saved = vocabularyCardRepository.save(card);
+        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
+            userVocabularyService.upsertProgress(conversation.getUser().getId(), saved);
+            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
+                    conversation.getUser().getId(), vocabularyWord.getId());
+        }
         evictConversationCache(conversationId);
         log.info("Created new card and evicted cache: conversationId={}, cardId={}", conversationId, saved.getId());
         return toDTO(saved);
@@ -433,29 +438,48 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
     @Override
     @Transactional
-    public VocabularyCardDTO updateUserSentence(Long cardId, String userSentence) {
+    public VocabularyCardDTO updateUserEnglishSentence(Long cardId, String userEnglishSentence) {
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
                 .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
-        
-        card.setUserSentence(userSentence);
+
+        card.setUserEnglishSentence(userEnglishSentence);
+        card.setSentenceAnalysisCompleted(false);
+        card.setSentenceHasNewWord(null);
+        card.setSentenceMeaningMatches(null);
+        card.setSentenceAnalysis(null);
         VocabularyCard saved = vocabularyCardRepository.save(card);
-        // 更新后清除缓存
         evictCardAndConversationCache(cardId, card.getConversation().getId());
-        log.info("Updated user sentence and evicted cache: cardId={}", cardId);
+        log.info("Updated user english sentence and evicted cache: cardId={}", cardId);
         return toDTOWithNavigation(saved);
     }
 
     @Override
-    @Transactional
-    public VocabularyCardDTO updateAIFeedback(Long cardId, String feedback) {
+    public void analyzeUserSentenceAsync(Long cardId) {
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
                 .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
-        
-        card.setAiFeedback(feedback);
+
+        if (card.getUserEnglishSentence() == null || card.getUserEnglishSentence().isBlank()) {
+            log.warn("No userEnglishSentence to analyze for cardId={}", cardId);
+            return;
+        }
+
+        log.info("Triggering async sentence analysis for cardId={}", cardId);
+        sentenceAnalysisService.analyzeUserSentenceAsync(cardId);
+    }
+
+    @Override
+    @Transactional
+    public VocabularyCardDTO updateSentenceAnalysis(Long cardId, String analysis, Boolean hasNewWord, Boolean meaningMatches) {
+        VocabularyCard card = vocabularyCardRepository.findById(cardId)
+                .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
+
+        card.setSentenceAnalysis(analysis);
+        card.setSentenceHasNewWord(hasNewWord);
+        card.setSentenceMeaningMatches(meaningMatches);
+        card.setSentenceAnalysisCompleted(true);
         VocabularyCard saved = vocabularyCardRepository.save(card);
-        // 更新后清除缓存
         evictCardAndConversationCache(cardId, card.getConversation().getId());
-        log.info("Updated AI feedback and evicted cache: cardId={}", cardId);
+        log.info("Updated sentence analysis and evicted cache: cardId={}", cardId);
         return toDTOWithNavigation(saved);
     }
 
@@ -467,7 +491,16 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         
         card.setIsCompleted(true);
         VocabularyCard saved = vocabularyCardRepository.save(card);
+        if (card.getVocabularyWordId() != null
+                && card.getConversation() != null
+                && card.getConversation().getUser() != null
+                && card.getConversation().getUser().getId() != null) {
+            userVocabularyService.upsertProgress(
+                    card.getConversation().getUser().getId(),
+                    saved);
+        }
         // 更新后清除缓存
+        evictCardAndConversationCache(cardId, card.getConversation().getId());
         evictCardAndConversationCache(cardId, card.getConversation().getId());
         log.info("Marked card as completed and evicted cache: cardId={}", cardId);
         return toDTOWithNavigation(saved);
@@ -491,20 +524,16 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(generated.getWord());
         log.info("Using VocabularyWord: id={}, normalizedWord={}", vocabularyWord.getId(), vocabularyWord.getNormalizedWord());
 
-        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-            userVocabularyService.upsertProgress(conversation.getUser().getId(), vocabularyWord.getId());
-            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}", 
-                    conversation.getUser().getId(), vocabularyWord.getId());
-        }
-
         VocabularyCard card = VocabularyCard.builder()
                 .conversation(conversation)
                 .vocabularyWordId(vocabularyWord.getId())
                 .word(generated.getWord())
                 .phonetic(generated.getPhonetic())
+                .partOfSpeech(generated.getPartOfSpeech())
                 .meaning(generated.getMeaning())
                 .example(generated.getExample())
                 .exampleTranslation(generated.getExampleTranslation())
+                .chineseSentenceForTranslation(generated.getExampleTranslation())
                 .category(generated.getCategory())
                 .difficulty(generated.getDifficulty())
                 .position(nextPosition)
@@ -518,6 +547,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
 
         VocabularyCard saved = vocabularyCardRepository.save(card);
+        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
+            userVocabularyService.upsertProgress(conversation.getUser().getId(), saved);
+            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
+                    conversation.getUser().getId(), vocabularyWord.getId());
+        }
         evictConversationCache(conversationId);
         log.info("Generated next card and evicted cache: conversationId={}, cardId={}", conversationId, saved.getId());
         return toDTOWithNavigation(saved);
@@ -562,20 +596,16 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(generated.getWord());
         log.info("Using VocabularyWord: id={}, normalizedWord={}", vocabularyWord.getId(), vocabularyWord.getNormalizedWord());
 
-        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-            userVocabularyService.upsertProgress(conversation.getUser().getId(), vocabularyWord.getId());
-            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}", 
-                    conversation.getUser().getId(), vocabularyWord.getId());
-        }
-
         VocabularyCard newCard = VocabularyCard.builder()
                 .conversation(conversation)
                 .vocabularyWordId(vocabularyWord.getId())
                 .word(generated.getWord())
                 .phonetic(generated.getPhonetic())
+                .partOfSpeech(generated.getPartOfSpeech())
                 .meaning(generated.getMeaning())
                 .example(generated.getExample())
                 .exampleTranslation(generated.getExampleTranslation())
+                .chineseSentenceForTranslation(generated.getExampleTranslation())
                 .category(generated.getCategory())
                 .difficulty(generated.getDifficulty())
                 .position(replacePosition)
@@ -589,6 +619,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
 
         VocabularyCard saved = vocabularyCardRepository.save(newCard);
+        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
+            userVocabularyService.upsertProgress(conversation.getUser().getId(), saved);
+            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
+                    conversation.getUser().getId(), vocabularyWord.getId());
+        }
         log.info("重新生成词汇卡成功: id={}, word={}, position={}, regenerationIndex={}",
                 saved.getId(), saved.getWord(), replacePosition, saved.getRegenerationIndex());
         evictCardCache(lastCard.getId());
@@ -605,6 +640,13 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         // 删除所有卡片后清除该对话的缓存
         evictConversationCache(conversationId);
         log.info("Deleted all cards and evicted cache: conversationId={}", conversationId);
+    }
+
+    @Override
+    public VocabularyCardDTO getCardByIdFromDb(Long cardId) {
+        VocabularyCard card = vocabularyCardRepository.findById(cardId)
+                .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
+        return toDTO(card);
     }
 
     @Override
@@ -894,6 +936,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         return WordCardData.builder()
                 .word("hello")
                 .phonetic("həˈloʊ")
+                .partOfSpeech("int.")
                 .meaning("你好")
                 .example("Hello, how are you?")
                 .exampleTranslation("你好，你好吗？")
@@ -929,6 +972,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 .conversationId(card.getConversation().getId())
                 .word(card.getWord())
                 .phonetic(card.getPhonetic())
+                .partOfSpeech(card.getPartOfSpeech())
                 .meaning(card.getMeaning())
                 .example(card.getExample())
                 .exampleTranslation(card.getExampleTranslation())
@@ -940,8 +984,12 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 .meaningCheckResult(card.getMeaningCheckResult())
                 .meaningIsCorrect(card.getMeaningIsCorrect())
                 .meaningCheckCompleted(card.getMeaningCheckCompleted())
-                .userSentence(card.getUserSentence())
-                .aiFeedback(card.getAiFeedback())
+                .chineseSentenceForTranslation(card.getChineseSentenceForTranslation())
+                .userEnglishSentence(card.getUserEnglishSentence())
+                .sentenceAnalysis(card.getSentenceAnalysis())
+                .sentenceAnalysisCompleted(card.getSentenceAnalysisCompleted())
+                .sentenceHasNewWord(card.getSentenceHasNewWord())
+                .sentenceMeaningMatches(card.getSentenceMeaningMatches())
                 .isCompleted(card.getIsCompleted())
                 .isRegenerated(card.getIsRegenerated())
                 .regenerationIndex(card.getRegenerationIndex())

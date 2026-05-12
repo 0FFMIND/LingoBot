@@ -13,18 +13,19 @@ export interface UseVocabularyResult {
   vocabularyCategory: VocabularyCategory;
   vocabularyDifficulty: VocabularyDifficulty;
   userMeaningInput: string;
-  userSentenceInput: string;
+  userEnglishSentenceInput: string;
   setVocabularyCategory: (category: VocabularyCategory) => void;
   setVocabularyDifficulty: (difficulty: VocabularyDifficulty) => void;
   setUserMeaningInput: (value: string) => void;
-  setUserSentenceInput: (value: string) => void;
+  setUserEnglishSentenceInput: (value: string) => void;
   loadCurrentCard: () => Promise<void>;
   getPrevCard: () => Promise<void>;
   getNextCard: () => Promise<void>;
   generateNextCard: () => Promise<void>;
   regenerateCard: () => Promise<void>;
   saveUserMeaning: (cardId: number, meaning: string) => Promise<void>;
-  saveUserSentence: (cardId: number, sentence: string) => Promise<void>;
+  saveUserEnglishSentence: (cardId: number, sentence: string) => Promise<void>;
+  analyzeUserSentence: (cardId: number) => Promise<void>;
   markAsCompleted: (cardId: number) => Promise<void>;
 }
 
@@ -37,7 +38,7 @@ export function useVocabulary(
   const [vocabularyCategory, setVocabularyCategory] = useState<VocabularyCategory>('cefr');
   const [vocabularyDifficulty, setVocabularyDifficulty] = useState<VocabularyDifficulty>('b2');
   const [userMeaningInput, setUserMeaningInput] = useState('');
-  const [userSentenceInput, setUserSentenceInput] = useState('');
+  const [userEnglishSentenceInput, setUserEnglishSentenceInput] = useState('');
 
   const loadCurrentCard = useCallback(async () => {
     if (!isAuthenticated || !conversationId) return;
@@ -48,7 +49,7 @@ export function useVocabulary(
       if (existingCard) {
         setCurrentVocabularyCard(existingCard);
         setUserMeaningInput(existingCard.userMeaningGuess || '');
-        setUserSentenceInput(existingCard.userSentence || '');
+        setUserEnglishSentenceInput(existingCard.userEnglishSentence || '');
       }
       try {
         const totalCount = await vocabularyService.getCardCount(conversationId);
@@ -81,7 +82,7 @@ export function useVocabulary(
       if (card) {
         setCurrentVocabularyCard(card);
         setUserMeaningInput(card.userMeaningGuess || '');
-        setUserSentenceInput(card.userSentence || '');
+        setUserEnglishSentenceInput(card.userEnglishSentence || '');
       }
     } catch (error) {
       console.error('获取上一个单词失败:', error);
@@ -98,19 +99,20 @@ export function useVocabulary(
       const card = await vocabularyService.getNextCard(
         conversationId,
         currentVocabularyCard.position,
-        vocabularyDifficulty.toUpperCase()
+        vocabularyCategory,
+        vocabularyDifficulty
       );
       if (card) {
         setCurrentVocabularyCard(card);
         setUserMeaningInput(card.userMeaningGuess || '');
-        setUserSentenceInput(card.userSentence || '');
+        setUserEnglishSentenceInput(card.userEnglishSentence || '');
       }
     } catch (error) {
       console.error('获取下一个单词失败:', error);
     } finally {
       setVocabularyCardLoading(false);
     }
-  }, [isAuthenticated, conversationId, currentVocabularyCard]);
+  }, [isAuthenticated, conversationId, currentVocabularyCard, vocabularyCategory, vocabularyDifficulty]);
 
   const generateNextCard = useCallback(async () => {
     if (!isAuthenticated || !conversationId) return;
@@ -119,12 +121,13 @@ export function useVocabulary(
     try {
       const card = await vocabularyService.generateNextCard(
         conversationId,
-        vocabularyDifficulty.toUpperCase()
+        vocabularyCategory,
+        vocabularyDifficulty
       );
       if (card) {
         setCurrentVocabularyCard(card);
         setUserMeaningInput('');
-        setUserSentenceInput('');
+        setUserEnglishSentenceInput('');
         useTokenUsageStore.getState().recordWordCard(conversationId);
         console.log('✅ 已记录新词汇卡到本地状态，conversationId:', conversationId);
       }
@@ -133,7 +136,7 @@ export function useVocabulary(
     } finally {
       setVocabularyCardLoading(false);
     }
-  }, [isAuthenticated, conversationId, vocabularyDifficulty]);
+  }, [isAuthenticated, conversationId, vocabularyCategory, vocabularyDifficulty]);
 
   const regenerateCard = useCallback(async () => {
     if (!isAuthenticated || !conversationId) return;
@@ -142,19 +145,20 @@ export function useVocabulary(
     try {
       const card = await vocabularyService.regenerateCard(
         conversationId,
-        vocabularyDifficulty.toUpperCase()
+        vocabularyCategory,
+        vocabularyDifficulty
       );
       if (card) {
         setCurrentVocabularyCard(card);
         setUserMeaningInput('');
-        setUserSentenceInput('');
+        setUserEnglishSentenceInput('');
       }
     } catch (error) {
       console.error('重新生成单词失败:', error);
     } finally {
       setVocabularyCardLoading(false);
     }
-  }, [isAuthenticated, conversationId, vocabularyDifficulty]);
+  }, [isAuthenticated, conversationId, vocabularyCategory, vocabularyDifficulty]);
 
   const saveUserMeaning = useCallback(async (cardId: number, meaning: string) => {
     try {
@@ -167,14 +171,22 @@ export function useVocabulary(
     }
   }, []);
 
-  const saveUserSentence = useCallback(async (cardId: number, sentence: string) => {
+  const saveUserEnglishSentence = useCallback(async (cardId: number, sentence: string) => {
     try {
-      const updated = await vocabularyService.updateUserSentence(cardId, sentence);
+      const updated = await vocabularyService.updateUserEnglishSentence(cardId, sentence);
       if (updated) {
         setCurrentVocabularyCard(updated);
       }
     } catch (error) {
-      console.error('保存用户造句失败:', error);
+      console.error('保存用户英文句子失败:', error);
+    }
+  }, []);
+
+  const analyzeUserSentence = useCallback(async (cardId: number) => {
+    try {
+      await vocabularyService.analyzeUserSentence(cardId);
+    } catch (error) {
+      console.error('触发句子分析失败:', error);
     }
   }, []);
 
@@ -195,18 +207,19 @@ export function useVocabulary(
     vocabularyCategory,
     vocabularyDifficulty,
     userMeaningInput,
-    userSentenceInput,
+    userEnglishSentenceInput,
     setVocabularyCategory,
     setVocabularyDifficulty,
     setUserMeaningInput,
-    setUserSentenceInput,
+    setUserEnglishSentenceInput,
     loadCurrentCard,
     getPrevCard,
     getNextCard,
     generateNextCard,
     regenerateCard,
     saveUserMeaning,
-    saveUserSentence,
+    saveUserEnglishSentence,
+    analyzeUserSentence,
     markAsCompleted,
   };
 }

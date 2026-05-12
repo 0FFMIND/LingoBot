@@ -1,6 +1,8 @@
 package com.lingobot.learning.vocabulary.service.impl;
 
 import com.lingobot.infrastructure.common.dto.PageResponseDTO;
+import com.lingobot.infrastructure.common.exception.ChatException;
+import com.lingobot.learning.vocabulary.dto.UpdateUserVocabularyRequest;
 import com.lingobot.learning.vocabulary.dto.UserVocabularyDTO;
 import com.lingobot.learning.vocabulary.dto.VocabularyStatsDTO;
 import com.lingobot.learning.vocabulary.entity.UserVocabulary;
@@ -46,6 +48,23 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
         return upsertProgress(userId, vocabularyWordId, VocabularyEventType.NEW_LEARNING);
     }
 
+    @Override
+    @Transactional
+    public UserVocabulary upsertProgress(Long userId, VocabularyCard card) {
+        return upsertProgress(userId, card, VocabularyEventType.NEW_LEARNING);
+    }
+
+    @Override
+    @Transactional
+    public UserVocabulary upsertProgress(Long userId, VocabularyCard card, VocabularyEventType eventType) {
+        if (card == null || card.getVocabularyWordId() == null) {
+            throw new IllegalArgumentException("Vocabulary card and vocabularyWordId are required");
+        }
+        UserVocabulary vocabulary = upsertProgress(userId, card.getVocabularyWordId(), eventType);
+        copyDisplayFields(vocabulary, card);
+        return userVocabularyRepository.save(vocabulary);
+    }
+
     // 新增或更新用户学习记录（指定事件类型）
     @Override
     @Transactional
@@ -59,6 +78,11 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                     if (existing.getStatus() == VocabularyStatus.NEW) {
                         existing.setStatus(VocabularyStatus.LEARNING);
                     }
+
+                    if (existing.getMasteryScore() == null
+                            || existing.getMasteryScore().compareTo(new BigDecimal("0.12")) < 0) {
+                        existing.setMasteryScore(new BigDecimal("0.12"));
+                    }
                     
                     if (existing.getNextReviewAt() == null) {
                         existing.setNextReviewAt(LocalDateTime.now().plusDays(1));
@@ -71,8 +95,9 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                     UserVocabulary newProgress = UserVocabulary.builder()
                             .userId(userId)
                             .vocabularyWordId(vocabularyWordId)
-                            .status(VocabularyStatus.NEW)
-                            .masteryScore(BigDecimal.ZERO)
+                            .word("")
+                            .status(VocabularyStatus.LEARNING)
+                            .masteryScore(new BigDecimal("0.12"))
                             .seenCount(1)
                             .correctCount(0)
                             .wrongCount(0)
@@ -98,6 +123,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                     } else {
                         progress.setWrongCount(progress.getWrongCount() + 1);
                     }
+                    progress.setSeenCount(progress.getSeenCount() + 1);
                     
                     int totalAttempts = progress.getCorrectCount() + progress.getWrongCount();
                     if (totalAttempts > 0) {
@@ -152,7 +178,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                 .build();
     }
 
-    // 分页查询用户词汇列表（支持状态筛选、类型筛选和排序）
+    // 分页查询用户词汇列表（支持状态筛选、类型筛选、排序和搜索）
     @Override
     @Transactional(readOnly = true)
     public PageResponseDTO<UserVocabularyDTO> getUserVocabularies(
@@ -160,6 +186,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
             VocabularyStatus status,
             String filterType,
             String sortBy,
+            String search,
             int page,
             int size) {
         
@@ -167,15 +194,24 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
         Pageable pageable = PageRequest.of(page, size, sort);
         
         Page<UserVocabulary> vocabularies;
+        boolean hasSearch = search != null && !search.trim().isEmpty();
         
         if ("to_review".equals(filterType)) {
-            vocabularies = userVocabularyRepository.findToReviewByUserId(userId, LocalDateTime.now(), pageable);
+            vocabularies = hasSearch
+                    ? userVocabularyRepository.findToReviewByUserIdAndKeyword(userId, LocalDateTime.now(), search.trim(), pageable)
+                    : userVocabularyRepository.findToReviewByUserId(userId, LocalDateTime.now(), pageable);
         } else if ("difficult".equals(filterType)) {
-            vocabularies = userVocabularyRepository.findDifficultByUserId(userId, pageable);
+            vocabularies = hasSearch
+                    ? userVocabularyRepository.findDifficultByUserIdAndKeyword(userId, search.trim(), pageable)
+                    : userVocabularyRepository.findDifficultByUserId(userId, pageable);
         } else if (status != null) {
-            vocabularies = userVocabularyRepository.findByUserIdAndStatus(userId, status, pageable);
+            vocabularies = hasSearch
+                    ? userVocabularyRepository.findByUserIdAndStatusAndKeyword(userId, status, search.trim(), pageable)
+                    : userVocabularyRepository.findByUserIdAndStatus(userId, status, pageable);
         } else {
-            vocabularies = userVocabularyRepository.findByUserId(userId, pageable);
+            vocabularies = hasSearch
+                    ? userVocabularyRepository.findByUserIdAndKeyword(userId, search.trim(), pageable)
+                    : userVocabularyRepository.findByUserId(userId, pageable);
         }
         
         List<UserVocabularyDTO> dtoList = vocabularies.getContent().stream()
@@ -188,6 +224,36 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                 vocabularies.getSize(),
                 vocabularies.getTotalElements()
         );
+    }
+
+    @Override
+    @Transactional
+    public UserVocabularyDTO updateVocabulary(Long userId, Long id, UpdateUserVocabularyRequest request) {
+        UserVocabulary vocabulary = userVocabularyRepository.findById(id)
+                .filter(item -> item.getUserId().equals(userId))
+                .orElseThrow(() -> ChatException.badRequest("Vocabulary not found: " + id));
+
+        if (isNotBlank(request.getWord())) {
+            vocabulary.setWord(request.getWord().trim());
+        }
+        vocabulary.setPhonetic(trimToNull(request.getPhonetic()));
+        vocabulary.setPartOfSpeech(trimToNull(request.getPartOfSpeech()));
+        vocabulary.setMeaning(trimToNull(request.getMeaning()));
+        vocabulary.setSynonyms(request.getSynonyms());
+        vocabulary.setCategory(trimToNull(request.getCategory()));
+        vocabulary.setDifficulty(trimToNull(request.getDifficulty()));
+        userVocabularyRepository.save(vocabulary);
+
+        return toDTO(userId, vocabulary);
+    }
+
+    @Override
+    @Transactional
+    public void deleteVocabulary(Long userId, Long id) {
+        UserVocabulary vocabulary = userVocabularyRepository.findById(id)
+                .filter(item -> item.getUserId().equals(userId))
+                .orElseThrow(() -> ChatException.badRequest("Vocabulary not found: " + id));
+        userVocabularyRepository.delete(vocabulary);
     }
 
     // 根据排序参数构建 Sort 对象
@@ -210,22 +276,19 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
     // 将 UserVocabulary 实体转换为 DTO（关联查询最新词汇卡获取单词详情）
     private UserVocabularyDTO toDTO(Long userId, UserVocabulary uv) {
         // 同一个单词可能有多张历史卡片，这里只取最新一张用于展示字段。
-        List<VocabularyCard> latestCards = vocabularyCardRepository
-                .findLatestCardsByUserIdAndVocabularyWordId(
-                        userId,
-                        uv.getVocabularyWordId(),
-                        PageRequest.of(0, 1));
-        VocabularyCard latestCard = latestCards.isEmpty() ? null : latestCards.get(0);
+        VocabularyCard latestCard = getLatestCard(userId, uv.getVocabularyWordId());
         
         return UserVocabularyDTO.builder()
                 .id(uv.getId())
                 .userId(uv.getUserId())
                 .vocabularyWordId(uv.getVocabularyWordId())
-                .word(latestCard != null ? latestCard.getWord() : null)
-                .phonetic(latestCard != null ? latestCard.getPhonetic() : null)
-                .meaning(latestCard != null ? latestCard.getMeaning() : null)
-                .category(latestCard != null ? latestCard.getCategory() : null)
-                .difficulty(latestCard != null ? latestCard.getDifficulty() : null)
+                .word(uv.getWord())
+                .phonetic(uv.getPhonetic())
+                .partOfSpeech(uv.getPartOfSpeech())
+                .meaning(uv.getMeaning())
+                .synonyms(uv.getSynonyms())
+                .category(uv.getCategory())
+                .difficulty(uv.getDifficulty())
                 .status(uv.getStatus())
                 .masteryScore(uv.getMasteryScore())
                 .seenCount(uv.getSeenCount())
@@ -238,5 +301,32 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                 .createdAt(uv.getCreatedAt())
                 .updatedAt(uv.getUpdatedAt())
                 .build();
+    }
+
+    private VocabularyCard getLatestCard(Long userId, Long vocabularyWordId) {
+        List<VocabularyCard> latestCards = vocabularyCardRepository
+                .findLatestCardsByUserIdAndVocabularyWordId(
+                        userId,
+                        vocabularyWordId,
+                        PageRequest.of(0, 1));
+        return latestCards.isEmpty() ? null : latestCards.get(0);
+    }
+
+    private void copyDisplayFields(UserVocabulary vocabulary, VocabularyCard card) {
+        vocabulary.setWord(card.getWord());
+        vocabulary.setPhonetic(card.getPhonetic());
+        vocabulary.setPartOfSpeech(card.getPartOfSpeech());
+        vocabulary.setMeaning(card.getMeaning());
+        vocabulary.setSynonymsJson(card.getSynonymsJson());
+        vocabulary.setCategory(card.getCategory());
+        vocabulary.setDifficulty(card.getDifficulty());
+    }
+
+    private boolean isNotBlank(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private String trimToNull(String value) {
+        return isNotBlank(value) ? value.trim() : null;
     }
 }

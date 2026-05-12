@@ -221,10 +221,10 @@ public class MessageHistoryService {
                 
                 if (card.getUserSentence() != null && !card.getUserSentence().isEmpty()) {
                     sb.append("   - 用户造的句子: ").append(card.getUserSentence()).append("\n");
-                    if (card.getAiFeedback() == null || card.getAiFeedback().isEmpty()) {
-                        sb.append("   - 状态: 句子已提交，等待 AI 反馈\n");
+                    if (card.getSentenceAnalysisCompleted() == null || !card.getSentenceAnalysisCompleted()) {
+                        sb.append("   - 状态: 句子已提交，等待 AI 分析\n");
                     } else {
-                        sb.append("   - 状态: AI 已提供反馈\n");
+                        sb.append("   - 状态: AI 已完成句子分析\n");
                     }
                 }
                 
@@ -232,9 +232,8 @@ public class MessageHistoryService {
             }
             
             sb.append("## 处理规则（重要！）\n");
-            sb.append("1. 如果用户发送的消息包含 `[intent:make_sentence]`，说明用户正在完成造句练习，请调用 `display_sentence_feedback` 工具\n");
-            sb.append("2. 只有当用户发送`[intent:next_word]` 时，才生成新的单词卡\n");
-            sb.append("3. **绝对不能**跳过未完成的单词直接生成新单词\n");
+            sb.append("1. 只有当用户发送`[intent:next_word]` 时，才生成新的单词卡\n");
+            sb.append("2. **绝对不能**跳过未完成的单词直接生成新单词\n");
             sb.append("\n");
         }
         

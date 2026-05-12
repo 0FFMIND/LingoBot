@@ -19,8 +19,8 @@ import java.util.*;
 
 /**
  * 词汇学习 MCP 工具
- * 用于 AI 与前端交互，展示单词卡片和造句反馈
- * 支持两种操作：display_flashcard（展示单词卡）和 display_sentence_feedback（展示造句反馈） */
+ * 用于 AI 与前端交互，展示单词卡片
+ * 支持操作：display_flashcard（展示单词卡）、check_meaning_accuracy（检查用户释义准确性） */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -70,11 +70,11 @@ public class VocabularyTool implements McpToolHandler {
 
         properties.put("action", McpTool.Property.builder()
                 .type("string")
-                .description("操作类型：display_flashcard（展示单词卡，由AI生成单词信息后调用）、display_sentence_feedback（展示造句反馈）、check_meaning_accuracy（检查用户释义准确性）")
+                .description("操作类型：display_flashcard（展示单词卡）、check_meaning_accuracy（检查用户释义准确性）、analyze_sentence（分析用户英文造句）")
                 .enums(Arrays.asList(
                         "display_flashcard",
-                        "display_sentence_feedback",
-                        "check_meaning_accuracy"
+                        "check_meaning_accuracy",
+                        "analyze_sentence"
                 ))
                 .build());
 
@@ -98,6 +98,16 @@ public class VocabularyTool implements McpToolHandler {
                 .description("中文释义")
                 .build());
 
+        properties.put("example", McpTool.Property.builder()
+                .type("string")
+                .description("使用该单词的自然英文例句，难度须与单词难度匹配")
+                .build());
+
+        properties.put("exampleTranslation", McpTool.Property.builder()
+                .type("string")
+                .description("英文例句的准确中文翻译")
+                .build());
+
         properties.put("synonyms", McpTool.Property.builder()
                 .type("array")
                 .description("同义词列表（数组）")
@@ -112,32 +122,7 @@ public class VocabularyTool implements McpToolHandler {
 
         properties.put("vocabularyDifficulty", McpTool.Property.builder()
                 .type("string")
-                .description("难度级别：CEFR 如 a1/a2/b1/b2/c1/c2；IELTS 如；TOEFL 如 beginner/intermediate/advanced/expert")
-                .build());
-
-        properties.put("sentence", McpTool.Property.builder()
-                .type("string")
-                .description("用户造的句子（用于display_sentence_feedback）")
-                .build());
-
-        properties.put("current_word", McpTool.Property.builder()
-                .type("string")
-                .description("当前学习的单词（用于 display_sentence_feedback）")
-                .build());
-
-        properties.put("feedback", McpTool.Property.builder()
-                .type("string")
-                .description("AI 对用户造句的反馈（用于 display_sentence_feedback）")
-                .build());
-
-        properties.put("example", McpTool.Property.builder()
-                .type("string")
-                .description("参考例句（用于 display_sentence_feedback）")
-                .build());
-
-        properties.put("exampleTranslation", McpTool.Property.builder()
-                .type("string")
-                .description("例句中文翻译（用于display_sentence_feedback）")
+                .description("难度级别：CEFR 使用 a1/a2/b1/b2/c1/c2；IELTS 使用 4.0-5.0/5.5-6.5/7.0-8.0/8.5-9.0；TOEFL 使用 60-80/81-100/101-110/111-120")
                 .build());
 
         properties.put("user_meaning", McpTool.Property.builder()
@@ -155,10 +140,30 @@ public class VocabularyTool implements McpToolHandler {
                 .description("对用户释义的详细反馈（用于check_meaning_accuracy）")
                 .build());
 
+        properties.put("chineseSentenceForTranslation", McpTool.Property.builder()
+                .type("string")
+                .description("一个自然的中文句子，供用户翻译成英文（用于check_meaning_accuracy），难度须与单词难度匹配")
+                .build());
+
+        properties.put("meaning_matches", McpTool.Property.builder()
+                .type("boolean")
+                .description("用户英文句子的意思是否与中文例句匹配（用于analyze_sentence）")
+                .build());
+
+        properties.put("has_new_word", McpTool.Property.builder()
+                .type("boolean")
+                .description("用户英文句子是否正确包含新单词（用于analyze_sentence）")
+                .build());
+
+        properties.put("feedback", McpTool.Property.builder()
+                .type("string")
+                .description("对用户英文句子的详细中文反馈，指出优点和改进建议（用于analyze_sentence）")
+                .build());
+
         // 构建工具定义，返回给前端和 AI 模型
         return McpTool.builder()
                 .name(TOOL_NAME)
-                .description("英语词汇学习工具。用于展示单词卡片和造句反馈。AI 应该：1. 生成单词、音标、词性、释义、同义词、词汇划分标准和难度级别后调用 display_flashcard；2. 用户造句后，分析句子并调用 display_sentence_feedback 展示反馈")
+                .description("英语词汇学习工具。用于展示单词卡片。AI 应该：1. 生成单词、音标、词性、释义、同义词、词汇划分标准和难度级别后调用 display_flashcard")
                 .arguments(McpTool.ToolArguments.builder()
                         .type("object")
                         .properties(properties)
@@ -183,11 +188,11 @@ public class VocabularyTool implements McpToolHandler {
                 case "display_flashcard":
                     result = displayFlashcard(args, conversationId);
                     break;
-                case "display_sentence_feedback":
-                    result = displaySentenceFeedback(args, conversationId);
-                    break;
                 case "check_meaning_accuracy":
                     result = checkMeaningAccuracy(args, conversationId);
+                    break;
+                case "analyze_sentence":
+                    result = analyzeSentence(args, conversationId);
                     break;
                 default:
                     result = displayFlashcard(args, conversationId);
@@ -243,6 +248,12 @@ public class VocabularyTool implements McpToolHandler {
         String meaning = args != null && args.containsKey("meaning")
                 ? (String) args.get("meaning")
                 : "";
+        String example = args != null && args.containsKey("example")
+                ? (String) args.get("example")
+                : "";
+        String exampleTranslation = args != null && args.containsKey("exampleTranslation")
+                ? (String) args.get("exampleTranslation")
+                : "";
         String vocabularyCategory = args != null && args.containsKey("vocabularyCategory")
                 ? (String) args.get("vocabularyCategory")
                 : "cefr";
@@ -273,6 +284,8 @@ public class VocabularyTool implements McpToolHandler {
         result.put("phonetic", phonetic);
         result.put("partOfSpeech", partOfSpeech);
         result.put("meaning", meaning);
+        result.put("example", example);
+        result.put("exampleTranslation", exampleTranslation);
         result.put("synonyms", synonyms);
         result.put("vocabularyCategory", vocabularyCategory);
         result.put("vocabularyDifficulty", vocabularyDifficulty);
@@ -280,122 +293,6 @@ public class VocabularyTool implements McpToolHandler {
         result.put("message", word != null && phonetic != null 
                 ? String.format("%s [%s]", word, phonetic) 
                 : word);
-
-        return result;
-    }
-
-    private Map<String, Object> displaySentenceFeedback(Map<String, Object> args, Long conversationId) {
-        String userSentence = args != null && args.containsKey("sentence")
-                ? (String) args.get("sentence")
-                : "";
-        String currentWord = args != null && args.containsKey("current_word")
-                ? (String) args.get("current_word")
-                : "";
-        String feedback = args != null && args.containsKey("feedback")
-                ? (String) args.get("feedback")
-                : "";
-        String example = args != null && args.containsKey("example")
-                ? (String) args.get("example")
-                : "";
-        String exampleTranslation = args != null && args.containsKey("exampleTranslation")
-                ? (String) args.get("exampleTranslation")
-                : "";
-        
-        Map<String, Object> cachedState = null;
-        if (conversationId != null) {
-            cachedState = vocabularyStateService.getCurrentWord(conversationId);
-            log.info("Retrieved cached state for conversation {}: {}", conversationId, 
-                    cachedState != null ? cachedState.get("word") : "null");
-        }
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("action", "display_sentence_feedback");
-        result.put("sentence", userSentence);
-        result.put("current_word", currentWord);
-        result.put("feedback", feedback);
-        result.put("example", example);
-        result.put("exampleTranslation", exampleTranslation);
-        result.put("display_mode", "sentence_feedback");
-        
-        if (args != null && args.containsKey("word")) {
-            result.put("word", args.get("word"));
-        } else if (cachedState != null && cachedState.containsKey("word")) {
-            result.put("word", cachedState.get("word"));
-        } else {
-            result.put("word", currentWord);
-        }
-        
-        if (args != null && args.containsKey("phonetic")) {
-            result.put("phonetic", args.get("phonetic"));
-        } else if (cachedState != null && cachedState.containsKey("phonetic")) {
-            result.put("phonetic", cachedState.get("phonetic"));
-        }
-        
-        if (args != null && args.containsKey("partOfSpeech")) {
-            result.put("partOfSpeech", args.get("partOfSpeech"));
-        } else if (cachedState != null && cachedState.containsKey("partOfSpeech")) {
-            result.put("partOfSpeech", cachedState.get("partOfSpeech"));
-        }
-        
-        if (args != null && args.containsKey("meaning")) {
-            result.put("meaning", args.get("meaning"));
-        } else if (cachedState != null && cachedState.containsKey("meaning")) {
-            result.put("meaning", cachedState.get("meaning"));
-        }
-        
-        if (args != null && args.containsKey("vocabularyCategory")) {
-            result.put("vocabularyCategory", args.get("vocabularyCategory"));
-        } else if (cachedState != null && cachedState.containsKey("vocabularyCategory")) {
-            result.put("vocabularyCategory", cachedState.get("vocabularyCategory"));
-        }
-        
-        if (args != null && args.containsKey("vocabularyDifficulty")) {
-            result.put("vocabularyDifficulty", args.get("vocabularyDifficulty"));
-        } else if (cachedState != null && cachedState.containsKey("vocabularyDifficulty")) {
-            result.put("vocabularyDifficulty", cachedState.get("vocabularyDifficulty"));
-        }
-        
-        List<String> synonyms = new ArrayList<>();
-        if (args != null && args.containsKey("synonyms")) {
-            Object synonymsObj = args.get("synonyms");
-            if (synonymsObj instanceof List) {
-                synonyms = (List<String>) synonymsObj;
-            }
-        } else if (cachedState != null && cachedState.containsKey("synonyms")) {
-            Object synonymsObj = cachedState.get("synonyms");
-            if (synonymsObj instanceof List) {
-                synonyms = (List<String>) synonymsObj;
-            }
-        }
-        result.put("synonyms", synonyms);
-
-        // 保存用户造句和 AI 反馈到数据库
-        if (conversationId != null && !feedback.isEmpty()) {
-            try {
-                List<VocabularyCard> incompleteCards = vocabularyCardRepository
-                        .findIncompleteByConversationId(conversationId);
-                Optional<VocabularyCard> targetCard = incompleteCards.stream()
-                        .filter(c -> currentWord.equalsIgnoreCase(c.getWord()))
-                        .findFirst();
-                if (!targetCard.isPresent() && !incompleteCards.isEmpty()) {
-                    targetCard = Optional.of(incompleteCards.get(0));
-                }
-                if (targetCard.isPresent()) {
-                    VocabularyCard card = targetCard.get();
-                    card.setAiFeedback(feedback);
-                    if (!example.isEmpty()) card.setExample(example);
-                    if (!exampleTranslation.isEmpty()) card.setExampleTranslation(exampleTranslation);
-                    vocabularyCardRepository.save(card);
-                    evictCardAndConversationCache(card.getId(), conversationId);
-                    log.info("Saved AI feedback to vocabulary card id={} word={}", card.getId(), card.getWord());
-                } else {
-                    log.warn("No vocabulary card found to save feedback for conversation={}", conversationId);
-                }
-            } catch (Exception e) {
-                log.error("Failed to save AI feedback to vocabulary card", e);
-            }
-        }
 
         return result;
     }
@@ -413,6 +310,9 @@ public class VocabularyTool implements McpToolHandler {
         String targetWord = args != null && args.containsKey("word")
                 ? (String) args.get("word")
                 : "";
+        String chineseSentenceForTranslation = args != null && args.containsKey("chineseSentenceForTranslation")
+                ? (String) args.get("chineseSentenceForTranslation")
+                : "";
 
         Map<String, Object> cachedState = null;
         if (conversationId != null) {
@@ -429,10 +329,12 @@ public class VocabularyTool implements McpToolHandler {
         result.put("check_feedback", checkFeedback);
         result.put("display_mode", "meaning_check");
 
+        String resolvedWord = targetWord;
         if (args != null && args.containsKey("word")) {
             result.put("word", args.get("word"));
         } else if (cachedState != null && cachedState.containsKey("word")) {
-            result.put("word", cachedState.get("word"));
+            resolvedWord = (String) cachedState.get("word");
+            result.put("word", resolvedWord);
         }
 
         if (args != null && args.containsKey("meaning")) {
@@ -441,9 +343,97 @@ public class VocabularyTool implements McpToolHandler {
             result.put("correct_meaning", cachedState.get("meaning"));
         }
 
+        if (!chineseSentenceForTranslation.isEmpty()) {
+            result.put("chineseSentenceForTranslation", chineseSentenceForTranslation);
+        }
+
+        // 持久化检查结果到数据库
+        if (conversationId != null && isCorrect != null) {
+            try {
+                List<VocabularyCard> candidates = vocabularyCardRepository.findIncompleteByConversationId(conversationId);
+                final String wordToMatch = resolvedWord;
+                Optional<VocabularyCard> target = candidates.stream()
+                        .filter(c -> wordToMatch != null && wordToMatch.equalsIgnoreCase(c.getWord()))
+                        .findFirst();
+                if (!target.isPresent() && !candidates.isEmpty()) {
+                    target = Optional.of(candidates.get(0));
+                }
+                if (target.isPresent()) {
+                    VocabularyCard card = target.get();
+                    card.setMeaningIsCorrect(isCorrect);
+                    card.setMeaningCheckCompleted(true);
+                    if (!checkFeedback.isEmpty()) {
+                        card.setMeaningCheckResult(checkFeedback);
+                    }
+                    if (!chineseSentenceForTranslation.isEmpty()) {
+                        card.setChineseSentenceForTranslation(chineseSentenceForTranslation);
+                    }
+                    VocabularyCard saved = vocabularyCardRepository.save(card);
+                    evictCardAndConversationCache(saved.getId(), conversationId);
+                    log.info("Persisted meaning check for cardId={}, word={}, isCorrect={}", saved.getId(), saved.getWord(), isCorrect);
+                } else {
+                    log.warn("No vocabulary card found to persist meaning check for conversation={}", conversationId);
+                }
+            } catch (Exception e) {
+                log.error("Failed to persist meaning check result in VocabularyTool", e);
+            }
+        }
+
         return result;
     }
     
+    private Map<String, Object> analyzeSentence(Map<String, Object> args, Long conversationId) {
+        String word = args != null && args.containsKey("word") ? (String) args.get("word") : "";
+        Boolean meaningMatches = args != null && args.containsKey("meaning_matches")
+                ? (Boolean) args.get("meaning_matches") : null;
+        Boolean hasNewWord = args != null && args.containsKey("has_new_word")
+                ? (Boolean) args.get("has_new_word") : null;
+        String feedback = args != null && args.containsKey("feedback") ? (String) args.get("feedback") : "";
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("action", "analyze_sentence");
+        result.put("word", word);
+        result.put("meaning_matches", meaningMatches);
+        result.put("has_new_word", hasNewWord);
+        result.put("feedback", feedback);
+        result.put("display_mode", "sentence_analysis");
+
+        if (conversationId != null && (meaningMatches != null || hasNewWord != null)) {
+            try {
+                List<com.lingobot.learning.vocabulary.entity.VocabularyCard> candidates =
+                        vocabularyCardRepository.findIncompleteByConversationId(conversationId);
+                final String wordToMatch = word;
+                java.util.Optional<com.lingobot.learning.vocabulary.entity.VocabularyCard> target =
+                        candidates.stream()
+                                .filter(c -> wordToMatch != null && wordToMatch.equalsIgnoreCase(c.getWord()))
+                                .findFirst();
+                if (!target.isPresent() && !candidates.isEmpty()) {
+                    target = java.util.Optional.of(candidates.get(0));
+                }
+                if (target.isPresent()) {
+                    com.lingobot.learning.vocabulary.entity.VocabularyCard card = target.get();
+                    card.setSentenceMeaningMatches(meaningMatches);
+                    card.setSentenceHasNewWord(hasNewWord);
+                    card.setSentenceAnalysisCompleted(true);
+                    if (!feedback.isEmpty()) {
+                        card.setSentenceAnalysis(feedback);
+                    }
+                    com.lingobot.learning.vocabulary.entity.VocabularyCard saved =
+                            vocabularyCardRepository.save(card);
+                    evictCardAndConversationCache(saved.getId(), conversationId);
+                    log.info("Persisted sentence analysis for cardId={}, word={}", saved.getId(), saved.getWord());
+                } else {
+                    log.warn("No vocabulary card found to persist sentence analysis for conversation={}", conversationId);
+                }
+            } catch (Exception e) {
+                log.error("Failed to persist sentence analysis result in VocabularyTool", e);
+            }
+        }
+
+        return result;
+    }
+
     /**
      * 清除单词卡及其所属对话的所有缓存
      * 用于更新/删除操作

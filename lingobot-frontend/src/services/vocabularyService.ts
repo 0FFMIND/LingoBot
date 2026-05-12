@@ -6,9 +6,16 @@ import {
   VocabularyStatsDTO,
   UserVocabularyDTO,
   PageResponseDTO,
+  VocabularyCategory,
+  VocabularyDifficulty,
   VocabularyStatus,
   VocabularySortBy,
 } from '../types';
+
+export type AIModifyVocabularyRequest = Partial<Pick<
+  UserVocabularyDTO,
+  'word' | 'phonetic' | 'partOfSpeech' | 'meaning' | 'example' | 'exampleTranslation' | 'synonyms' | 'category' | 'difficulty'
+>> & { id: number };
 
 const refreshCurrentUserBalance = async (): Promise<void> => {
   try {
@@ -35,13 +42,21 @@ export const vocabularyService = {
     return httpClient.get<VocabularyCardDTO | null>(`/vocabulary/conversations/${conversationId}/current`);
   },
 
-  getNextCard: async (conversationId: number, currentPosition?: number, level?: string): Promise<VocabularyCardDTO | null> => {
+  getNextCard: async (
+    conversationId: number,
+    currentPosition?: number,
+    category?: VocabularyCategory,
+    difficulty?: VocabularyDifficulty
+  ): Promise<VocabularyCardDTO | null> => {
     const params = new URLSearchParams();
     if (currentPosition !== undefined) {
       params.set('currentPosition', String(currentPosition));
     }
-    if (level) {
-      params.set('level', level);
+    if (category) {
+      params.set('category', category);
+    }
+    if (difficulty) {
+      params.set('difficulty', difficulty);
     }
     const query = params.toString();
     return httpClient.get<VocabularyCardDTO | null>(
@@ -56,19 +71,27 @@ export const vocabularyService = {
     return httpClient.get<VocabularyCardDTO | null>(url);
   },
 
-  generateNextCard: async (conversationId: number, level?: string): Promise<VocabularyCardDTO> => {
+  generateNextCard: async (
+    conversationId: number,
+    category?: VocabularyCategory,
+    difficulty?: VocabularyDifficulty
+  ): Promise<VocabularyCardDTO> => {
     const card = await httpClient.post<VocabularyCardDTO>(
       `/vocabulary/conversations/${conversationId}/generate`,
-      level ? { level } : {}
+      { category, difficulty }
     );
     await refreshCurrentUserBalance();
     return card;
   },
 
-  regenerateCard: async (conversationId: number, level?: string): Promise<VocabularyCardDTO> => {
+  regenerateCard: async (
+    conversationId: number,
+    category?: VocabularyCategory,
+    difficulty?: VocabularyDifficulty
+  ): Promise<VocabularyCardDTO> => {
     const card = await httpClient.post<VocabularyCardDTO>(
       `/vocabulary/conversations/${conversationId}/regenerate`,
-      level ? { level } : {}
+      { category, difficulty }
     );
     await refreshCurrentUserBalance();
     return card;
@@ -90,18 +113,49 @@ export const vocabularyService = {
     return card;
   },
 
-  updateUserSentence: async (cardId: number, userSentence: string): Promise<VocabularyCardDTO> => {
+  updateUserEnglishSentence: async (cardId: number, userEnglishSentence: string): Promise<VocabularyCardDTO> => {
     return httpClient.put<VocabularyCardDTO>(
-      `/vocabulary/cards/${cardId}/sentence`,
-      { userSentence }
+      `/vocabulary/cards/${cardId}/english-sentence`,
+      { userEnglishSentence }
     );
   },
 
-  updateAIFeedback: async (cardId: number, feedback: string): Promise<VocabularyCardDTO> => {
-    return httpClient.put<VocabularyCardDTO>(
-      `/vocabulary/cards/${cardId}/feedback`,
-      { feedback }
+  analyzeUserSentence: async (cardId: number): Promise<VocabularyCardDTO> => {
+    const card = await httpClient.post<VocabularyCardDTO>(
+      `/vocabulary/cards/${cardId}/analyze-sentence`,
+      {}
     );
+    await refreshCurrentUserBalance();
+    return card;
+  },
+
+  updateAIFeedback: async (cardId: number, aiFeedback: string): Promise<VocabularyCardDTO> => {
+    return httpClient.put<VocabularyCardDTO>(
+      `/vocabulary/cards/${cardId}/ai-feedback`,
+      { aiFeedback }
+    );
+  },
+
+  getSentenceAnalysisStatus: async (cardId: number): Promise<{
+    cardId: number;
+    word: string;
+    chineseSentenceForTranslation: string;
+    userEnglishSentence: string;
+    sentenceAnalysisCompleted: boolean;
+    sentenceHasNewWord?: boolean;
+    sentenceMeaningMatches?: boolean;
+    sentenceAnalysis: string;
+  }> => {
+    return httpClient.get<{
+      cardId: number;
+      word: string;
+      chineseSentenceForTranslation: string;
+      userEnglishSentence: string;
+      sentenceAnalysisCompleted: boolean;
+      sentenceHasNewWord?: boolean;
+      sentenceMeaningMatches?: boolean;
+      sentenceAnalysis: string;
+    }>(`/vocabulary/cards/${cardId}/sentence-analysis`);
   },
 
   markAsCompleted: async (cardId: number): Promise<VocabularyCardDTO> => {
@@ -123,6 +177,7 @@ export const vocabularyService = {
     meaningCheckCompleted: boolean;
     meaningIsCorrect?: boolean;
     meaningCheckResult: string;
+    chineseSentenceForTranslation?: string;
   }> => {
     return httpClient.get<{
       cardId: number;
@@ -131,6 +186,7 @@ export const vocabularyService = {
       meaningCheckCompleted: boolean;
       meaningIsCorrect?: boolean;
       meaningCheckResult: string;
+      chineseSentenceForTranslation?: string;
     }>(`/vocabulary/cards/${cardId}/meaning-check`);
   },
 
@@ -142,6 +198,7 @@ export const vocabularyService = {
     status?: VocabularyStatus;
     filterType?: string;
     sortBy?: VocabularySortBy;
+    search?: string;
     page?: number;
     size?: number;
   }): Promise<PageResponseDTO<UserVocabularyDTO>> => {
@@ -149,6 +206,7 @@ export const vocabularyService = {
     if (params.status) queryParams.set('status', params.status);
     if (params.filterType) queryParams.set('filterType', params.filterType);
     if (params.sortBy) queryParams.set('sortBy', params.sortBy);
+    if (params.search) queryParams.set('search', params.search);
     if (params.page !== undefined) queryParams.set('page', String(params.page));
     if (params.size !== undefined) queryParams.set('size', String(params.size));
     
@@ -156,5 +214,22 @@ export const vocabularyService = {
     return httpClient.get<PageResponseDTO<UserVocabularyDTO>>(
       `/user-vocabulary/list${query ? `?${query}` : ''}`
     );
+  },
+
+  updateUserVocabulary: async (
+    id: number,
+    request: Partial<Pick<UserVocabularyDTO, 'word' | 'phonetic' | 'partOfSpeech' | 'meaning' | 'example' | 'exampleTranslation' | 'synonyms' | 'category' | 'difficulty'>>
+  ): Promise<UserVocabularyDTO> => {
+    return httpClient.put<UserVocabularyDTO>(`/user-vocabulary/${id}`, request);
+  },
+
+  aiModifyVocabulary: async (request: AIModifyVocabularyRequest): Promise<UserVocabularyDTO> => {
+    const result = await httpClient.post<UserVocabularyDTO>('/user-vocabulary/ai-modify', request);
+    await refreshCurrentUserBalance();
+    return result;
+  },
+
+  deleteUserVocabulary: async (id: number): Promise<void> => {
+    return httpClient.delete<void>(`/user-vocabulary/${id}`);
   },
 };

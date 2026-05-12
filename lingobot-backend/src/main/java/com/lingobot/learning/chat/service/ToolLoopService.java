@@ -249,25 +249,6 @@ public class ToolLoopService {
                 try {
                     JsonNode jsonNode = objectMapper.readTree(text);
                     
-                    boolean isSentenceFeedback = false;
-                    if (jsonNode.has("action")) {
-                        String action = jsonNode.get("action").asText();
-                        isSentenceFeedback = "display_sentence_feedback".equals(action);
-                    }
-                    if (!isSentenceFeedback && jsonNode.has("display_mode")) {
-                        String displayMode = jsonNode.get("display_mode").asText();
-                        isSentenceFeedback = "sentence_feedback".equals(displayMode);
-                    }
-                    
-                    if (isSentenceFeedback) {
-                        if (jsonNode.has("feedback") && !jsonNode.get("feedback").isNull()) {
-                            String feedback = jsonNode.get("feedback").asText();
-                            if (feedback != null && !feedback.trim().isEmpty()) {
-                                return feedback;
-                            }
-                        }
-                    }
-                    
                     if (jsonNode.has("message") && !jsonNode.get("message").isNull()) {
                         String message = jsonNode.get("message").asText();
                         if (message != null && !message.trim().isEmpty()) {
