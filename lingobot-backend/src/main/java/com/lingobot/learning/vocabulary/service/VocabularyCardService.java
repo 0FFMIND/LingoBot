@@ -37,9 +37,11 @@ public interface VocabularyCardService {
      * 获取下一个词汇卡
      * @param conversationId 对话ID
      * @param currentPosition 当前位置（可选）
+     * @param category 词汇类别（可选）
+     * @param difficulty 难度级别（可选）
      * @return 下一个词汇卡DTO
      */
-    VocabularyCardDTO getNextCard(Long conversationId, Integer currentPosition, String level);
+    VocabularyCardDTO getNextCard(Long conversationId, Integer currentPosition, String category, String difficulty);
 
     /**
      * 获取上一个词汇卡
@@ -91,19 +93,21 @@ public interface VocabularyCardService {
     /**
      * 通过AI生成下一个新词汇卡
      * @param conversationId 对话ID
-     * @param level 难度级别（如A1, B2等）
+     * @param category 词汇类别（如 cefr, ielts, toefl）
+     * @param difficulty 难度级别（如 A1, B2, beginner 等）
      * @return 生成的词汇卡DTO
      */
-    VocabularyCardDTO generateNextCard(Long conversationId, String level);
+    VocabularyCardDTO generateNextCard(Long conversationId, String category, String difficulty);
 
     /**
      * 重新生成当前词汇卡
      * 删除当前未完成的词汇卡，生成新的替换
      * @param conversationId 对话ID
-     * @param level 难度级别
+     * @param category 词汇类别
+     * @param difficulty 难度级别
      * @return 重新生成的词汇卡DTO
      */
-    VocabularyCardDTO regenerateCard(Long conversationId, String level);
+    VocabularyCardDTO regenerateCard(Long conversationId, String category, String difficulty);
 
     /**
      * 删除对话的所有词汇卡

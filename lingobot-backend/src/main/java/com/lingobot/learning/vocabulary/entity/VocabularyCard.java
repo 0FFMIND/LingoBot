@@ -32,6 +32,10 @@ public class VocabularyCard {
     @JoinColumn(name = "conversation_id", nullable = false)
     private Conversation conversation;
 
+    /** 关联的标准化单词ID */
+    @Column(name = "vocabulary_word_id")
+    private Long vocabularyWordId;
+
     /** 单词 */
     @Column(nullable = false, length = 100)
     private String word;
@@ -56,13 +60,13 @@ public class VocabularyCard {
     @Column(name = "synonyms_json", columnDefinition = "TEXT")
     private String synonymsJson;
 
-    /** 反义词JSON存储 */
-    @Column(name = "antonyms_json", columnDefinition = "TEXT")
-    private String antonymsJson;
+    /** 词汇类别（如 cefr, ielts, toefl） */
+    @Column(name = "category", length = 20)
+    private String category;
 
-    /** 难度级别（如A1, B2, C1等） */
-    @Column(length = 10)
-    private String level;
+    /** 难度级别（如 A1, B2, C1, beginner, intermediate 等） */
+    @Column(name = "difficulty", length = 20)
+    private String difficulty;
 
     /** 在对话中的位置顺序*/
     @Column(nullable = false)
@@ -163,33 +167,6 @@ public class VocabularyCard {
             this.synonymsJson = mapper.writeValueAsString(synonyms);
         } catch (Exception e) {
             this.synonymsJson = null;
-        }
-    }
-
-    /** 从JSON解析反义词列表*/
-    public List<String> getAntonyms() {
-        if (antonymsJson == null || antonymsJson.isEmpty()) {
-            return new ArrayList<>();
-        }
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            return mapper.readValue(antonymsJson, List.class);
-        } catch (Exception e) {
-            return new ArrayList<>();
-        }
-    }
-
-    /** 将反义词列表序列化为JSON存储 */
-    public void setAntonyms(List<String> antonyms) {
-        if (antonyms == null || antonyms.isEmpty()) {
-            this.antonymsJson = null;
-            return;
-        }
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            this.antonymsJson = mapper.writeValueAsString(antonyms);
-        } catch (Exception e) {
-            this.antonymsJson = null;
         }
     }
 }

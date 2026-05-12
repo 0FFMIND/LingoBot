@@ -93,9 +93,10 @@ public class VocabularyCardController {
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> getNextCard(
             @PathVariable Long conversationId,
             @RequestParam(required = false) Integer currentPosition,
-            @RequestParam(required = false) String level) {
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String difficulty) {
         try {
-            VocabularyCardDTO card = vocabularyCardService.getNextCard(conversationId, currentPosition, level);
+            VocabularyCardDTO card = vocabularyCardService.getNextCard(conversationId, currentPosition, category, difficulty);
             return ResponseEntity.ok(ApiResponse.success(card));
         } catch (Exception e) {
             return ResponseEntity.ok(ApiResponse.success(e.getMessage(), null));
@@ -123,7 +124,7 @@ public class VocabularyCardController {
     /**
      * 生成下一个词汇卡（通过AI生成新单词）
      * @param conversationId 对话ID
-     * @param request 包含难度级别
+     * @param request 包含词汇类别和难度级别
      * @return 生成的词汇卡
      */
     @PostMapping("/conversations/{conversationId}/generate")
@@ -135,8 +136,9 @@ public class VocabularyCardController {
         log.info("冻结点数: {}，用于生成词汇卡", cost);
         
         try {
-            String level = request != null ? request.get("level") : null;
-            VocabularyCardDTO card = vocabularyCardService.generateNextCard(conversationId, level);
+            String category = request != null ? request.get("category") : null;
+            String difficulty = request != null ? request.get("difficulty") : null;
+            VocabularyCardDTO card = vocabularyCardService.generateNextCard(conversationId, category, difficulty);
             balanceService.confirmTransaction(transactionId);
             log.info("确认扣费: {}，生成词汇卡成功", cost);
             return ResponseEntity.status(HttpStatus.CREATED)
@@ -151,7 +153,7 @@ public class VocabularyCardController {
     /**
      * 重新生成当前词汇卡（删除当前未完成的，生成新的）
      * @param conversationId 对话ID
-     * @param request 包含难度级别
+     * @param request 包含词汇类别和难度级别
      * @return 重新生成的词汇卡
      */
     @PostMapping("/conversations/{conversationId}/regenerate")
@@ -163,8 +165,9 @@ public class VocabularyCardController {
         log.info("冻结点数: {}，用于重新生成词汇卡", cost);
         
         try {
-            String level = request != null ? request.get("level") : null;
-            VocabularyCardDTO card = vocabularyCardService.regenerateCard(conversationId, level);
+            String category = request != null ? request.get("category") : null;
+            String difficulty = request != null ? request.get("difficulty") : null;
+            VocabularyCardDTO card = vocabularyCardService.regenerateCard(conversationId, category, difficulty);
             balanceService.confirmTransaction(transactionId);
             log.info("确认扣费: {}，重新生成词汇卡成功", cost);
             return ResponseEntity.status(HttpStatus.CREATED)

@@ -441,43 +441,6 @@ public class VocabularyTool implements McpToolHandler {
             result.put("correct_meaning", cachedState.get("meaning"));
         }
 
-        String wordToMatch = targetWord != null && !targetWord.isEmpty() ? targetWord
-                : (cachedState != null && cachedState.containsKey("word") ? (String) cachedState.get("word") : "");
-
-        if (conversationId != null && isCorrect != null) {
-            try {
-                List<VocabularyCard> incompleteCards = vocabularyCardRepository
-                        .findIncompleteByConversationId(conversationId);
-                Optional<VocabularyCard> targetCard = Optional.empty();
-
-                if (!wordToMatch.isEmpty()) {
-                    targetCard = incompleteCards.stream()
-                            .filter(c -> wordToMatch.equalsIgnoreCase(c.getWord()))
-                            .findFirst();
-                }
-                if (!targetCard.isPresent() && !incompleteCards.isEmpty()) {
-                    targetCard = Optional.of(incompleteCards.get(0));
-                }
-
-                if (targetCard.isPresent()) {
-                    VocabularyCard card = targetCard.get();
-                    card.setMeaningIsCorrect(isCorrect);
-                    if (!checkFeedback.isEmpty()) {
-                        card.setMeaningCheckResult(checkFeedback);
-                    }
-                    card.setMeaningCheckCompleted(true);
-                    vocabularyCardRepository.save(card);
-                    evictCardAndConversationCache(card.getId(), conversationId);
-                    log.info("Saved meaning check result to vocabulary card id={} word={}, isCorrect={}",
-                            card.getId(), card.getWord(), isCorrect);
-                } else {
-                    log.warn("No vocabulary card found to save meaning check for conversation={}", conversationId);
-                }
-            } catch (Exception e) {
-                log.error("Failed to save meaning check to vocabulary card", e);
-            }
-        }
-
         return result;
     }
     

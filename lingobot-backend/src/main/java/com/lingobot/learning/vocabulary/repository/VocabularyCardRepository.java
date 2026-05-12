@@ -2,6 +2,7 @@ package com.lingobot.learning.vocabulary.repository;
 
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -51,4 +52,13 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
 
     /** 删除对话的所有词汇卡 */
     void deleteByConversationId(Long conversationId);
+
+    /** 获取用户某个单词的最近词汇卡（用于展示最新的内容） */
+    @Query("SELECT vc FROM VocabularyCard vc WHERE vc.conversation.user.id = :userId " +
+           "AND vc.vocabularyWordId = :vocabularyWordId AND vc.isRegenerated = false " +
+           "ORDER BY vc.createdAt DESC")
+    List<VocabularyCard> findLatestCardsByUserIdAndVocabularyWordId(
+            @Param("userId") Long userId,
+            @Param("vocabularyWordId") Long vocabularyWordId,
+            Pageable pageable);
 }

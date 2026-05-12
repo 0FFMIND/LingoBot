@@ -8,12 +8,14 @@ import AdminPage from './features/admin/components/AdminPage';
 import LogPage from './features/admin/components/LogPage';
 import RightPanel from './features/chat/components/RightPanel';
 import AccountSettings from './features/auth/components/AccountSettings';
+import VocabularyManager from './features/vocabulary/components/VocabularyManager';
 import { UserDTO } from './types';
 import { authApi } from './api';
 import { useAuthStore, useChatStore, useConversationStore } from './stores';
 import './App.css';
 
 type Route = 'chat' | 'log' | 'admin';
+type MainView = 'chat' | 'settings' | 'vocabulary-manager';
 
 function ChatApp() {
   const {
@@ -156,6 +158,14 @@ function ChatApp() {
     setMainView('chat');
   };
 
+  const handleOpenVocabularyManager = () => {
+    setMainView('vocabulary-manager');
+  };
+
+  const handleCloseVocabularyManager = () => {
+    setMainView('chat');
+  };
+
   const currentLearningMode = getCurrentLearningMode();
 
   return (
@@ -170,6 +180,7 @@ function ChatApp() {
         onLogout={handleLogoutComplete}
         onDeactivate={handleDeactivateClick}
         onOpenSettings={handleOpenSettings}
+        onOpenVocabularyManager={handleOpenVocabularyManager}
         onLoadMore={loadMoreConversations}
         onManualCompact={manualCompact}
         disabled={!isAuthenticated}
@@ -185,10 +196,14 @@ function ChatApp() {
       <div className="main-content-wrapper">
         {mainView === 'chat' ? (
           <ChatWindow />
-        ) : (
+        ) : mainView === 'settings' ? (
           <AccountSettings
             onClose={handleCloseSettings}
             onLogout={handleLogoutComplete}
+          />
+        ) : (
+          <VocabularyManager
+            onBack={handleCloseVocabularyManager}
           />
         )}
       </div>

@@ -7,18 +7,32 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/**
+ * 创建词汇卡的请求体 DTO。
+ *
+ * 用于手动创建词汇卡时接收前端传入的单词信息，
+ * 包含单词、音标、释义、例句、同义词、词汇类别和难度级别等字段。
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateVocabularyCardRequest {
 
+    // 单词
     private String word;
+    // 音标
     private String phonetic;
+    // 中文释义
     private String meaning;
+    // 英文例句
     private String example;
+    // 例句中文翻译
     private String exampleTranslation;
+    // 同义词列表
     private List<String> synonyms;
-    private List<String> antonyms;
-    private String level;
+    // 词汇类别（如 cefr, ielts, toefl）
+    private String category;
+    // 难度级别（如 A1, B2, C1, beginner, intermediate 等）
+    private String difficulty;
 }

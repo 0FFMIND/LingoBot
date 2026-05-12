@@ -16,6 +16,7 @@ interface SidebarProps {
   onLogout: () => void;
   onDeactivate: () => void;
   onOpenSettings: () => void;
+  onOpenVocabularyManager?: () => void;
   onLoadMore?: () => void;
   onManualCompact?: (conversationId: number) => void;
   disabled?: boolean;
@@ -38,6 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
   onDeactivate,
   onOpenSettings,
+  onOpenVocabularyManager,
   onLoadMore,
   onManualCompact,
   disabled = false,
@@ -155,7 +157,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const handleKnowledgeBaseClick = () => {
-    alert('知识库管理功能开发中...');
+    if (onOpenVocabularyManager && !disabled) {
+      onOpenVocabularyManager();
+    }
   };
 
   const handleSearchClick = () => {
@@ -254,8 +258,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           onClick={handleKnowledgeBaseClick}
           disabled={disabled}
         >
-          <span className="menu-item-icon">📁</span>
-          <span className="menu-item-text">知识库管理</span>
+          <span className="menu-item-icon">📚</span>
+          <span className="menu-item-text">单词卡管理</span>
         </button>
 
         <button

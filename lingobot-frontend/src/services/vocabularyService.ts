@@ -1,5 +1,14 @@
 import { authUtils, httpClient } from './httpClient';
-import { VocabularyCardDTO, CreateVocabularyCardRequest, UserDTO } from '../types';
+import {
+  VocabularyCardDTO,
+  CreateVocabularyCardRequest,
+  UserDTO,
+  VocabularyStatsDTO,
+  UserVocabularyDTO,
+  PageResponseDTO,
+  VocabularyStatus,
+  VocabularySortBy,
+} from '../types';
 
 const refreshCurrentUserBalance = async (): Promise<void> => {
   try {
@@ -123,5 +132,29 @@ export const vocabularyService = {
       meaningIsCorrect?: boolean;
       meaningCheckResult: string;
     }>(`/vocabulary/cards/${cardId}/meaning-check`);
+  },
+
+  getVocabularyStats: async (): Promise<VocabularyStatsDTO> => {
+    return httpClient.get<VocabularyStatsDTO>('/user-vocabulary/stats');
+  },
+
+  getUserVocabularies: async (params: {
+    status?: VocabularyStatus;
+    filterType?: string;
+    sortBy?: VocabularySortBy;
+    page?: number;
+    size?: number;
+  }): Promise<PageResponseDTO<UserVocabularyDTO>> => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.set('status', params.status);
+    if (params.filterType) queryParams.set('filterType', params.filterType);
+    if (params.sortBy) queryParams.set('sortBy', params.sortBy);
+    if (params.page !== undefined) queryParams.set('page', String(params.page));
+    if (params.size !== undefined) queryParams.set('size', String(params.size));
+    
+    const query = queryParams.toString();
+    return httpClient.get<PageResponseDTO<UserVocabularyDTO>>(
+      `/user-vocabulary/list${query ? `?${query}` : ''}`
+    );
   },
 };

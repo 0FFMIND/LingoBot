@@ -206,8 +206,11 @@ public class MessageHistoryService {
                 if (card.getMeaning() != null && !card.getMeaning().isEmpty()) {
                     sb.append("   - 释义: ").append(card.getMeaning()).append("\n");
                 }
-                if (card.getLevel() != null && !card.getLevel().isEmpty()) {
-                    sb.append("   - 难度: ").append(card.getLevel()).append("\n");
+                if (card.getCategory() != null && !card.getCategory().isEmpty()) {
+                    sb.append("   - 词汇类别: ").append(card.getCategory()).append("\n");
+                }
+                if (card.getDifficulty() != null && !card.getDifficulty().isEmpty()) {
+                    sb.append("   - 难度: ").append(card.getDifficulty()).append("\n");
                 }
                 
                 if (card.getUserMeaningGuess() != null && !card.getUserMeaningGuess().isEmpty()) {

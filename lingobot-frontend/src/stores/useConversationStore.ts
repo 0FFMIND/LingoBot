@@ -14,7 +14,7 @@ interface ConversationStore {
   showModeSelectorForNewChat: boolean
   conversationLearningModes: Record<number, LearningMode>
   globalLearningMode: LearningMode
-  mainView: 'chat' | 'settings'
+  mainView: 'chat' | 'settings' | 'vocabulary-manager'
 
   loadConversations: () => Promise<void>
   loadMoreConversations: () => Promise<void>
@@ -25,7 +25,7 @@ interface ConversationStore {
   handleLearningModeSelect: (selectedMode: LearningMode) => Promise<void>
   getCurrentLearningMode: () => LearningMode
   isWaitingForMode: () => boolean
-  setMainView: (v: 'chat' | 'settings') => void
+  setMainView: (v: 'chat' | 'settings' | 'vocabulary-manager') => void
   reset: () => void
 }
 
