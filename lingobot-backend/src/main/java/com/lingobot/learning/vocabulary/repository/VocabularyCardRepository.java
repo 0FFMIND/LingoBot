@@ -134,6 +134,24 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
     Optional<MeaningCheckStatusProjection> findMeaningCheckStatusByCardId(@Param("cardId") Long cardId);
 
     /** 删除对话的所有词汇卡 */
+    interface CardLearningContextProjection {
+        Long getCardId();
+        Long getConversationId();
+        Long getUserId();
+        Long getVocabularyWordId();
+    }
+
+    @Query(value = """
+            SELECT vc.id AS cardId,
+                   vc.conversation_id AS conversationId,
+                   c.user_id AS userId,
+                   vc.vocabulary_word_id AS vocabularyWordId
+            FROM vocabulary_cards vc
+            JOIN conversations c ON c.id = vc.conversation_id
+            WHERE vc.id = :cardId
+            """, nativeQuery = true)
+    Optional<CardLearningContextProjection> findLearningContextByCardId(@Param("cardId") Long cardId);
+
     void deleteByConversationId(Long conversationId);
 
     /** 获取用户某个单词的最近词汇卡（用于展示最新的内容） */

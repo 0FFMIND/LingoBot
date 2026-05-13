@@ -6,7 +6,6 @@ import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.dto.openai.OpenAiTool;
 import com.lingobot.learning.llm.tool.service.McpService;
-import com.lingobot.learning.mode.service.SystemPromptService;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,9 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -33,7 +30,7 @@ public class SentenceAnalysisService {
 
     private final ToolLoopService toolLoopService;
     private final McpService mcpService;
-    private final SystemPromptService systemPromptService;
+    private final VocabularyPromptService vocabularyPromptService;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final UserVocabularyService userVocabularyService;
     private final ObjectMapper objectMapper;
@@ -44,18 +41,17 @@ public class SentenceAnalysisService {
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
 
-    /**
-     * 异步分析用户的英文句子
-     * 检查：1）是否与中文例句意思匹配；2）是否包含新单词
-     */
+    // 异步分析用户写的英文句子：检查意思是否与中文例句匹配、是否包含目标新单词
     @Async("meaningCheckExecutor")
-    @Transactional
     public void analyzeUserSentenceAsync(Long cardId) {
         try {
             log.info("Starting async sentence analysis for cardId={}", cardId);
 
             VocabularyCard card = vocabularyCardRepository.findById(cardId)
                     .orElseThrow(() -> new IllegalArgumentException("Vocabulary card not found: " + cardId));
+            VocabularyCardRepository.CardLearningContextProjection learningContext = vocabularyCardRepository
+                    .findLearningContextByCardId(cardId)
+                    .orElseThrow(() -> new IllegalArgumentException("Vocabulary card learning context not found: " + cardId));
 
             String word = card.getWord();
             String chineseSentence = card.getChineseSentenceForTranslation();
@@ -74,37 +70,28 @@ public class SentenceAnalysisService {
                 return;
             }
 
-            String systemPrompt = systemPromptService.getSystemPrompt("vocabulary");
-
-            List<OpenAiChatMessage> messages = new ArrayList<>();
-            messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
-            messages.add(OpenAiChatMessage.createTextMessage("user", String.format(
-                    "[intent:analyze_sentence][current_word:%s]%n" +
-                    "Chinese sentence: %s%n" +
-                    "User's English sentence: %s%n" +
-                    "Please analyze: 1) Does the English sentence match the meaning of the Chinese sentence? " +
-                    "2) Does the English sentence contain the new word '%s'?%n" +
-                    "Give detailed feedback.",
+            String systemPrompt = vocabularyPromptService.getSentenceAnalysisPrompt(
                     word,
+                    card.getPhonetic(),
+                    card.getPartOfSpeech(),
+                    card.getMeaning(),
                     chineseSentence,
-                    userEnglishSentence,
-                    word
-            )));
+                    userEnglishSentence);
 
-            List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary");
+            List<OpenAiChatMessage> messages = List.of(
+                    OpenAiChatMessage.createTextMessage("system", systemPrompt));
+
+            List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary", "analyze_sentence");
             if (tools == null || tools.isEmpty()) {
                 log.warn("No vocabulary tools available for sentence analysis");
                 return;
             }
 
-            Long conversationId = card.getConversation() != null ? card.getConversation().getId() : null;
-            // Capture lazy relation ids before tool execution; native tool updates can detach this entity.
-            Long vocabularyWordId = card.getVocabularyWordId();
-            Long userId = card.getConversation() != null && card.getConversation().getUser() != null
-                    ? card.getConversation().getUser().getId()
-                    : null;
+            Long conversationId = learningContext.getConversationId();
+            Long vocabularyWordId = learningContext.getVocabularyWordId();
+            Long userId = learningContext.getUserId();
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
-                    conversationId, messages, tools, DEFAULT_MODEL);
+                    null, messages, tools, DEFAULT_MODEL);
             persistSentenceAnalysisResult(cardId, conversationId, vocabularyWordId, userId, result);
             log.info("Sentence analysis completed for cardId={}", cardId);
         } catch (Exception e) {
@@ -112,9 +99,7 @@ public class SentenceAnalysisService {
         }
     }
 
-    /**
-     * 持久化句子分析结果
-     */
+    // 解析 AI 工具返回结果并通过原生 SQL 持久化句子分析状态，同步更新用户学习进度
     private void persistSentenceAnalysisResult(Long cardId, Long conversationId, Long vocabularyWordId, Long userId,
                                                ToolLoopService.ToolLoopResult result) {
         if (result == null || !result.hasToolCalls() || result.getToolResultText() == null) {
@@ -136,6 +121,11 @@ public class SentenceAnalysisService {
 
             String finalAnalysis = !feedback.isEmpty() ? feedback : analysis;
 
+            if (userId != null && vocabularyWordId != null) {
+                boolean overallCorrect = Boolean.TRUE.equals(meaningMatches) && Boolean.TRUE.equals(hasNewWord);
+                userVocabularyService.updateProgress(userId, vocabularyWordId, overallCorrect);
+            }
+
             // Keep sentence status updates on the same direct-update path as meaning checks.
             int updatedRows = vocabularyCardRepository.updateSentenceAnalysisResult(
                     cardId,
@@ -144,16 +134,12 @@ public class SentenceAnalysisService {
                     finalAnalysis != null ? finalAnalysis : "");
             evictCardAndConversationCache(cardId, conversationId);
             log.info("Persisted sentence analysis by cardId={}, rows={}", cardId, updatedRows);
-
-            if (userId != null && vocabularyWordId != null) {
-                boolean overallCorrect = Boolean.TRUE.equals(meaningMatches) && Boolean.TRUE.equals(hasNewWord);
-                userVocabularyService.updateProgress(userId, vocabularyWordId, overallCorrect);
-            }
         } catch (Exception e) {
             log.error("Failed to persist sentence analysis result for cardId={}", cardId, e);
         }
     }
 
+    // 清除词汇卡及所属对话的 Redis 缓存，确保前端轮询拿到最新状态
     private void evictCardAndConversationCache(Long cardId, Long conversationId) {
         if (cardId != null) {
             stringRedisTemplate.delete(CACHE_KEY_CARD + cardId);

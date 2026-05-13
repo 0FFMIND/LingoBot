@@ -82,6 +82,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         }
         """;
 
+    // 调用 LLM 完善词汇信息：读取当前字段 → 构建提示词 → 解析 AI 返回 → 更新词汇记录
     @Transactional
     public UserVocabularyDTO modifyWithAI(AIModifyVocabularyRequest request) {
         Long userId = authService.getCurrentUserId();
@@ -129,6 +130,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         return userVocabularyService.updateVocabulary(userId, request.getId(), updateRequest);
     }
 
+    // 解析 AI 返回的 JSON，用有效字段覆盖 updateRequest，无效字段保留原值
     private UpdateUserVocabularyRequest parseAIResponse(
             String aiResponse,
             AIModifyVocabularyRequest original,
@@ -180,6 +182,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         return updateRequest;
     }
 
+    // 将 JSON 节点中的非空字符串字段写入 setter
     private void applyText(JsonNode root, String field, java.util.function.Consumer<String> setter) {
         if (root.has(field) && !root.get(field).isNull()) {
             String value = root.get(field).asText().trim();
@@ -189,6 +192,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         }
     }
 
+    // 将 JSON 节点中通过校验的字符串字段写入 setter，校验不通过则保留原值
     private void applyValidatedText(
             JsonNode root,
             String field,
@@ -202,6 +206,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         }
     }
 
+    // 从 JSON 节点解析同义词数组并写入 updateRequest
     private void applySynonyms(JsonNode root, UpdateUserVocabularyRequest updateRequest) {
         if (!root.has("synonyms") || !root.get("synonyms").isArray()) {
             return;
@@ -216,6 +221,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         updateRequest.setSynonyms(synonyms);
     }
 
+    // 从文本中提取第一个完整的 JSON 对象（按括号深度匹配）
     private String extractJson(String text) {
         if (text == null) return null;
         int start = text.indexOf('{');
@@ -236,6 +242,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         return end < 0 ? null : text.substring(start, end + 1);
     }
 
+    // 校验词性是否在允许的枚举值范围内（n./v./adj. 等）
     private boolean isValidPartOfSpeech(String pos) {
         if (pos == null) return false;
         String[] valid = {"n.", "v.", "adj.", "adv.", "prep.", "conj.", "pron.", "interj.", "det."};
@@ -245,10 +252,12 @@ private static final String USER_PROMPT_TEMPLATE = """
         return false;
     }
 
+    // 校验词汇类别是否合法（cefr/ielts/toefl）
     private boolean isValidCategory(String category) {
         return "cefr".equals(category) || "ielts".equals(category) || "toefl".equals(category);
     }
 
+    // 校验难度级别是否与词汇类别匹配（不同类别有各自的难度枚举）
     private boolean isDifficultyValidForCategory(String difficulty, String category) {
         if (difficulty == null || category == null) return false;
         return switch (category) {
@@ -259,6 +268,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         };
     }
 
+    // 获取各词汇类别的默认难度值（类别与难度不匹配时的兜底）
     private String getDefaultDifficultyForCategory(String category) {
         return switch (category) {
             case "cefr" -> "b2";
@@ -277,6 +287,7 @@ private static final String USER_PROMPT_TEMPLATE = """
         return false;
     }
 
+    // 优先返回非空的 preferred，否则返回 fallback（null 时返回空字符串）
     private String firstNonBlank(String preferred, String fallback) {
         return isNotBlank(preferred) ? preferred.trim() : (fallback != null ? fallback : "");
     }

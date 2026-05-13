@@ -3,6 +3,7 @@ package com.lingobot.learning.vocabulary.service.impl;
 import com.lingobot.infrastructure.common.dto.PageResponseDTO;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.learning.vocabulary.dto.UpdateUserVocabularyRequest;
+import com.lingobot.learning.vocabulary.dto.UpdateLearningStateRequest;
 import com.lingobot.learning.vocabulary.dto.UserVocabularyDTO;
 import com.lingobot.learning.vocabulary.dto.VocabularyStatsDTO;
 import com.lingobot.learning.vocabulary.entity.UserVocabulary;
@@ -48,12 +49,14 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
         return upsertProgress(userId, vocabularyWordId, VocabularyEventType.NEW_LEARNING);
     }
 
+    // 新增或更新用户学习记录（从词汇卡获取信息，默认事件类型为 NEW_LEARNING）
     @Override
     @Transactional
     public UserVocabulary upsertProgress(Long userId, VocabularyCard card) {
         return upsertProgress(userId, card, VocabularyEventType.NEW_LEARNING);
     }
 
+    // 新增或更新用户学习记录（从词汇卡获取信息，指定事件类型），同步刷新词汇卡展示字段
     @Override
     @Transactional
     public UserVocabulary upsertProgress(Long userId, VocabularyCard card, VocabularyEventType eventType) {
@@ -114,38 +117,78 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
     @Override
     @Transactional
     public UserVocabulary updateProgress(Long userId, Long vocabularyWordId, boolean isCorrect) {
-        return userVocabularyRepository.findByUserIdAndVocabularyWordId(userId, vocabularyWordId)
-                .map(progress -> {
-                    progress.setLastEventType(VocabularyEventType.HYBRID);
-                    progress.setLastSeenAt(LocalDateTime.now());
-                    if (isCorrect) {
-                        progress.setCorrectCount(progress.getCorrectCount() + 1);
-                    } else {
-                        progress.setWrongCount(progress.getWrongCount() + 1);
-                    }
-                    progress.setSeenCount(progress.getSeenCount() + 1);
-                    
-                    int totalAttempts = progress.getCorrectCount() + progress.getWrongCount();
-                    if (totalAttempts > 0) {
-                        BigDecimal newScore = BigDecimal.valueOf(progress.getCorrectCount())
-                                .divide(BigDecimal.valueOf(totalAttempts), 2, RoundingMode.HALF_UP);
-                        progress.setMasteryScore(newScore);
-                        
-                        if (newScore.compareTo(new BigDecimal("0.90")) >= 0) {
-                            progress.setStatus(VocabularyStatus.MASTERED);
-                        } else if (newScore.compareTo(new BigDecimal("0.60")) >= 0) {
-                            progress.setStatus(VocabularyStatus.REVIEWING);
-                        } else if (progress.getSeenCount() > 1) {
-                            progress.setStatus(VocabularyStatus.LEARNING);
-                        }
-                    }
+        UserVocabulary progress = userVocabularyRepository.findByUserIdAndVocabularyWordId(userId, vocabularyWordId)
+                .orElseGet(() -> createProgressForResult(userId, vocabularyWordId));
+        return applyResult(progress, isCorrect);
+    }
 
-                    progress.setNextReviewAt(calculateNextReviewAt(progress.getMasteryScore(), isCorrect));
-                    
-                    return userVocabularyRepository.save(progress);
-                })
-                .orElseThrow(() -> new RuntimeException(
-                        "UserVocabulary not found for userId=" + userId + ", vocabularyWordId=" + vocabularyWordId));
+    // 在结果更新时找不到现有记录时创建兜底进度（正常不应触发，仅防御性处理）
+    private UserVocabulary createProgressForResult(Long userId, Long vocabularyWordId) {
+        log.warn("UserVocabulary missing during result update; creating fallback progress for userId={}, vocabularyWordId={}",
+                userId, vocabularyWordId);
+        UserVocabulary progress = UserVocabulary.builder()
+                .userId(userId)
+                .vocabularyWordId(vocabularyWordId)
+                .word("")
+                .status(VocabularyStatus.LEARNING)
+                .masteryScore(BigDecimal.ZERO)
+                .seenCount(0)
+                .correctCount(0)
+                .wrongCount(0)
+                .firstSeenAt(LocalDateTime.now())
+                .lastSeenAt(LocalDateTime.now())
+                .lastEventType(VocabularyEventType.HYBRID)
+                .nextReviewAt(LocalDateTime.now().plusDays(1))
+                .build();
+
+        VocabularyCard latestCard = getLatestCard(userId, vocabularyWordId);
+        if (latestCard != null) {
+            copyDisplayFields(progress, latestCard);
+        }
+        return progress;
+    }
+
+    // 根据测验结果更新计数、重新计算掌握程度和学习状态，并调度下次复习时间
+    private UserVocabulary applyResult(UserVocabulary progress, boolean isCorrect) {
+        progress.setLastEventType(VocabularyEventType.HYBRID);
+        progress.setLastSeenAt(LocalDateTime.now());
+        if (progress.getFirstSeenAt() == null) {
+            progress.setFirstSeenAt(LocalDateTime.now());
+        }
+        if (progress.getSeenCount() == null) {
+            progress.setSeenCount(0);
+        }
+        if (progress.getCorrectCount() == null) {
+            progress.setCorrectCount(0);
+        }
+        if (progress.getWrongCount() == null) {
+            progress.setWrongCount(0);
+        }
+
+        if (isCorrect) {
+            progress.setCorrectCount(progress.getCorrectCount() + 1);
+        } else {
+            progress.setWrongCount(progress.getWrongCount() + 1);
+        }
+        progress.setSeenCount(progress.getSeenCount() + 1);
+
+        int totalAttempts = progress.getCorrectCount() + progress.getWrongCount();
+        if (totalAttempts > 0) {
+            BigDecimal newScore = BigDecimal.valueOf(progress.getCorrectCount())
+                    .divide(BigDecimal.valueOf(totalAttempts), 2, RoundingMode.HALF_UP);
+            progress.setMasteryScore(newScore);
+
+            if (newScore.compareTo(new BigDecimal("0.90")) >= 0) {
+                progress.setStatus(VocabularyStatus.MASTERED);
+            } else if (newScore.compareTo(new BigDecimal("0.60")) >= 0) {
+                progress.setStatus(VocabularyStatus.REVIEWING);
+            } else {
+                progress.setStatus(VocabularyStatus.LEARNING);
+            }
+        }
+
+        progress.setNextReviewAt(calculateNextReviewAt(progress.getMasteryScore(), isCorrect));
+        return userVocabularyRepository.save(progress);
     }
 
     // 根据掌握程度和测验结果计算下次复习时间（模拟艾宾浩斯遗忘曲线）
@@ -226,6 +269,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
         );
     }
 
+    // 手动更新用户词汇信息，仅允许修改当前用户自己的记录
     @Override
     @Transactional
     public UserVocabularyDTO updateVocabulary(Long userId, Long id, UpdateUserVocabularyRequest request) {
@@ -247,6 +291,35 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
         return toDTO(userId, vocabulary);
     }
 
+    // 手动更新学习状态（状态、掌握度、下次复习时间）
+    @Override
+    @Transactional
+    public UserVocabularyDTO updateLearningState(Long userId, Long id, UpdateLearningStateRequest request) {
+        UserVocabulary vocabulary = userVocabularyRepository.findById(id)
+                .filter(item -> item.getUserId().equals(userId))
+                .orElseThrow(() -> ChatException.badRequest("Vocabulary not found: " + id));
+
+        if (request.getStatus() != null) {
+            try {
+                vocabulary.setStatus(VocabularyStatus.valueOf(request.getStatus()));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        if (request.getMasteryScore() != null) {
+            BigDecimal score = request.getMasteryScore().max(BigDecimal.ZERO).min(BigDecimal.ONE);
+            vocabulary.setMasteryScore(score);
+        }
+        if (Boolean.TRUE.equals(request.getNeverReview())) {
+            vocabulary.setNextReviewAt(null);
+        } else if (request.getNextReviewAt() != null) {
+            vocabulary.setNextReviewAt(request.getNextReviewAt());
+        }
+
+        userVocabularyRepository.save(vocabulary);
+        return toDTO(userId, vocabulary);
+    }
+
+    // 删除用户词汇记录，仅允许删除当前用户自己的数据
     @Override
     @Transactional
     public void deleteVocabulary(Long userId, Long id) {
@@ -303,6 +376,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                 .build();
     }
 
+    // 获取用户对某个单词的最新词汇卡（用于展示字段填充）
     private VocabularyCard getLatestCard(Long userId, Long vocabularyWordId) {
         List<VocabularyCard> latestCards = vocabularyCardRepository
                 .findLatestCardsByUserIdAndVocabularyWordId(
@@ -312,6 +386,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
         return latestCards.isEmpty() ? null : latestCards.get(0);
     }
 
+    // 从词汇卡同步展示字段到用户词汇记录（单词、音标、释义、同义词等）
     private void copyDisplayFields(UserVocabulary vocabulary, VocabularyCard card) {
         vocabulary.setWord(card.getWord());
         vocabulary.setPhonetic(card.getPhonetic());
@@ -322,10 +397,12 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
         vocabulary.setDifficulty(card.getDifficulty());
     }
 
+    // 判断字符串是否非空白
     private boolean isNotBlank(String value) {
         return value != null && !value.trim().isEmpty();
     }
 
+    // trim 后若为空则返回 null，用于清空可选字段
     private String trimToNull(String value) {
         return isNotBlank(value) ? value.trim() : null;
     }

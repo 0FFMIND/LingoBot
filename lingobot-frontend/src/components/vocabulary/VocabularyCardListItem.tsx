@@ -60,7 +60,9 @@ const VocabularyCardListItem: React.FC<VocabularyCardListItemProps> = ({
       <div className="vocabulary-item-main">
         <div className="vocabulary-word-block">
           <div className="vocabulary-word-row">
-            <span className="vocabulary-word">{item.word || '未知单词'}</span>
+            <span className="vocabulary-word" title={item.word || '未知单词'}>
+              {item.word || '未知单词'}
+            </span>
             <button
               className="vocabulary-play-btn"
               onClick={() => onPlayAudio?.(item.word || '')}
@@ -73,9 +75,9 @@ const VocabularyCardListItem: React.FC<VocabularyCardListItemProps> = ({
           <div className="vocabulary-phonetic">{formatPhonetic(item.phonetic)}</div>
         </div>
 
-        <div className="vocabulary-meaning">
+        <div className="vocabulary-meaning" title={`${item.partOfSpeech ? `${item.partOfSpeech} ` : ''}${item.meaning || '暂无释义'}`}>
           {item.partOfSpeech && <span className="vocabulary-pos">{item.partOfSpeech}</span>}
-          {item.meaning || '暂无释义'}
+          <span className="vocabulary-meaning-text">{item.meaning || '暂无释义'}</span>
         </div>
 
         <span className={`vocabulary-status-tag ${statusClass}`}>

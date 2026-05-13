@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  VocabularyTab, 
-  VocabularySortBy, 
-  VocabularyStatus, 
+import {
+  VocabularyTab,
+  VocabularySortBy,
+  VocabularyStatus,
   UserVocabularyDTO,
   PageResponseDTO,
   VocabularyStatsDTO,
   VOCABULARY_CATEGORIES,
   VOCABULARY_DIFFICULTIES,
+  UpdateLearningStateRequest,
 } from '../../types';
 import { vocabularyService } from '../../services';
 import VocabularyCardListItem from './VocabularyCardListItem';
@@ -56,6 +57,8 @@ const partOfSpeechOptions = [
 ];
 
 const PAGE_SIZE = 7;
+const PREFETCH_PAGES = 10;
+const PREFETCH_SIZE = PREFETCH_PAGES * PAGE_SIZE;
 
 const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<VocabularyTab>('all');
@@ -68,6 +71,8 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [editingItem, setEditingItem] = useState<UserVocabularyDTO | null>(null);
+  const [editTab, setEditTab] = useState<'card' | 'state'>('card');
+  const [deletingItem, setDeletingItem] = useState<UserVocabularyDTO | null>(null);
   const [editForm, setEditForm] = useState({
     word: '',
     phonetic: '',
@@ -76,6 +81,13 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
     category: '',
     difficulty: '',
   });
+  const [learningStateForm, setLearningStateForm] = useState({
+    status: '' as VocabularyStatus | '',
+    masteryScore: 0,
+    nextReviewAt: '',
+    neverReview: false,
+  });
+  const [savingLearningState, setSavingLearningState] = useState(false);
   const [aiModifying, setAiModifying] = useState(false);
 
   const getTabCount = (tab: VocabularyTab): number => {
@@ -99,29 +111,53 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
     }
   }, []);
 
+  const loadBatch = useCallback(async (startPage: number): Promise<{
+    items: UserVocabularyDTO[];
+    totalPages: number;
+    totalElements: number;
+  }> => {
+    const tabConfig = tabs.find(t => t.key === activeTab)!;
+    const pageRequests = [];
+    
+    for (let i = 0; i < PREFETCH_PAGES; i++) {
+      pageRequests.push(
+        vocabularyService.getUserVocabularies({
+          status: tabConfig.status,
+          filterType: tabConfig.filterType,
+          sortBy,
+          search: searchKeyword || undefined,
+          page: startPage + i,
+          size: PAGE_SIZE,
+        })
+      );
+    }
+
+    const responses = await Promise.all(pageRequests);
+    const allContent = responses.flatMap(r => r.content);
+    const firstResponse = responses[0];
+
+    return {
+      items: allContent,
+      totalPages: firstResponse.totalPages,
+      totalElements: firstResponse.totalElements,
+    };
+  }, [activeTab, sortBy, searchKeyword]);
+
   const loadItems = useCallback(async (pageNum: number) => {
     setLoading(true);
-    const tabConfig = tabs.find(t => t.key === activeTab)!;
 
     try {
-      const response: PageResponseDTO<UserVocabularyDTO> = await vocabularyService.getUserVocabularies({
-        status: tabConfig.status,
-        filterType: tabConfig.filterType,
-        sortBy,
-        search: searchKeyword || undefined,
-        page: pageNum,
-        size: PAGE_SIZE,
-      });
+      const batchData = await loadBatch(0);
 
-      setItems(response.content);
-      setTotalElements(response.totalElements);
-      setTotalPages(response.totalPages);
+      setItems(batchData.items);
+      setTotalElements(batchData.totalElements);
+      setTotalPages(batchData.totalPages);
     } catch (error) {
       console.error('Failed to load vocabulary items:', error);
     } finally {
       setLoading(false);
     }
-  }, [activeTab, sortBy, searchKeyword]);
+  }, [loadBatch]);
 
   useEffect(() => {
     loadStats();
@@ -137,7 +173,6 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
       return;
     }
     setPage(newPage);
-    loadItems(newPage);
   };
 
   const paginationButtons = useMemo(() => {
@@ -184,6 +219,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
 
   const handleEditClick = (item: UserVocabularyDTO) => {
     setEditingItem(item);
+    setEditTab('card');
     setEditForm({
       word: item.word || '',
       phonetic: item.phonetic || '',
@@ -191,6 +227,51 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
       meaning: item.meaning || '',
       category: item.category || '',
       difficulty: item.difficulty || '',
+    });
+    const nextReview = item.nextReviewAt
+      ? new Date(item.nextReviewAt).toISOString().slice(0, 16)
+      : '';
+    setLearningStateForm({
+      status: item.status || '',
+      masteryScore: Math.round((item.masteryScore || 0) * 100),
+      nextReviewAt: nextReview,
+      neverReview: !item.nextReviewAt,
+    });
+  };
+
+  const handleSaveLearningState = async () => {
+    if (!editingItem) return;
+    setSavingLearningState(true);
+    try {
+      const request: UpdateLearningStateRequest = {
+        status: learningStateForm.status as VocabularyStatus || undefined,
+        masteryScore: learningStateForm.masteryScore / 100,
+        neverReview: learningStateForm.neverReview,
+        nextReviewAt: learningStateForm.neverReview
+          ? null
+          : learningStateForm.nextReviewAt
+            ? new Date(learningStateForm.nextReviewAt).toISOString()
+            : undefined,
+      };
+      const updated = await vocabularyService.updateLearningState(editingItem.id, request);
+      setItems(prev => prev.map(item => item.id === updated.id ? updated : item));
+      setEditingItem(updated);
+      setEditTab('card');
+      loadStats();
+    } catch (error) {
+      console.error('Failed to update learning state:', error);
+      alert('保存失败，请稍后再试');
+    } finally {
+      setSavingLearningState(false);
+    }
+  };
+
+  const handleSetMastered = async () => {
+    setLearningStateForm({
+      status: 'MASTERED',
+      masteryScore: 100,
+      nextReviewAt: '',
+      neverReview: true,
     });
   };
 
@@ -279,16 +360,64 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
     }
   };
 
-  const handleDelete = async (item: UserVocabularyDTO) => {
-    const word = item.word || '这个单词';
-    if (!window.confirm(`确定删除「${word}」吗？删除后它不会出现在单词卡管理列表中。`)) {
-      return;
+  const currentPageItems = useMemo(() => {
+    const startIndex = page * PAGE_SIZE;
+    const endIndex = startIndex + PAGE_SIZE;
+    return items.slice(startIndex, endIndex);
+  }, [items, page]);
+
+  const fetchNextBatchIfNeeded = useCallback(async () => {
+    const maxPageInItems = Math.ceil(items.length / PAGE_SIZE) - 1;
+    
+    if (page >= maxPageInItems && totalPages > maxPageInItems + 1) {
+      const nextStartPage = (Math.ceil(items.length / PREFETCH_SIZE)) * PREFETCH_PAGES;
+      if (nextStartPage < totalPages) {
+        try {
+          const batchData = await loadBatch(nextStartPage);
+          setItems(prev => [...prev, ...batchData.items]);
+          setTotalPages(batchData.totalPages);
+          setTotalElements(batchData.totalElements);
+        } catch (error) {
+          console.error('Failed to prefetch next batch:', error);
+        }
+      }
     }
+  }, [items, page, totalPages, loadBatch]);
+
+  const handleDeleteClick = (item: UserVocabularyDTO) => {
+    setDeletingItem(item);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingItem) return;
+    
+    const itemId = deletingItem.id;
+    
     try {
-      await vocabularyService.deleteUserVocabulary(item.id);
-      setItems(prev => prev.filter(current => current.id !== item.id));
-      setTotalElements(prev => Math.max(0, prev - 1));
+      await vocabularyService.deleteUserVocabulary(itemId);
+      
+      const newTotalElements = totalElements - 1;
+      const newTotalPages = Math.ceil(newTotalElements / PAGE_SIZE);
+      
+      setItems(prev => {
+        const newItems = prev.filter(current => current.id !== itemId);
+        
+        if (page >= newTotalPages && newTotalPages > 0) {
+          setPage(newTotalPages - 1);
+        }
+        
+        return newItems;
+      });
+      
+      setTotalElements(newTotalElements);
+      setTotalPages(newTotalPages);
+      setDeletingItem(null);
       loadStats();
+      
+      setTimeout(() => {
+        fetchNextBatchIfNeeded();
+      }, 0);
+      
     } catch (error) {
       console.error('Failed to delete vocabulary:', error);
       alert('删除失败，请稍后再试');
@@ -351,7 +480,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
       </div>
 
       <div className="vocabulary-list-container">
-        {items.length === 0 && !loading ? (
+        {currentPageItems.length === 0 && !loading ? (
           <div className="vocabulary-empty-state">
             <div className="empty-icon">📖</div>
             <h3>暂无单词</h3>
@@ -360,13 +489,13 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
         ) : (
           <>
             <div className="vocabulary-list">
-              {items.map(item => (
+              {currentPageItems.map(item => (
                 <VocabularyCardListItem
                   key={item.id}
                   item={item}
                   onPlayAudio={handlePlayAudio}
                   onEdit={handleEditClick}
-                  onDelete={handleDelete}
+                  onDelete={handleDeleteClick}
                 />
               ))}
             </div>
@@ -378,7 +507,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
               </div>
             )}
             
-            {!loading && totalPages > 1 && items.length > 0 && (
+            {!loading && totalPages > 1 && currentPageItems.length > 0 && (
               <div className="pagination-section">
                 <button
                   className="pagination-btn"
@@ -423,58 +552,203 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
         <div className="vocabulary-edit-overlay" onClick={() => setEditingItem(null)}>
           <div className="vocabulary-edit-modal" onClick={(event) => event.stopPropagation()}>
             <div className="vocabulary-edit-header">
-              <h3>编辑单词卡</h3>
+              <h3>{editTab === 'card' ? '编辑单词卡' : '编辑学习状态'}</h3>
+              <div className="vocabulary-edit-header-tabs">
+                <button
+                  className={`edit-tab-btn ${editTab === 'card' ? 'active' : ''}`}
+                  onClick={() => setEditTab('card')}
+                  type="button"
+                >
+                  单词卡
+                </button>
+                <button
+                  className={`edit-tab-btn ${editTab === 'state' ? 'active' : ''}`}
+                  onClick={() => setEditTab('state')}
+                  type="button"
+                >
+                  学习状态
+                </button>
+              </div>
               <button className="vocabulary-edit-close" onClick={() => setEditingItem(null)} type="button">×</button>
             </div>
-            <div className="vocabulary-edit-grid">
-              <label>
-                <span>单词</span>
-                <input value={editForm.word} readOnly disabled className="vocabulary-edit-disabled" />
-              </label>
-              <label>
-                <span>音标</span>
-                <input value={editForm.phonetic} onChange={(e) => setEditForm(prev => ({ ...prev, phonetic: e.target.value }))} />
-              </label>
-              <label>
-                <span>词性</span>
-                <select value={editForm.partOfSpeech} onChange={(e) => setEditForm(prev => ({ ...prev, partOfSpeech: e.target.value }))}>
-                  {partOfSpeechOptions.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>分类</span>
-                <select value={editForm.category} onChange={(e) => handleCategoryChange(e.target.value)}>
-                  {getCategoryOptions().map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>难度</span>
-                <select value={editForm.difficulty} onChange={(e) => setEditForm(prev => ({ ...prev, difficulty: e.target.value }))}>
-                  {getDifficultyOptions(editForm.category).map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="wide">
-                <span>释义</span>
-                <textarea value={editForm.meaning} onChange={(e) => setEditForm(prev => ({ ...prev, meaning: e.target.value }))} />
-              </label>
+
+            {editTab === 'card' && (
+              <>
+                <div className="vocabulary-edit-grid">
+                  <label>
+                    <span>单词</span>
+                    <input value={editForm.word} readOnly disabled className="vocabulary-edit-disabled" />
+                  </label>
+                  <label>
+                    <span>音标</span>
+                    <input value={editForm.phonetic} onChange={(e) => setEditForm(prev => ({ ...prev, phonetic: e.target.value }))} />
+                  </label>
+                  <label>
+                    <span>词性</span>
+                    <select value={editForm.partOfSpeech} onChange={(e) => setEditForm(prev => ({ ...prev, partOfSpeech: e.target.value }))}>
+                      {partOfSpeechOptions.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>分类</span>
+                    <select value={editForm.category} onChange={(e) => handleCategoryChange(e.target.value)}>
+                      {getCategoryOptions().map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>难度</span>
+                    <select value={editForm.difficulty} onChange={(e) => setEditForm(prev => ({ ...prev, difficulty: e.target.value }))}>
+                      {getDifficultyOptions(editForm.category).map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="wide">
+                    <span>释义</span>
+                    <textarea value={editForm.meaning} onChange={(e) => setEditForm(prev => ({ ...prev, meaning: e.target.value }))} />
+                  </label>
+                </div>
+                <div className="vocabulary-edit-actions">
+                  <button className="vocabulary-edit-cancel" onClick={() => setEditingItem(null)} type="button">取消</button>
+                  <button
+                    className="vocabulary-edit-ai"
+                    onClick={handleAIModify}
+                    type="button"
+                    disabled={aiModifying}
+                  >
+                    {aiModifying ? 'AI修改中...' : '🤖 AI修改'}
+                  </button>
+                  <button className="vocabulary-edit-save" onClick={handleSaveEdit} type="button">保存</button>
+                </div>
+              </>
+            )}
+
+            {editTab === 'state' && (
+              <>
+                <div className="learning-state-panel">
+                  <div className="learning-state-quick">
+                    <button
+                      className="set-mastered-btn"
+                      type="button"
+                      onClick={handleSetMastered}
+                    >
+                      ✅ 一键设为已掌握
+                    </button>
+                    <span className="learning-state-quick-desc">掌握度 100%，不再复习</span>
+                  </div>
+
+                  <div className="learning-state-field">
+                    <label className="learning-state-label">
+                      学习状态
+                      <span className="learning-state-hint" title="NEW=新词，LEARNING=学习中（掌握度&lt;75%），REVIEWING=复习中（75%-90%），MASTERED=已掌握（≥90%）。每次正确答题提升掌握度，答错会降低。">❓</span>
+                    </label>
+                    <select
+                      value={learningStateForm.status}
+                      onChange={(e) => setLearningStateForm(prev => ({ ...prev, status: e.target.value as VocabularyStatus }))}
+                    >
+                      <option value="NEW">新词</option>
+                      <option value="LEARNING">学习中</option>
+                      <option value="REVIEWING">复习中</option>
+                      <option value="MASTERED">已掌握</option>
+                      <option value="IGNORED">已忽略</option>
+                    </select>
+                  </div>
+
+                  <div className="learning-state-field">
+                    <label className="learning-state-label">
+                      掌握度
+                      <span className="learning-state-hint" title="掌握度由正确率、学习次数和时间衰减共同决定。每次正确答题 +12%，答错 -20%，长时间不复习会自然衰减。">❓</span>
+                    </label>
+                    <div className="mastery-score-row">
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={learningStateForm.masteryScore}
+                        onChange={(e) => setLearningStateForm(prev => ({ ...prev, masteryScore: Number(e.target.value) }))}
+                        className="mastery-score-slider"
+                      />
+                      <span className="mastery-score-value">{learningStateForm.masteryScore}%</span>
+                    </div>
+                  </div>
+
+                  <div className="learning-state-field">
+                    <label className="learning-state-label">下次复习时间</label>
+                    <div className="next-review-row">
+                      <input
+                        type="datetime-local"
+                        value={learningStateForm.nextReviewAt}
+                        disabled={learningStateForm.neverReview}
+                        onChange={(e) => setLearningStateForm(prev => ({ ...prev, nextReviewAt: e.target.value }))}
+                        className="next-review-input"
+                      />
+                      <label className="never-review-label">
+                        <input
+                          type="checkbox"
+                          checked={learningStateForm.neverReview}
+                          onChange={(e) => setLearningStateForm(prev => ({ ...prev, neverReview: e.target.checked }))}
+                        />
+                        不再复习
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="learning-state-stats">
+                    <span>已学习 {editingItem.seenCount} 次</span>
+                    <span>答错 {editingItem.wrongCount} 次</span>
+                    <span>正确率 {editingItem.seenCount > 0 ? Math.round(((editingItem.seenCount - editingItem.wrongCount) / editingItem.seenCount) * 100) : 0}%</span>
+                  </div>
+                </div>
+
+                <div className="vocabulary-edit-actions">
+                  <button className="vocabulary-edit-cancel" onClick={() => setEditTab('card')} type="button">返回</button>
+                  <button
+                    className="vocabulary-edit-save"
+                    onClick={handleSaveLearningState}
+                    type="button"
+                    disabled={savingLearningState}
+                  >
+                    {savingLearningState ? '保存中...' : '保存'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {deletingItem && (
+        <div className="vocabulary-edit-overlay" onClick={() => setDeletingItem(null)}>
+          <div className="auth-modal delete-conversation-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="delete-modal-header">
+              <h2>删除单词卡？</h2>
             </div>
-            <div className="vocabulary-edit-actions">
-              <button className="vocabulary-edit-cancel" onClick={() => setEditingItem(null)} type="button">取消</button>
-              <button 
-                className="vocabulary-edit-ai" 
-                onClick={handleAIModify} 
+
+            <div className="delete-modal-content">
+              <p className="delete-modal-message">
+                确定删除「<strong>{deletingItem.word || '这个单词'}</strong>」吗？删除后它不会出现在单词卡管理列表中。
+              </p>
+            </div>
+
+            <div className="delete-modal-actions">
+              <button
                 type="button"
-                disabled={aiModifying}
+                className="delete-modal-cancel-btn"
+                onClick={() => setDeletingItem(null)}
               >
-                {aiModifying ? 'AI修改中...' : '🤖 AI修改'}
+                取消
               </button>
-              <button className="vocabulary-edit-save" onClick={handleSaveEdit} type="button">保存</button>
+              <button
+                type="button"
+                className="delete-modal-delete-btn"
+                onClick={confirmDelete}
+              >
+                删除
+              </button>
             </div>
           </div>
         </div>

@@ -3,6 +3,7 @@ package com.lingobot.learning.vocabulary.service;
 import com.lingobot.infrastructure.common.dto.PageResponseDTO;
 import com.lingobot.learning.vocabulary.dto.UserVocabularyDTO;
 import com.lingobot.learning.vocabulary.dto.UpdateUserVocabularyRequest;
+import com.lingobot.learning.vocabulary.dto.UpdateLearningStateRequest;
 import com.lingobot.learning.vocabulary.dto.VocabularyStatsDTO;
 import com.lingobot.learning.vocabulary.entity.UserVocabulary;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
@@ -47,6 +48,9 @@ public interface UserVocabularyService {
 
     // 更新用户词汇信息（手动修改单词详情）
     UserVocabularyDTO updateVocabulary(Long userId, Long id, UpdateUserVocabularyRequest request);
+
+    // 更新用户词汇学习状态（手动设置状态、掌握度、复习时间）
+    UserVocabularyDTO updateLearningState(Long userId, Long id, UpdateLearningStateRequest request);
 
     // 删除用户词汇记录
     void deleteVocabulary(Long userId, Long id);

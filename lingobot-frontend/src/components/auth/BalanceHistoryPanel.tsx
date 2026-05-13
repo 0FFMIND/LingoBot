@@ -11,8 +11,6 @@ type QuickFilterType = 'none' | 'week' | 'month' | 'custom';
 const BalanceHistoryPanel: React.FC = () => {
   const [allTransactions, setAllTransactions] = useState<BalanceTransactionDTO[]>([]);
   const [summary, setSummary] = useState<TransactionSummaryDTO | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadingBatch, setLoadingBatch] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -68,7 +66,6 @@ const BalanceHistoryPanel: React.FC = () => {
   }, [useDateFilter, filterTab]);
 
   const loadInitialData = useCallback(async (start?: string, end?: string) => {
-    setLoading(true);
     setError(null);
     setLoadedBatches(1);
     setPage(0);
@@ -90,8 +87,6 @@ const BalanceHistoryPanel: React.FC = () => {
     } catch (err) {
       setError('加载交易记录失败，请稍后重试');
       console.error('加载交易记录失败:', err);
-    } finally {
-      setLoading(false);
     }
   }, [loadBatch, useDateFilter]);
 
@@ -106,7 +101,6 @@ const BalanceHistoryPanel: React.FC = () => {
     }
 
     preloadingBatchRef.current = batchNum;
-    setLoadingBatch(true);
     
     try {
       const batchData = await loadBatch(nextBatchStart, start, end);
@@ -121,7 +115,6 @@ const BalanceHistoryPanel: React.FC = () => {
       return false;
     } finally {
       preloadingBatchRef.current = null;
-      setLoadingBatch(false);
     }
   }, [loadBatch, totalPages]);
 
@@ -172,16 +165,12 @@ const BalanceHistoryPanel: React.FC = () => {
       return;
     }
     
-    if (loadingBatch) {
-      return;
-    }
-    
     const nextBatchNum = Math.floor(newPage / BATCH_PAGES);
     const loaded = await loadNextBatchInternal(nextBatchNum, startDate, endDate);
     if (loaded) {
       setPage(newPage);
     }
-  }, [page, loadedBatches, totalPages, loadingBatch, loadNextBatchInternal, triggerPreload, startDate, endDate]);
+  }, [page, loadedBatches, totalPages, loadNextBatchInternal, triggerPreload, startDate, endDate]);
 
   const applyQuickFilter = (type: 'week' | 'month') => {
     const now = new Date();
@@ -408,12 +397,7 @@ const BalanceHistoryPanel: React.FC = () => {
       )}
 
       <div className="transactions-table-container">
-        {loading && allTransactions.length === 0 ? (
-          <div className="loading-state">
-            <div className="loading-spinner"></div>
-            <span>加载中...</span>
-          </div>
-        ) : error ? (
+        {error ? (
           <div className="error-state">
             {error}
           </div>
@@ -470,19 +454,12 @@ const BalanceHistoryPanel: React.FC = () => {
               </tbody>
             </table>
 
-            {loadingBatch && (
-              <div className="batch-loading">
-                <div className="loading-spinner small"></div>
-                <span>加载更多记录中...</span>
-              </div>
-            )}
-
             {visiblePages > 1 && (
               <div className="pagination-section">
                 <button
                   className="pagination-btn"
                   onClick={() => handlePageChange(page - 1)}
-                  disabled={page === 0 || loadingBatch}
+                  disabled={page === 0}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="15 18 9 12 15 6" />
@@ -495,7 +472,6 @@ const BalanceHistoryPanel: React.FC = () => {
                       key={index}
                       className={`pagination-number ${page + 1 === btn ? 'active' : ''}`}
                       onClick={() => handlePageChange(btn - 1)}
-                      disabled={loadingBatch}
                     >
                       {btn}
                     </button>
@@ -507,7 +483,7 @@ const BalanceHistoryPanel: React.FC = () => {
                 <button
                   className="pagination-btn"
                   onClick={() => handlePageChange(page + 1)}
-                  disabled={(!hasMoreBatches && page >= visiblePages - 1) || loadingBatch}
+                  disabled={!hasMoreBatches && page >= visiblePages - 1}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="9 18 15 12 9 6" />

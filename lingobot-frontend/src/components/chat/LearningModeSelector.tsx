@@ -11,28 +11,12 @@ export const learningFeatures = [
     bgColor: '#eef2ff',
   },
   {
-    mode: 'grammar' as LearningMode,
-    label: '语法纠错',
-    labelEn: 'Grammar Fix',
-    icon: '📝',
-    color: '#8b5cf6',
-    bgColor: '#f5f3ff',
-  },
-  {
     mode: 'vocabulary' as LearningMode,
     label: '词汇拓展',
     labelEn: 'Vocabulary',
     icon: '📚',
     color: '#10b981',
     bgColor: '#ecfdf5',
-  },
-  {
-    mode: 'writing' as LearningMode,
-    label: '发音训练',
-    labelEn: 'Pronunciation',
-    icon: '🔊',
-    color: '#f59e0b',
-    bgColor: '#fffbeb',
   },
 ]
 

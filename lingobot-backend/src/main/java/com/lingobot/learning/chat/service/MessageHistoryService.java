@@ -10,7 +10,6 @@ import com.lingobot.learning.mode.service.SystemPromptService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
-import com.lingobot.learning.vocabulary.service.VocabularyStateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,7 +25,6 @@ public class MessageHistoryService {
     
     private final MessageRepository messageRepository;
     private final SystemPromptService systemPromptService;
-    private final VocabularyStateService vocabularyStateService;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final ConversationRepository conversationRepository;
     
@@ -95,11 +93,6 @@ public class MessageHistoryService {
                 if (vocabularyHistoryInfo != null && !vocabularyHistoryInfo.isEmpty()) {
                     systemPrompt = systemPrompt + vocabularyHistoryInfo;
                     log.info("已添加词汇历史信息到 System Prompt，conversationId: {}", conversationId);
-                }
-                String vocabularyStateInfo = vocabularyStateService.getCurrentWordInfoForPrompt(conversationId);
-                if (vocabularyStateInfo != null && !vocabularyStateInfo.isEmpty()) {
-                    systemPrompt = systemPrompt + vocabularyStateInfo;
-                    log.info("已添加词汇状态信息到 System Prompt，conversationId: {}", conversationId);
                 }
             }
             messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));

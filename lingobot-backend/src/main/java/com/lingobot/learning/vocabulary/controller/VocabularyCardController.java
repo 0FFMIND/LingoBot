@@ -230,6 +230,11 @@ public class VocabularyCardController {
         return ResponseEntity.ok(ApiResponse.success("用户英文句子已更新", updated));
     }
 
+    /**
+     * 触发 AI 异步分析用户写的英文句子（收费接口）
+     * @param cardId 词汇卡ID
+     * @return 触发后的词汇卡（分析结果通过轮询 /sentence-analysis 获取）
+     */
     @PostMapping("/cards/{cardId}/analyze-sentence")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> analyzeUserSentence(
             @PathVariable Long cardId) {

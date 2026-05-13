@@ -14,8 +14,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * 词汇学习状态服务。
  *
- * 使用 Redis 缓存当前学习的单词信息，
- * 用于 AI 生成造句反馈时的上下文参数。
+ * 使用 Redis 缓存当前学习的单词信息。
  */
 @Slf4j
 @Service
@@ -31,13 +30,15 @@ public class VocabularyStateService {
     private static final long STATE_EXPIRE_HOURS = 24;
     
     /**
-     * 保存当前学习的单词状态到Redis
-     * 当AI调用display_flashcard工具时被调用
+     * 保存当前学习的单词状态到 Redis。
+     * 当 AI 调用 display_flashcard 工具时被调用。
      * @param conversationId 对话ID
      * @param word 单词
      * @param phonetic 音标
-     * @param partOfSpeech 词性     * @param meaning 释义
-     * @param synonyms 同义词列表     * @param vocabularyCategory 词汇标准（cefr/ielts/toefl等）
+     * @param partOfSpeech 词性
+     * @param meaning 释义
+     * @param synonyms 同义词列表
+     * @param vocabularyCategory 词汇标准（cefr/ielts/toefl等）
      * @param vocabularyDifficulty 难度级别
      */
     public void saveCurrentWord(Long conversationId, String word, String phonetic, String partOfSpeech,
@@ -66,8 +67,9 @@ public class VocabularyStateService {
     }
     
     /**
-     * 从Redis获取当前学习的单词状态     * @param conversationId 对话ID
-     * @return 单词状态Map
+     * 从 Redis 获取当前学习的单词状态。
+     * @param conversationId 对话ID
+     * @return 单词状态Map，不存在时返回 null
      */
     public Map<String, Object> getCurrentWord(Long conversationId) {
         String key = VOCABULARY_STATE_PREFIX + conversationId;
@@ -89,7 +91,7 @@ public class VocabularyStateService {
     }
     
     /**
-     * 清除Redis中的单词状态缓存     
+     * 清除 Redis 中的单词状态缓存。
      * @param conversationId 对话ID
      */
     public void clearCurrentWord(Long conversationId) {
@@ -98,28 +100,4 @@ public class VocabularyStateService {
         log.info("Cleared vocabulary state for conversation {}", conversationId);
     }
     
-    /**
-     * 生成用于AI提示词的当前单词信息
-     * 当AI需要生成造句反馈时，将这些信息注入到System Prompt 中     * @param conversationId 对话ID
-     * @return 格式化的提示词文本     
-     */
-    public String getCurrentWordInfoForPrompt(Long conversationId) {
-        Map<String, Object> state = getCurrentWord(conversationId);
-        if (state == null) {
-            return "";
-        }
-        
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n\n## 当前学习的单词信息\n");
-        sb.append("用户当前正在学习以下单词：\n");
-        sb.append("- 单词: ").append(state.getOrDefault("word", "")).append("\n");
-        sb.append("- 音标: ").append(state.getOrDefault("phonetic", "")).append("\n");
-        sb.append("- 词性 ").append(state.getOrDefault("partOfSpeech", "")).append("\n");
-        sb.append("- 释义: ").append(state.getOrDefault("meaning", "")).append("\n");
-        sb.append("- 同义词: ").append(state.getOrDefault("synonyms", List.of())).append("\n");
-        sb.append("- 词汇标准: ").append(state.getOrDefault("vocabularyCategory", "")).append("\n");
-        sb.append("- 难度级别: ").append(state.getOrDefault("vocabularyDifficulty", "")).append("\n");
-        
-        return sb.toString();
-    }
 }

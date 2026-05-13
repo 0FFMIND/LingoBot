@@ -6,7 +6,6 @@ import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.core.user.preference.dto.UserPreferenceDTO;
 import com.lingobot.core.user.preference.service.UserPreferenceService;
-import com.lingobot.learning.mode.service.SystemPromptService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.dto.openai.OpenAiTool;
 import com.lingobot.learning.llm.tool.service.McpService;
@@ -20,6 +19,7 @@ import com.lingobot.learning.vocabulary.service.MeaningCheckService;
 import com.lingobot.learning.vocabulary.service.SentenceAnalysisService;
 import com.lingobot.learning.vocabulary.service.UserVocabularyService;
 import com.lingobot.learning.vocabulary.service.VocabularyCardService;
+import com.lingobot.learning.vocabulary.service.VocabularyPromptService;
 import com.lingobot.learning.vocabulary.service.VocabularyWordService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,7 +51,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     private final ConversationRepository conversationRepository;
     private final ToolLoopService toolLoopService;
     private final McpService mcpService;
-    private final SystemPromptService systemPromptService;
+    private final VocabularyPromptService vocabularyPromptService;
     private final UserPreferenceService userPreferenceService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
@@ -74,29 +74,22 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     /** 缓存过期时间（小时） */
     private static final long CACHE_EXPIRE_HOURS = 1;
     
-    /**
-     * 获取单个单词卡的缓存键     */
+    // 获取单个词汇卡的 Redis 缓存键
     private String getCardCacheKey(Long cardId) {
         return CACHE_KEY_CARD + cardId;
     }
     
-    /**
-     * 获取对话卡片列表的缓存键
-     */
+    // 获取对话词汇卡列表的 Redis 缓存键
     private String getCardsListCacheKey(Long conversationId) {
         return CACHE_KEY_CARDS_LIST + conversationId;
     }
     
-    /**
-     * 获取对话卡片数量的缓存键
-     */
+    // 获取对话词汇卡数量的 Redis 缓存键
     private String getCardsCountCacheKey(Long conversationId) {
         return CACHE_KEY_CARDS_COUNT + conversationId;
     }
     
-    /**
-     * 从缓存获取单个单词卡
-     */
+    // 从 Redis 缓存读取单个词汇卡，未命中返回 empty
     private Optional<VocabularyCardDTO> getCardFromCache(Long cardId) {
         try {
             String key = getCardCacheKey(cardId);
@@ -112,8 +105,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         return Optional.empty();
     }
     
-    /**
-     * 从缓存获取对话的所有有效卡片列表     */
+    // 从 Redis 缓存读取对话的词汇卡列表，未命中返回 empty
     private Optional<List<VocabularyCardDTO>> getCardsListFromCache(Long conversationId) {
         try {
             String key = getCardsListCacheKey(conversationId);
@@ -130,9 +122,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         return Optional.empty();
     }
     
-    /**
-     * 从缓存获取对话的有效卡片数量
-     */
+    // 从 Redis 缓存读取对话的词汇卡数量，未命中返回 empty
     private Optional<Long> getCardsCountFromCache(Long conversationId) {
         try {
             String key = getCardsCountCacheKey(conversationId);
@@ -148,8 +138,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         return Optional.empty();
     }
     
-    /**
-     * 缓存单个单词卡     */
+    // 将单个词汇卡写入 Redis 缓存
     private void cacheCard(Long cardId, VocabularyCardDTO dto) {
         try {
             String key = getCardCacheKey(cardId);
@@ -161,8 +150,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
     }
     
-    /**
-     * 缓存对话的所有有效卡片列表     */
+    // 将对话的词汇卡列表写入 Redis 缓存
     private void cacheCardsList(Long conversationId, List<VocabularyCardDTO> cards) {
         try {
             String key = getCardsListCacheKey(conversationId);
@@ -174,8 +162,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
     }
     
-    /**
-     * 缓存对话的有效卡片数量     */
+    // 将对话的词汇卡数量写入 Redis 缓存
     private void cacheCardsCount(Long conversationId, long count) {
         try {
             String key = getCardsCountCacheKey(conversationId);
@@ -666,30 +653,28 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         return count;
     }
 
-    /**
-     * 获取对话实体
-     * @param conversationId 对话ID
-     * @return 对话实体
-     */
+    // 根据 ID 获取对话实体，不存在则抛出业务异常
     private Conversation getConversation(Long conversationId) {
         return conversationRepository.findById(conversationId)
                 .orElseThrow(() -> ChatException.badRequest("对话不存在: " + conversationId));
     }
 
-    /**
-     * 通过AI Agent生成随机单词
-     * 核心流程：构建System Prompt -> 调用AI -> 解析工具返回结果
-     * @param conversationId 对话ID
-     * @param level 难度级别
-     * @param intent 意图（next_word/regenerate）
-     * @return 生成的单词卡片数据
-     */
+    // 确认对话仍然存在（AI 生成期间对话可能被并发删除）
     private void ensureConversationStillExists(Long conversationId) {
         if (!conversationRepository.existsById(conversationId)) {
             throw ChatException.badRequest("Conversation was deleted while generating vocabulary card: " + conversationId);
         }
     }
 
+    /**
+     * 通过 AI Agent 生成随机单词卡片数据。
+     * 核心流程：读取用户偏好 → 构建 System Prompt（含历史词汇）→ 调用 AI 工具 → 解析返回结果。
+     * @param conversationId 对话ID
+     * @param category 词汇类别（cefr/ielts/toefl），null 时从用户偏好读取
+     * @param difficulty 难度级别，null 时从用户偏好读取
+     * @param intent 生成意图（next_word / regenerate）
+     * @return 解析后的单词卡片数据，AI 失败时返回默认单词
+     */
     private WordCardData generateRandomWord(Long conversationId, String category, String difficulty, String intent) {
         try {
             log.info("=== 开始生成词汇卡（AI Agent 模式）===");
@@ -723,8 +708,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                     vocabularyCategory, vocabularyDifficulty, model);
 
             // 获取System Prompt并追加历史单词记录（避免重复）
-            String systemPrompt = systemPromptService.getSystemPrompt(
-                    "vocabulary", vocabularyCategory, vocabularyDifficulty);
+            String systemPrompt = vocabularyPromptService.getDisplayFlashcardPrompt(
+                    vocabularyCategory, vocabularyDifficulty);
             log.info("System prompt 已生成，长度: {}", systemPrompt != null ? systemPrompt.length() : 0);
 
             String vocabularyHistory = buildVocabularyHistoryForPrompt(conversationId);
@@ -734,15 +719,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             }
 
             // 构建消息列表
-            String userMessage = String.format("[intent:%s]", intent != null ? intent : "next_word");
-            log.info("发送给 AI 的用户消息: {}", userMessage);
-
             List<OpenAiChatMessage> messages = new ArrayList<>();
             messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
-            messages.add(OpenAiChatMessage.createTextMessage("user", userMessage));
 
             // 获取vocabulary模式可用的工具
-            List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary");
+            List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary", "display_flashcard");
             log.info("获取到 {} 个vocabulary 模式的工具", tools != null ? tools.size() : 0);
 
             if (tools == null || tools.isEmpty()) {

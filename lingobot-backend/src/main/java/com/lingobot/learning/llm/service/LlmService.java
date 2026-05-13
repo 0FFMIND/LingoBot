@@ -35,6 +35,10 @@ public class LlmService {
     private final ObjectMapper objectMapper;
     private final AudioConversionService audioConversionService;
 
+    /**
+     * 单次非流式文本请求入口。
+     * 普通文本调用也复用 chatWithTools(messages, null)，这样模型配置、请求构造和响应解析只维护一套逻辑。
+     */
     public String chat(List<OpenAiChatMessage> messages) {
         OpenAiChatResponse response = chatWithTools(messages, null);
         if (response.getChoices() == null || response.getChoices().isEmpty()) {
@@ -47,6 +51,10 @@ public class LlmService {
         return text;
     }
 
+    /**
+     * 单次非流式文本请求入口。
+     * tools 为空时就是普通聊天；tools 非空时启用 tool_choice=auto，并在响应返回后解析原生或兼容格式的工具调用。
+     */
     public OpenAiChatResponse chatWithTools(List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
         boolean hasTools = tools != null && !tools.isEmpty();
         log.info("调用 Chat Completions API，模型: {}, 消息数: {}, tools: {}",
@@ -120,7 +128,13 @@ public class LlmService {
         }
         
         String fullModelName = llmProperties.getFullModelName(model);
-        LlmProperties.AudioModelConfig config = llmProperties.getAudioModelConfigForModel(model);
+        LlmProperties.ModelCapabilityConfig config = llmProperties.getAudioModelConfigForModel(model);
+        if (!config.isSupportsAudio()) {
+            String fallbackModel = llmProperties.getModelForAudio();
+            log.warn("模型 {} 不支持音频输入，已切换到音频模型 {}", fullModelName, fallbackModel);
+            fullModelName = fallbackModel;
+            config = llmProperties.getAudioModelConfig();
+        }
         
         log.info("调用多模态音频处理API - 模型: {} ({}), 消息数: {}, 音频格式: {}, 支持: 音频={}, 图像={}, 视频={}",
                 config.getDisplayName(),
@@ -226,7 +240,7 @@ public class LlmService {
             String model) {
         
         String fullModelName = llmProperties.getFullModelName(model);
-        LlmProperties.AudioModelConfig config = llmProperties.getAudioModelConfigForModel(model);
+        LlmProperties.ModelCapabilityConfig config = llmProperties.getAudioModelConfigForModel(model);
         
         if (!config.isSupportsImage()) {
             log.warn("当前模型 {} 不支持图片输入，尝试使用支持图片的模型", config.getDisplayName());
@@ -268,7 +282,13 @@ public class LlmService {
             String model) {
         
         String fullModelName = llmProperties.getFullModelName(model);
-        LlmProperties.AudioModelConfig config = llmProperties.getAudioModelConfigForModel(model);
+        LlmProperties.ModelCapabilityConfig config = llmProperties.getAudioModelConfigForModel(model);
+        if (!config.isSupportsAudio()) {
+            String fallbackModel = llmProperties.getModelForAudio();
+            log.warn("模型 {} 不支持音频输入，已切换到音频模型 {}", fullModelName, fallbackModel);
+            fullModelName = fallbackModel;
+            config = llmProperties.getAudioModelConfig();
+        }
         
         log.info("调用多模态混合输入API - 模型: {} ({}), 消息数: {}, 支持: 音频={}, 图像={}, 视频={}",
                 config.getDisplayName(),

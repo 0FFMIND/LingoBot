@@ -1,5 +1,7 @@
 package com.lingobot.learning.llm.dto.openai;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -27,6 +29,8 @@ public class OpenAiChatResponse {
     public static class Choice {
         private Integer index;
         private OpenAiChatMessage message;
+        @JsonProperty("finish_reason")
+        @JsonAlias("finishReason")
         private String finishReason;
     }
     
@@ -35,8 +39,14 @@ public class OpenAiChatResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class Usage {
+        @JsonProperty("prompt_tokens")
+        @JsonAlias("promptTokens")
         private Integer promptTokens;
+        @JsonProperty("completion_tokens")
+        @JsonAlias("completionTokens")
         private Integer completionTokens;
+        @JsonProperty("total_tokens")
+        @JsonAlias("totalTokens")
         private Integer totalTokens;
     }
 }

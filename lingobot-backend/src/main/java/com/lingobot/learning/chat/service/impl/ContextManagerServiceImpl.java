@@ -23,7 +23,7 @@ public class ContextManagerServiceImpl implements ContextManagerService {
     private final VocabularyCardRepository vocabularyCardRepository;
 
     private static final int MAX_TOKENS = 128000;
-    private static final int VOCABULARY_MAX_TOKENS = 4096 * 2;
+    private static final int VOCABULARY_MAX_TOKENS = 100000;
     private static final int WORD_CARD_THRESHOLD = 10;
     private static final double COMPACT_RATIO_THRESHOLD = 0.7;
 

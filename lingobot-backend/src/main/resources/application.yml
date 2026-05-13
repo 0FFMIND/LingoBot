@@ -74,7 +74,7 @@ llm:
   model: ${LLM_MODEL:qwen/qwen3.5-flash-02-23}
   audio-model: ${LLM_AUDIO_MODEL:xiaomi/mimo-v2-omni}
   temperature: ${LLM_TEMPERATURE:0.7}
-  max-tokens: ${LLM_MAX_TOKENS:4096}
+  max-tokens: ${LLM_MAX_TOKENS:8192}
   timeout: ${LLM_TIMEOUT:120000}
   audio-enabled: ${LLM_AUDIO_ENABLED:true}
 

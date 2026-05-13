@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { ContextStatusDTO } from '../../types';
 import { useTokenUsageStore, ConversationTokenUsage } from '../../stores';
+import { conversationService } from '../../services/conversationService';
 
 interface ContextStatusTooltipProps {
   status: ContextStatusDTO;
@@ -21,12 +22,16 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
   children,
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
+  const [isTooltipFadingOut, setIsTooltipFadingOut] = useState(false);
+  const [freshStatus, setFreshStatus] = useState<ContextStatusDTO | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const hideTimerRef = useRef<number | null>(null);
   const isCurrentlyCompacting = isCompacting && compactingConversationId === conversationId;
 
   const localUsage = useTokenUsageStore((state) => state.usageByConversation[conversationId]);
   const maxTokens = useTokenUsageStore((state) => state.maxTokensPerConversation);
+  const activeStatus = freshStatus || status;
 
   const getCombinedUsage = (): {
     currentTokens: number;
@@ -35,15 +40,15 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
     wordCardsTotal: number;
     hasLocalData: boolean;
   } => {
-    const backendTokens = status.currentTokens ?? 0;
-    const backendMax = status.maxTokens ?? maxTokens;
+    const backendTokens = activeStatus.currentTokens ?? 0;
+    const backendMax = activeStatus.maxTokens ?? maxTokens;
     const localTokens = localUsage?.totalTokens ?? 0;
     const localWordCards = localUsage?.wordCardsCount ?? 0;
 
     const currentTokens = Math.max(backendTokens, localTokens);
     const effectiveMax = backendMax > 0 ? backendMax : maxTokens;
     const tokenRatio = Math.min(currentTokens / effectiveMax, 1);
-    const wordCardsTotal = Math.max(status.wordCardsTotal ?? 0, localWordCards);
+    const wordCardsTotal = Math.max(activeStatus.wordCardsTotal ?? 0, localWordCards);
 
     return {
       currentTokens,
@@ -58,14 +63,14 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
 
   const getStatusText = () => {
     if (isCurrentlyCompacting) return '正在压缩上下文...';
-    if (status.shouldCompact) return '建议压缩上下文';
+    if (activeStatus.shouldCompact) return '建议压缩上下文';
     if (combined.tokenRatio >= 0.7) return '上下文用量偏高';
     return '上下文状态正常';
   };
 
   const getStatusColor = () => {
     if (isCurrentlyCompacting) return '#3498db';
-    if (status.shouldCompact) return '#e74c3c';
+    if (activeStatus.shouldCompact) return '#e74c3c';
     if (combined.tokenRatio >= 0.7) return '#f39c12';
     return '#27ae60';
   };
@@ -75,6 +80,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
     if (onManualCompact && !isCurrentlyCompacting) {
       onManualCompact(conversationId);
       setShowTooltip(false);
+      setIsTooltipFadingOut(false);
     }
   };
 
@@ -94,13 +100,35 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
     }
   }, []);
 
+  const cancelHide = () => {
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+    setIsTooltipFadingOut(false);
+  };
+
   const handleMouseEnter = () => {
+    cancelHide();
     updatePosition();
     setShowTooltip(true);
+    conversationService.getContextStatus(conversationId)
+      .then(setFreshStatus)
+      .catch(() => {
+        setFreshStatus(null);
+      });
   };
 
   const handleMouseLeave = () => {
-    setShowTooltip(false);
+    setIsTooltipFadingOut(true);
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+    hideTimerRef.current = window.setTimeout(() => {
+      setShowTooltip(false);
+      setIsTooltipFadingOut(false);
+      hideTimerRef.current = null;
+    }, 260);
   };
 
   useEffect(() => {
@@ -115,14 +143,27 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
     };
   }, [showTooltip, updatePosition]);
 
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, []);
+
   const tooltipPanel = showTooltip
     ? ReactDOM.createPortal(
         <div
+          onMouseEnter={cancelHide}
+          onMouseLeave={handleMouseLeave}
           style={{
             position: 'fixed',
             left: tooltipPosition.left,
             top: tooltipPosition.top,
             zIndex: 2147483647,
+            opacity: isTooltipFadingOut ? 0 : 1,
+            transform: isTooltipFadingOut ? 'translateY(3px)' : 'translateY(0)',
+            transition: 'opacity 0.18s ease, transform 0.18s ease',
             padding: '12px',
             background: '#fff',
             border: '1px solid #ddd',
@@ -144,7 +185,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
               gap: '6px',
             }}
           >
-            <span>{status.shouldCompact ? '⚠️' : '✅'}</span>
+            <span>{activeStatus.shouldCompact ? '⚠️' : '✅'}</span>
             {getStatusText()}
           </div>
 
@@ -193,21 +234,9 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
                 </div>
               </>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', padding: '2px 0' }}>
-              <span>压缩后新增:</span>
-              <span style={{ fontWeight: '500' }}>
-                {status.wordCardsSinceCompact} / {status.wordCardThreshold}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-              <span>已压缩次数:</span>
-              <span style={{ fontWeight: '500' }}>
-                {status.compactedCount} 次
-              </span>
-            </div>
           </div>
 
-          {status.compactReason && (
+          {activeStatus.compactReason && (
             <div
               style={{
                 padding: '8px 10px',
@@ -219,7 +248,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
                 lineHeight: '1.4',
               }}
             >
-              💡 {status.compactReason}
+              💡 {activeStatus.compactReason}
             </div>
           )}
 
@@ -230,7 +259,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
               style={{
                 width: '100%',
                 padding: '8px 12px',
-                background: isCurrentlyCompacting ? '#cbd5e0' : (status.shouldCompact ? '#e74c3c' : '#3498db'),
+                background: isCurrentlyCompacting ? '#cbd5e0' : (activeStatus.shouldCompact ? '#e74c3c' : '#3498db'),
                 color: '#fff',
                 border: 'none',
                 borderRadius: '6px',
@@ -240,7 +269,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
                 transition: 'all 0.2s',
               }}
             >
-              {isCurrentlyCompacting ? '⏳ 压缩中...' : (status.shouldCompact ? '🔧 立即压缩' : '🔧 手动压缩上下文')}
+              {isCurrentlyCompacting ? '⏳ 压缩中...' : (activeStatus.shouldCompact ? '🔧 立即压缩' : '🔧 手动压缩上下文')}
             </button>
           )}
 

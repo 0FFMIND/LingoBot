@@ -8,6 +8,7 @@ import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.infrastructure.common.response.ErrorCode;
 import com.lingobot.learning.vocabulary.dto.AIModifyVocabularyRequest;
 import com.lingobot.learning.vocabulary.dto.UpdateUserVocabularyRequest;
+import com.lingobot.learning.vocabulary.dto.UpdateLearningStateRequest;
 import com.lingobot.learning.vocabulary.dto.UserVocabularyDTO;
 import com.lingobot.learning.vocabulary.dto.VocabularyStatsDTO;
 import com.lingobot.learning.vocabulary.entity.VocabularyStatus;
@@ -106,6 +107,7 @@ public class UserVocabularyController {
         return ResponseEntity.ok(ApiResponse.success("Operation succeeded", null));
     }
 
+    // 手动更新用户词汇信息（单词、音标、释义、同义词等）
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<UserVocabularyDTO>> updateVocabulary(
             @PathVariable Long id,
@@ -119,6 +121,20 @@ public class UserVocabularyController {
         return ResponseEntity.ok(ApiResponse.success("Vocabulary updated", updated));
     }
 
+    // 手动更新学习状态（状态、掌握度、下次复习时间）
+    @PutMapping("/{id}/learning-state")
+    public ResponseEntity<ApiResponse<UserVocabularyDTO>> updateLearningState(
+            @PathVariable Long id,
+            @RequestBody UpdateLearningStateRequest request) {
+        Long userId = authService.getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.ok(ApiResponse.success("Please login first", null));
+        }
+        UserVocabularyDTO updated = userVocabularyService.updateLearningState(userId, id, request);
+        return ResponseEntity.ok(ApiResponse.success("Learning state updated", updated));
+    }
+
+    // AI 智能完善词汇信息（补充缺失字段、校验类别难度），收费接口
     @PostMapping("/ai-modify")
     public ResponseEntity<ApiResponse<UserVocabularyDTO>> aiModifyVocabulary(
             @RequestBody AIModifyVocabularyRequest request) {
@@ -139,6 +155,7 @@ public class UserVocabularyController {
         }
     }
 
+    // 删除用户词汇记录（仅删除当前登录用户自己的数据）
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteVocabulary(@PathVariable Long id) {
         Long userId = authService.getCurrentUserId();

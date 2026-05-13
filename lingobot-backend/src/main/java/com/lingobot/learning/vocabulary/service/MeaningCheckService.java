@@ -6,7 +6,6 @@ import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.dto.openai.OpenAiTool;
 import com.lingobot.learning.llm.tool.service.McpService;
-import com.lingobot.learning.mode.service.SystemPromptService;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,12 +13,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 释义检查服务。
+ *
+ * 异步调用 AI Agent 对用户猜测的单词释义进行正误判断，
+ * 并将结果通过原生 SQL 写回词汇卡，避免 JPA 托管实体回写旧状态。
+ * 检查完成后同步更新用户词汇本的学习进度，并清除相关 Redis 缓存。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -27,7 +31,7 @@ public class MeaningCheckService {
 
     private final ToolLoopService toolLoopService;
     private final McpService mcpService;
-    private final SystemPromptService systemPromptService;
+    private final VocabularyPromptService vocabularyPromptService;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final UserVocabularyService userVocabularyService;
     private final ObjectMapper objectMapper;
@@ -38,55 +42,57 @@ public class MeaningCheckService {
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
 
+    // 异步检查用户猜测的释义是否正确，通过 AI Agent 工具调用完成判断
     @Async("meaningCheckExecutor")
-    @Transactional
     public void checkUserMeaningAsync(Long conversationId, Long cardId, String userMeaning) {
         try {
             log.info("Starting async meaning check for cardId={}, conversationId={}", cardId, conversationId);
 
             VocabularyCard card = vocabularyCardRepository.findById(cardId)
                     .orElseThrow(() -> new IllegalArgumentException("Vocabulary card not found: " + cardId));
+            VocabularyCardRepository.CardLearningContextProjection learningContext = vocabularyCardRepository
+                    .findLearningContextByCardId(cardId)
+                    .orElseThrow(() -> new IllegalArgumentException("Vocabulary card learning context not found: " + cardId));
 
             String word = card.getWord();
             String correctMeaning = card.getMeaning();
-            // Capture lazy relation ids before tool execution. The vocabulary tool uses native updates
-            // that clear the persistence context, so accessing card.getConversation().getUser() later can fail.
-            Long vocabularyWordId = card.getVocabularyWordId();
-            Long userId = card.getConversation() != null && card.getConversation().getUser() != null
-                    ? card.getConversation().getUser().getId()
-                    : null;
+            Long resolvedConversationId = learningContext.getConversationId();
+            Long vocabularyWordId = learningContext.getVocabularyWordId();
+            Long userId = learningContext.getUserId();
 
             if (word == null || word.isBlank()) {
                 log.warn("No word on vocabulary card id={}, skipping meaning check", cardId);
                 return;
             }
 
-            String systemPrompt = systemPromptService.getSystemPrompt("vocabulary");
-
-            List<OpenAiChatMessage> messages = new ArrayList<>();
-            messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
-            messages.add(OpenAiChatMessage.createTextMessage("user", String.format(
-                    "[intent:check_meaning][current_word:%s][user_meaning:%s]%nCorrect meaning: %s",
+            String systemPrompt = vocabularyPromptService.getMeaningCheckPrompt(
                     word,
-                    userMeaning,
-                    correctMeaning != null ? correctMeaning : "unknown"
-            )));
+                    card.getPhonetic(),
+                    card.getPartOfSpeech(),
+                    correctMeaning,
+                    card.getExample(),
+                    card.getExampleTranslation(),
+                    userMeaning);
 
-            List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary");
+            List<OpenAiChatMessage> messages = List.of(
+                    OpenAiChatMessage.createTextMessage("system", systemPrompt));
+
+            List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary", "check_meaning_accuracy");
             if (tools == null || tools.isEmpty()) {
                 log.warn("No vocabulary tools available for meaning check");
                 return;
             }
 
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
-                    conversationId, messages, tools, DEFAULT_MODEL);
-            persistMeaningCheckResult(cardId, conversationId, vocabularyWordId, userId, result);
+                    null, messages, tools, DEFAULT_MODEL);
+            persistMeaningCheckResult(cardId, resolvedConversationId, vocabularyWordId, userId, result);
             log.info("Meaning check completed for cardId={}", cardId);
         } catch (Exception e) {
             log.error("Meaning check failed for cardId={}, conversationId={}", cardId, conversationId, e);
         }
     }
 
+    // 解析 AI 工具返回结果并通过原生 SQL 持久化释义检查状态，同步更新用户学习进度
     private void persistMeaningCheckResult(Long cardId, Long conversationId, Long vocabularyWordId, Long userId,
                                            ToolLoopService.ToolLoopResult result) {
         if (result == null || !result.hasToolCalls() || result.getToolResultText() == null) {
@@ -105,24 +111,34 @@ public class MeaningCheckService {
             }
 
             String feedback = payload.get("check_feedback") instanceof String value ? value : "";
+            String chineseSentenceForTranslation = payload.get("chineseSentenceForTranslation") instanceof String value
+                    ? value
+                    : "";
             // Write by card id instead of saving the previously loaded entity. Otherwise an old
             // managed VocabularyCard can overwrite meaning_check_completed back to false.
-            int updatedRows = vocabularyCardRepository.updateMeaningCheckResult(
-                    cardId,
-                    isCorrect,
-                    feedback != null ? feedback : "");
-            evictCardAndConversationCache(cardId, conversationId);
-            log.info("Persisted meaning check by cardId={}, rows={}, isCorrect={}",
-                    cardId, updatedRows, isCorrect);
-
             if (userId != null && vocabularyWordId != null) {
                 userVocabularyService.updateProgress(userId, vocabularyWordId, isCorrect);
             }
+
+            int updatedRows = chineseSentenceForTranslation.isBlank()
+                    ? vocabularyCardRepository.updateMeaningCheckResult(
+                            cardId,
+                            isCorrect,
+                            feedback != null ? feedback : "")
+                    : vocabularyCardRepository.updateMeaningCheckResultWithChineseSentence(
+                            cardId,
+                            isCorrect,
+                            feedback != null ? feedback : "",
+                            chineseSentenceForTranslation);
+            evictCardAndConversationCache(cardId, conversationId);
+            log.info("Persisted meaning check by cardId={}, rows={}, isCorrect={}",
+                    cardId, updatedRows, isCorrect);
         } catch (Exception e) {
             log.error("Failed to persist meaning check result for cardId={}", cardId, e);
         }
     }
 
+    // 清除词汇卡及所属对话的 Redis 缓存，确保前端轮询拿到最新状态
     private void evictCardAndConversationCache(Long cardId, Long conversationId) {
         if (cardId != null) {
             stringRedisTemplate.delete(CACHE_KEY_CARD + cardId);

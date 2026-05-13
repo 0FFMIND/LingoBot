@@ -2,6 +2,7 @@ import { authUtils, httpClient } from './httpClient';
 import {
   VocabularyCardDTO,
   CreateVocabularyCardRequest,
+  UpdateLearningStateRequest,
   UserDTO,
   VocabularyStatsDTO,
   UserVocabularyDTO,
@@ -243,6 +244,10 @@ export const vocabularyService = {
     const result = await httpClient.post<UserVocabularyDTO>('/user-vocabulary/ai-modify', request);
     await refreshCurrentUserBalance();
     return result;
+  },
+
+  updateLearningState: async (id: number, request: UpdateLearningStateRequest): Promise<UserVocabularyDTO> => {
+    return httpClient.put<UserVocabularyDTO>(`/user-vocabulary/${id}/learning-state`, request);
   },
 
   deleteUserVocabulary: async (id: number): Promise<void> => {

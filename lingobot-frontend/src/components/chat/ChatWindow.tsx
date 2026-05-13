@@ -308,6 +308,27 @@ const ChatWindow: React.FC = () => {
     )
   }
 
+  const renderVocabularyProgressBar = () => {
+    const total = currentVocabularyCard?.totalCount ?? 0
+    const index = currentVocabularyCard?.currentIndex ?? 0
+    const current = total > 0 ? index + 1 : 0
+    const progress = total > 0 ? Math.min(100, Math.max(0, (current / total) * 100)) : 0
+
+    return (
+      <div className="vocabulary-progress-strip">
+        <div className="vocabulary-progress-left">
+          <span className="vocabulary-progress-count">
+            第 <strong>{current || 0}</strong> / {total || 0} 张
+          </span>
+          <div className="vocabulary-progress-track" aria-hidden="true">
+            <div className="vocabulary-progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+        <span className="vocabulary-review-priority">◎ 复习优先</span>
+      </div>
+    )
+  }
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modeMenuRef.current && !modeMenuRef.current.contains(event.target as Node)) {
@@ -849,6 +870,8 @@ const ChatWindow: React.FC = () => {
             {renderVocabularyModelSelector()}
           </div>
         </div>
+
+        {renderVocabularyProgressBar()}
 
         <div className="vocabulary-main-area">
           {renderVocabularyView()}

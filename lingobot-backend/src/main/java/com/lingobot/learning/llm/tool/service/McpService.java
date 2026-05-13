@@ -69,6 +69,19 @@ public class McpService {
         return openAiTools;
     }
 
+    public List<com.lingobot.learning.llm.dto.openai.OpenAiTool> getOpenAiToolsForMode(String mode, String vocabularyAction) {
+        List<com.lingobot.learning.llm.dto.openai.OpenAiTool> tools = getOpenAiToolsForMode(mode);
+        if (!"vocabulary".equals(mode) || vocabularyAction == null || vocabularyAction.isBlank()) {
+            return tools;
+        }
+
+        return tools.stream()
+                .map(tool -> "vocabulary".equals(tool.getFunction().getName())
+                        ? narrowVocabularyTool(tool, vocabularyAction)
+                        : tool)
+                .toList();
+    }
+
     /**
      * 调用指定的MCP 工具
      */
@@ -107,6 +120,65 @@ public class McpService {
         return com.lingobot.learning.llm.dto.openai.OpenAiTool.builder()
                 .type("function")
                 .function(functionBuilder.build())
+                .build();
+    }
+
+    private com.lingobot.learning.llm.dto.openai.OpenAiTool narrowVocabularyTool(
+            com.lingobot.learning.llm.dto.openai.OpenAiTool tool,
+            String action) {
+        com.lingobot.learning.llm.dto.openai.OpenAiTool.Function function = tool.getFunction();
+        com.lingobot.learning.llm.dto.openai.OpenAiTool.Parameters parameters = function.getParameters();
+        if (parameters == null || parameters.getProperties() == null) {
+            return tool;
+        }
+
+        List<String> allowedKeys = switch (action) {
+            case "check_meaning_accuracy" -> List.of(
+                    "action", "word", "user_meaning", "is_correct", "check_feedback", "chineseSentenceForTranslation");
+            case "analyze_sentence" -> List.of(
+                    "action", "word", "meaning_matches", "has_new_word", "feedback");
+            default -> List.of(
+                    "action", "word", "phonetic", "partOfSpeech", "meaning", "example", "exampleTranslation",
+                    "synonyms", "vocabularyCategory", "vocabularyDifficulty");
+        };
+
+        Map<String, com.lingobot.learning.llm.dto.openai.OpenAiTool.Property> narrowedProperties = new HashMap<>();
+        for (String key : allowedKeys) {
+            com.lingobot.learning.llm.dto.openai.OpenAiTool.Property property = parameters.getProperties().get(key);
+            if (property != null) {
+                narrowedProperties.put(key, property);
+            }
+        }
+
+        com.lingobot.learning.llm.dto.openai.OpenAiTool.Property actionProperty = narrowedProperties.get("action");
+        if (actionProperty != null) {
+            narrowedProperties.put("action", com.lingobot.learning.llm.dto.openai.OpenAiTool.Property.builder()
+                    .type(actionProperty.getType())
+                    .description("固定为 " + action)
+                    .enums(List.of(action))
+                    .build());
+        }
+
+        String description = switch (action) {
+            case "check_meaning_accuracy" -> "检查用户中文释义是否准确，并生成下一步翻译用的中文例句。";
+            case "analyze_sentence" -> "分析用户英文句子是否匹配中文例句，并是否正确使用当前新单词。";
+            default -> "生成并展示一张新的英文单词卡。";
+        };
+
+        com.lingobot.learning.llm.dto.openai.OpenAiTool.Parameters narrowedParameters =
+                com.lingobot.learning.llm.dto.openai.OpenAiTool.Parameters.builder()
+                        .type(parameters.getType())
+                        .properties(narrowedProperties)
+                        .required(List.of("action"))
+                        .build();
+
+        return com.lingobot.learning.llm.dto.openai.OpenAiTool.builder()
+                .type(tool.getType())
+                .function(com.lingobot.learning.llm.dto.openai.OpenAiTool.Function.builder()
+                        .name(function.getName())
+                        .description(description)
+                        .parameters(narrowedParameters)
+                        .build())
                 .build();
     }
 

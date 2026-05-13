@@ -149,50 +149,6 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
 
   const canNavigate = step === 3 && (effectiveSentenceAnalysisCompleted || isCompleted)
 
-  const getLevelDisplay = () => {
-    const { vocabularyCategory, vocabularyDifficulty } = data
-    if (!vocabularyCategory || !vocabularyDifficulty) return null
-
-    const categoryLabels: Record<string, string> = {
-      'cefr': 'CEFR',
-      'toefl': 'TOEFL',
-    }
-
-    const difficultyLabels: Record<string, string> = {
-      'a1': 'A1',
-      'a2': 'A2',
-      'b1': 'B1',
-      'b2': 'B2',
-      'c1': 'C1',
-      'c2': 'C2',
-      '4.0-5.0': '4.0-5.0',
-      '5.5-6.5': '5.5-6.5',
-      '7.0-8.0': '7.0-8.0',
-      '8.5-9.0': '8.5-9.0',
-      '60-80': '60-80',
-      '81-100': '81-100',
-      '101-110': '101-110',
-      '111-120': '111-120',
-    }
-
-    const category = categoryLabels[vocabularyCategory.toLowerCase()] || vocabularyCategory
-    const difficulty = difficultyLabels[vocabularyDifficulty.toLowerCase()] || vocabularyDifficulty
-
-    return {
-      label: `${category} ${difficulty}`,
-      color: getLevelColor(vocabularyDifficulty),
-    }
-  }
-
-  const getLevelColor = (difficulty: string): string => {
-    const d = difficulty.toLowerCase()
-    if (['a1', 'a2', '4.0-5.0', '60-80'].includes(d)) return '#22c55e'
-    if (['b1', 'b2', '5.5-6.5', '81-100'].includes(d)) return '#3b82f6'
-    if (['c1', '7.0-8.0', '101-110'].includes(d)) return '#f59e0b'
-    if (['c2', '8.5-9.0', '111-120'].includes(d)) return '#ef4444'
-    return '#64748b'
-  }
-
   React.useEffect(() => {
     const newStep = getInitialStep()
     setStep(newStep)
@@ -304,27 +260,23 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
     ? 'vocabulary-flashcard vocabulary-flashcard-standalone'
     : 'vocabulary-flashcard'
 
+  const categoryLabel = data.vocabularyCategory || ''
+  const difficultyLabel = data.vocabularyDifficulty || ''
+
   return (
     <div className={cardClassName}>
       <div className="flashcard-header">
         <div className="flashcard-icon">📖</div>
-        {totalCount !== undefined && currentIndex !== undefined && (
-          <span className="card-counter">
-            {currentIndex + 1} / {totalCount}
-          </span>
+        {(categoryLabel || difficultyLabel) && (
+          <div className="flashcard-header-badges">
+            {categoryLabel && (
+              <span className="level-badge badge-category">{categoryLabel.toUpperCase()}</span>
+            )}
+            {difficultyLabel && (
+              <span className="level-badge badge-difficulty">{difficultyLabel}</span>
+            )}
+          </div>
         )}
-        {(() => {
-          const levelDisplay = getLevelDisplay()
-          if (!levelDisplay) return null
-          return (
-            <span
-              className="level-badge"
-              style={{ backgroundColor: `${levelDisplay.color}20`, color: levelDisplay.color }}
-            >
-              {levelDisplay.label}
-            </span>
-          )
-        })()}
       </div>
 
       <div className="flashcard-word-section">
@@ -516,7 +468,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
             <div className="sentence-waiting">
               <span className="typing-english">⏳ 正在分析你的英文句子...</span>
             </div>
-          ) : (
+          ) : effectiveSentenceAnalysisCompleted && (
             <>
               {effectiveSentenceAnalysis && (
                 <div className="flashcard-content feedback-content expanded">
