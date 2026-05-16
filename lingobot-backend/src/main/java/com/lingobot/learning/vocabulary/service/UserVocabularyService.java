@@ -30,6 +30,9 @@ public interface UserVocabularyService {
     // 新增或更新用户学习记录（从词汇卡获取信息，指定事件类型）
     UserVocabulary upsertProgress(Long userId, VocabularyCard card, VocabularyEventType eventType);
 
+    // 仅创建/更新用户词汇记录（只同步展示字段，不增加学习次数，不改变学习状态）
+    UserVocabulary upsertRecordOnly(Long userId, VocabularyCard card);
+
     // 更新用户学习进度（根据测验结果计算掌握程度和复习时间）
     UserVocabulary updateProgress(Long userId, Long vocabularyWordId, boolean isCorrect);
 

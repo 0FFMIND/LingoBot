@@ -56,16 +56,16 @@ export const vocabularyService = {
     return httpClient.get<VocabularyCardDTO>(`/vocabulary/cards/${cardId}`);
   },
 
-  getAllCards: async (conversationId: number): Promise<VocabularyCardDTO[]> => {
-    return httpClient.get<VocabularyCardDTO[]>(`/vocabulary/conversations/${conversationId}/cards`);
+  getAllCards: async (conversationPublicId: string): Promise<VocabularyCardDTO[]> => {
+    return httpClient.get<VocabularyCardDTO[]>(`/vocabulary/conversations/${conversationPublicId}/cards`);
   },
 
-  getCurrentCard: async (conversationId: number): Promise<VocabularyCardDTO | null> => {
-    return httpClient.get<VocabularyCardDTO | null>(`/vocabulary/conversations/${conversationId}/current`);
+  getCurrentCard: async (conversationPublicId: string): Promise<VocabularyCardDTO | null> => {
+    return httpClient.get<VocabularyCardDTO | null>(`/vocabulary/conversations/${conversationPublicId}/current`);
   },
 
   getNextCard: async (
-    conversationId: number,
+    conversationPublicId: string,
     currentPosition?: number,
     category?: VocabularyCategory,
     difficulty?: VocabularyDifficulty
@@ -82,24 +82,24 @@ export const vocabularyService = {
     }
     const query = params.toString();
     return httpClient.get<VocabularyCardDTO | null>(
-      `/vocabulary/conversations/${conversationId}/next${query ? `?${query}` : ''}`
+      `/vocabulary/conversations/${conversationPublicId}/next${query ? `?${query}` : ''}`
     );
   },
 
-  getPrevCard: async (conversationId: number, currentPosition?: number): Promise<VocabularyCardDTO | null> => {
+  getPrevCard: async (conversationPublicId: string, currentPosition?: number): Promise<VocabularyCardDTO | null> => {
     const url = currentPosition !== undefined
-      ? `/vocabulary/conversations/${conversationId}/prev?currentPosition=${currentPosition}`
-      : `/vocabulary/conversations/${conversationId}/prev`;
+      ? `/vocabulary/conversations/${conversationPublicId}/prev?currentPosition=${currentPosition}`
+      : `/vocabulary/conversations/${conversationPublicId}/prev`;
     return httpClient.get<VocabularyCardDTO | null>(url);
   },
 
   generateNextCard: async (
-    conversationId: number,
+    conversationPublicId: string,
     category?: VocabularyCategory,
     difficulty?: VocabularyDifficulty
   ): Promise<VocabularyCardDTO> => {
     const card = await httpClient.post<VocabularyCardDTO>(
-      `/vocabulary/conversations/${conversationId}/generate`,
+      `/vocabulary/conversations/${conversationPublicId}/generate`,
       { category, difficulty }
     );
     await refreshCurrentUserBalance();
@@ -107,21 +107,21 @@ export const vocabularyService = {
   },
 
   regenerateCard: async (
-    conversationId: number,
+    conversationPublicId: string,
     category?: VocabularyCategory,
     difficulty?: VocabularyDifficulty
   ): Promise<VocabularyCardDTO> => {
     const card = await httpClient.post<VocabularyCardDTO>(
-      `/vocabulary/conversations/${conversationId}/regenerate`,
+      `/vocabulary/conversations/${conversationPublicId}/regenerate`,
       { category, difficulty }
     );
     await refreshCurrentUserBalance();
     return card;
   },
 
-  createCard: async (conversationId: number, request: CreateVocabularyCardRequest): Promise<VocabularyCardDTO> => {
+  createCard: async (conversationPublicId: string, request: CreateVocabularyCardRequest): Promise<VocabularyCardDTO> => {
     return httpClient.post<VocabularyCardDTO>(
-      `/vocabulary/cards?conversationId=${conversationId}`,
+      `/vocabulary/cards?conversationPublicId=${conversationPublicId}`,
       request
     );
   },
@@ -181,12 +181,12 @@ export const vocabularyService = {
     return httpClient.put<VocabularyCardDTO>(`/vocabulary/cards/${cardId}/complete`);
   },
 
-  deleteAllCards: async (conversationId: number): Promise<void> => {
-    return httpClient.delete<void>(`/vocabulary/conversations/${conversationId}/cards`);
+  deleteAllCards: async (conversationPublicId: string): Promise<void> => {
+    return httpClient.delete<void>(`/vocabulary/conversations/${conversationPublicId}/cards`);
   },
 
-  getCardCount: async (conversationId: number): Promise<number> => {
-    return httpClient.get<number>(`/vocabulary/conversations/${conversationId}/count`);
+  getCardCount: async (conversationPublicId: string): Promise<number> => {
+    return httpClient.get<number>(`/vocabulary/conversations/${conversationPublicId}/count`);
   },
 
   getMeaningCheckStatus: async (cardId: number): Promise<MeaningCheckStatus> => {

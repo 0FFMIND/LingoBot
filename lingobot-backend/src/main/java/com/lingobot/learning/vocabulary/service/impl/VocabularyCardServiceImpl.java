@@ -14,13 +14,19 @@ import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
 import com.lingobot.learning.vocabulary.dto.WordCardData;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.entity.VocabularyWord;
+import com.lingobot.learning.vocabulary.repository.UserVocabularyRepository;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import com.lingobot.learning.vocabulary.service.MeaningCheckService;
 import com.lingobot.learning.vocabulary.service.SentenceAnalysisService;
+import com.lingobot.learning.vocabulary.service.UserVocabularyEventService;
 import com.lingobot.learning.vocabulary.service.UserVocabularyService;
 import com.lingobot.learning.vocabulary.service.VocabularyCardService;
+import com.lingobot.learning.vocabulary.service.VocabularyCardSnapshotService;
 import com.lingobot.learning.vocabulary.service.VocabularyPromptService;
 import com.lingobot.learning.vocabulary.service.VocabularyWordService;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryPromptBuilder;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +65,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     private final SentenceAnalysisService sentenceAnalysisService;
     private final VocabularyWordService vocabularyWordService;
     private final UserVocabularyService userVocabularyService;
+    private final UserVocabularyRepository userVocabularyRepository;
+    private final UserVocabularyEventService eventService;
+    private final VocabularyCardSnapshotService snapshotService;
+    private final VocabularyMemoryService vocabularyMemoryService;
+    private final VocabularyMemoryPromptBuilder memoryPromptBuilder;
 
     /** 默认使用的AI模型 */
     private static final String DEFAULT_MODEL = "qwen";
@@ -249,9 +260,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
         VocabularyCard saved = vocabularyCardRepository.save(card);
         if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-            userVocabularyService.upsertProgress(conversation.getUser().getId(), saved);
+            Long userId = conversation.getUser().getId();
+            userVocabularyService.upsertProgress(userId, saved);
+            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
             log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
-                    conversation.getUser().getId(), vocabularyWord.getId());
+                    userId, vocabularyWord.getId());
         }
         evictConversationCache(conversationId);
         log.info("Created new card and evicted cache: conversationId={}, cardId={}", conversationId, saved.getId());
@@ -482,9 +495,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 && card.getConversation() != null
                 && card.getConversation().getUser() != null
                 && card.getConversation().getUser().getId() != null) {
+            Long userId = card.getConversation().getUser().getId();
             userVocabularyService.upsertProgress(
-                    card.getConversation().getUser().getId(),
+                    userId,
                     saved);
+            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
         }
         // 更新后清除缓存
         evictCardAndConversationCache(cardId, card.getConversation().getId());
@@ -535,9 +550,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
         VocabularyCard saved = vocabularyCardRepository.save(card);
         if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-            userVocabularyService.upsertProgress(conversation.getUser().getId(), saved);
+            Long userId = conversation.getUser().getId();
+            userVocabularyService.upsertProgress(userId, saved);
+            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
             log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
-                    conversation.getUser().getId(), vocabularyWord.getId());
+                    userId, vocabularyWord.getId());
         }
         evictConversationCache(conversationId);
         log.info("Generated next card and evicted cache: conversationId={}, cardId={}", conversationId, saved.getId());
@@ -573,6 +590,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 lastCard.getId(), lastCard.getWord(), replacePosition, currentRegenerationIndex);
         lastCard.setIsRegenerated(true);
         vocabularyCardRepository.save(lastCard);
+        Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
+        vocabularyMemoryService.recordInteraction(userId, lastCard, VocabularyMemoryEventType.REGENERATED);
 
         WordCardData generated = generateRandomWord(conversationId, category, difficulty, "regenerate");
 
@@ -606,10 +625,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
 
         VocabularyCard saved = vocabularyCardRepository.save(newCard);
-        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-            userVocabularyService.upsertProgress(conversation.getUser().getId(), saved);
+        if (userId != null) {
+            userVocabularyService.upsertProgress(userId, saved);
+            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
             log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
-                    conversation.getUser().getId(), vocabularyWord.getId());
+                    userId, vocabularyWord.getId());
         }
         log.info("重新生成词汇卡成功: id={}, word={}, position={}, regenerationIndex={}",
                 saved.getId(), saved.getWord(), replacePosition, saved.getRegenerationIndex());

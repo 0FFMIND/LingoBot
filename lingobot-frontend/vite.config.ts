@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    historyApiFallback: true,
     proxy: {
       // API 请求代理配置
       '/api': {

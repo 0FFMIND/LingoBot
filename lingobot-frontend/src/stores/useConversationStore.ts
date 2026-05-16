@@ -10,9 +10,10 @@ interface ConversationStore {
   currentPage: number
   hasMoreConversations: boolean
   loadingMoreConversations: boolean
-  newConversationId: number | null
+  newConversationPublicId: string | null
   showModeSelectorForNewChat: boolean
-  conversationLearningModes: Record<number, LearningMode>
+  waitingForModeSelection: boolean
+  conversationLearningModes: Record<string, LearningMode>
   globalLearningMode: LearningMode
   mainView: 'chat' | 'settings' | 'vocabulary-manager'
 
@@ -21,10 +22,11 @@ interface ConversationStore {
   selectConversation: (conversation: ConversationDTO) => void
   createConversation: (title: string) => Promise<void>
   createConversationWithMode: (selectedMode: LearningMode) => Promise<ConversationDTO | null>
-  deleteConversation: (id: number) => Promise<void>
+  deleteConversation: (publicId: string) => Promise<void>
   handleLearningModeSelect: (selectedMode: LearningMode) => Promise<void>
   getCurrentLearningMode: () => LearningMode
   isWaitingForMode: () => boolean
+  startNewChatWithModeSelection: () => void
   setMainView: (v: 'chat' | 'settings' | 'vocabulary-manager') => void
   reset: () => void
 }
@@ -35,8 +37,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   currentPage: 0,
   hasMoreConversations: true,
   loadingMoreConversations: false,
-  newConversationId: null,
+  newConversationPublicId: null,
   showModeSelectorForNewChat: false,
+  waitingForModeSelection: false,
   conversationLearningModes: {},
   globalLearningMode: 'chat',
   mainView: 'chat',
@@ -57,7 +60,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         const currentConvFromBackend = await conversationApi.getCurrent()
 
         if (currentConvFromBackend) {
-          const matchingConv = data.find((c: ConversationDTO) => c.id === currentConvFromBackend.id)
+          const matchingConv = data.find((c: ConversationDTO) => c.publicId === currentConvFromBackend.publicId)
           if (matchingConv) {
             set({ currentConversation: matchingConv })
             if (matchingConv.learningMode) {
@@ -69,7 +72,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
         set({ currentConversation: data[0] })
         try {
-          await conversationApi.setCurrent(data[0].id)
+          await conversationApi.setCurrent(data[0].publicId)
         } catch (e) {
           console.warn('保存当前对话到后端失败:', e)
         }
@@ -91,8 +94,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       const nextPage = currentPage + 1
       const pageResponse = await conversationApi.getByPage(nextPage, PAGE_SIZE)
 
-      const existingIds = new Set(conversations.map((c: ConversationDTO) => c.id))
-      const newConversations = pageResponse.content.filter((c: ConversationDTO) => !existingIds.has(c.id))
+      const existingIds = new Set(conversations.map((c: ConversationDTO) => c.publicId))
+      const newConversations = pageResponse.content.filter((c: ConversationDTO) => !existingIds.has(c.publicId))
 
       if (newConversations.length > 0) {
         set(s => ({ conversations: [...s.conversations, ...newConversations] }))
@@ -110,7 +113,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     set({
       currentConversation: conversation,
       showModeSelectorForNewChat: false,
-      newConversationId: null,
+      newConversationPublicId: null,
+      waitingForModeSelection: false,
       mainView: 'chat',
     })
 
@@ -119,14 +123,14 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       selectedMode = conversation.learningMode as LearningMode
     } else {
       const modes = get().conversationLearningModes
-      if (modes[conversation.id]) {
-        selectedMode = modes[conversation.id]
+      if (modes[conversation.publicId]) {
+        selectedMode = modes[conversation.publicId]
       }
     }
     set({ globalLearningMode: selectedMode })
 
     try {
-      conversationApi.setCurrent(conversation.id)
+      conversationApi.setCurrent(conversation.publicId)
     } catch (e) {
       console.warn('保存当前对话到后端失败:', e)
     }
@@ -138,7 +142,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       set(s => ({
         conversations: [newConversation, ...s.conversations],
         currentConversation: newConversation,
-        newConversationId: newConversation.id,
+        newConversationPublicId: newConversation.publicId,
         showModeSelectorForNewChat: true,
         mainView: 'chat',
       }))
@@ -157,19 +161,19 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         conversations: [newConversation, ...s.conversations],
         currentConversation: newConversation,
         mainView: 'chat',
-        conversationLearningModes: { ...s.conversationLearningModes, [newConversation.id]: selectedMode },
+        conversationLearningModes: { ...s.conversationLearningModes, [newConversation.publicId]: selectedMode },
         globalLearningMode: selectedMode,
+        waitingForModeSelection: false,
       }))
 
-      // Update conversation in list with learning mode
       set(s => ({
         conversations: s.conversations.map(c =>
-          c.id === newConversation.id ? { ...c, learningMode: selectedMode } : c
+          c.publicId === newConversation.publicId ? { ...c, learningMode: selectedMode } : c
         ),
       }))
 
       try {
-        await conversationApi.updateLearningMode(newConversation.id, selectedMode)
+        await conversationApi.updateLearningMode(newConversation.publicId, selectedMode)
       } catch (e) {
         console.error('保存学习模式到后端失败:', e)
       }
@@ -182,26 +186,26 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
   },
 
-  deleteConversation: async (id: number) => {
+  deleteConversation: async (publicId: string) => {
     try {
-      await conversationApi.delete(id)
-      const { conversations, currentConversation, newConversationId } = get()
+      await conversationApi.delete(publicId)
+      const { conversations, currentConversation, newConversationPublicId } = get()
       set(s => ({
-        conversations: s.conversations.filter(c => c.id !== id),
+        conversations: s.conversations.filter(c => c.publicId !== publicId),
         conversationLearningModes: (() => {
           const updated = { ...s.conversationLearningModes }
-          delete updated[id]
+          delete updated[publicId]
           return updated
         })(),
       }))
 
-      if (currentConversation?.id === id) {
-        const remaining = conversations.filter(c => c.id !== id)
+      if (currentConversation?.publicId === publicId) {
+        const remaining = conversations.filter(c => c.publicId !== publicId)
         const newCurrent = remaining.length > 0 ? remaining[0] : null
         set({ currentConversation: newCurrent })
 
         try {
-          await conversationApi.setCurrent(newCurrent ? newCurrent.id : null)
+          await conversationApi.setCurrent(newCurrent ? newCurrent.publicId : null)
         } catch (e) {
           console.warn('更新当前对话到后端失败:', e)
         }
@@ -210,8 +214,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
           set({ globalLearningMode: newCurrent.learningMode as LearningMode })
         }
 
-        if (newConversationId === id) {
-          set({ showModeSelectorForNewChat: false, newConversationId: null })
+        if (newConversationPublicId === publicId) {
+          set({ showModeSelectorForNewChat: false, newConversationPublicId: null })
         }
       }
     } catch (error) {
@@ -221,29 +225,29 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   handleLearningModeSelect: async (selectedMode: LearningMode) => {
-    const { newConversationId, showModeSelectorForNewChat, currentConversation } = get()
-    if (newConversationId !== null && showModeSelectorForNewChat) {
-      const conversationId = newConversationId
+    const { newConversationPublicId, showModeSelectorForNewChat, currentConversation } = get()
+    if (newConversationPublicId !== null && showModeSelectorForNewChat) {
+      const publicId = newConversationPublicId
 
       set(s => ({
-        conversationLearningModes: { ...s.conversationLearningModes, [conversationId]: selectedMode },
+        conversationLearningModes: { ...s.conversationLearningModes, [publicId]: selectedMode },
         globalLearningMode: selectedMode,
         showModeSelectorForNewChat: false,
-        newConversationId: null,
+        newConversationPublicId: null,
       }))
 
       set(s => ({
         conversations: s.conversations.map(c =>
-          c.id === conversationId ? { ...c, learningMode: selectedMode } : c
+          c.publicId === publicId ? { ...c, learningMode: selectedMode } : c
         ),
       }))
 
-      if (currentConversation && currentConversation.id === conversationId) {
+      if (currentConversation && currentConversation.publicId === publicId) {
         set({ currentConversation: { ...currentConversation, learningMode: selectedMode } })
       }
 
       try {
-        await conversationApi.updateLearningMode(conversationId, selectedMode)
+        await conversationApi.updateLearningMode(publicId, selectedMode)
       } catch (e) {
         console.error('保存学习模式到后端失败:', e)
       }
@@ -252,8 +256,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   getCurrentLearningMode: () => {
     const { currentConversation, conversationLearningModes, globalLearningMode } = get()
-    if (currentConversation && conversationLearningModes[currentConversation.id]) {
-      return conversationLearningModes[currentConversation.id]
+    if (currentConversation && conversationLearningModes[currentConversation.publicId]) {
+      return conversationLearningModes[currentConversation.publicId]
     }
     if (currentConversation?.learningMode) {
       return currentConversation.learningMode as LearningMode
@@ -262,9 +266,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   isWaitingForMode: () => {
-    const { showModeSelectorForNewChat, currentConversation, newConversationId } = get()
-    return showModeSelectorForNewChat &&
-      currentConversation?.id === newConversationId
+    const { showModeSelectorForNewChat, currentConversation, newConversationPublicId, waitingForModeSelection } = get()
+    return waitingForModeSelection || (showModeSelectorForNewChat &&
+      currentConversation?.publicId === newConversationPublicId)
+  },
+
+  startNewChatWithModeSelection: () => {
+    set({
+      waitingForModeSelection: true,
+      currentConversation: null,
+      mainView: 'chat',
+    })
   },
 
   setMainView: (v) => set({ mainView: v }),
@@ -275,8 +287,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     currentPage: 0,
     hasMoreConversations: true,
     loadingMoreConversations: false,
-    newConversationId: null,
+    newConversationPublicId: null,
     showModeSelectorForNewChat: false,
+    waitingForModeSelection: false,
     conversationLearningModes: {},
     globalLearningMode: 'chat',
     mainView: 'chat',

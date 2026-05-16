@@ -2,6 +2,7 @@ package com.lingobot.learning.chat.controller;
 
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.repository.ConversationRepository;
+import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.exception.ChatException;
@@ -31,16 +32,19 @@ public class ContextController {
     private final VocabularyCardRepository vocabularyCardRepository;
     private final BalanceService balanceService;
     private final ApiConfigProperties apiConfigProperties;
+    private final ConversationService conversationService;
 
-    @GetMapping("/status/{conversationId}")
-    public ResponseEntity<ApiResponse<Object>> getContextStatus(@PathVariable Long conversationId) {
+    @GetMapping("/status/{publicId}")
+    public ResponseEntity<ApiResponse<Object>> getContextStatus(@PathVariable String publicId) {
+        Long conversationId = conversationService.resolvePublicIdToId(publicId);
         return ResponseEntity.ok(ApiResponse.success(contextManagerService.getContextStatus(conversationId)));
     }
 
-    @PostMapping("/compact/{conversationId}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> compact(@PathVariable Long conversationId) {
+    @PostMapping("/compact/{publicId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> compact(@PathVariable String publicId) {
+        Long conversationId = conversationService.resolvePublicIdToId(publicId);
         Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> ChatException.badRequest("对话不存在: " + conversationId));
+                .orElseThrow(() -> ChatException.badRequest("对话不存在: " + publicId));
 
         BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("context", "compact"));
         Long transactionId = balanceService.freezeBalance(cost, "context", "compact", "AI压缩对话历史", conversationId);
@@ -60,7 +64,7 @@ public class ContextController {
             int savedTokens = Math.max(0, beforeTokens - afterTokens);
 
             balanceService.confirmTransaction(transactionId);
-            log.info("Compact completed: conversationId={}, savedTokens={}", conversationId, savedTokens);
+            log.info("Compact completed: publicId={}, savedTokens={}", publicId, savedTokens);
 
             Map<String, Object> result = new HashMap<>();
             result.put("executed", true);
@@ -72,7 +76,7 @@ public class ContextController {
 
         } catch (Exception e) {
             balanceService.cancelTransaction(transactionId);
-            log.error("Compact failed: conversationId={}", conversationId, e);
+            log.error("Compact failed: publicId={}", publicId, e);
             throw e;
         }
     }

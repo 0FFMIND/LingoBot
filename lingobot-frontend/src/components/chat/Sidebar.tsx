@@ -10,23 +10,23 @@ interface SidebarProps {
   conversations: ConversationDTO[];
   currentConversation: ConversationDTO | null;
   onSelectConversation: (conversation: ConversationDTO) => void;
-  onCreateConversation: (title: string) => void;
-  onDeleteConversation: (id: number) => void;
+  onCreateConversation: (title?: string) => void;
+  onDeleteConversation: (publicId: string) => void;
   onLoginClick: () => void;
   onLogout: () => void;
   onDeactivate: () => void;
   onOpenSettings: () => void;
   onOpenVocabularyManager?: () => void;
   onLoadMore?: () => void;
-  onManualCompact?: (conversationId: number) => void;
+  onManualCompact?: (publicId: string) => void;
   disabled?: boolean;
   learningMode?: LearningMode;
   onLearningModeChange?: (mode: LearningMode) => void;
-  conversationLearningModes?: Record<number, LearningMode>;
+  conversationLearningModes?: Record<string, LearningMode>;
   loadingMore?: boolean;
   hasMore?: boolean;
   isCompacting?: boolean;
-  compactingConversationId?: number | null;
+  compactingConversationPublicId?: string | null;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -49,13 +49,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   loadingMore = false,
   hasMore = false,
   isCompacting = false,
-  compactingConversationId = null,
+  compactingConversationPublicId = null,
 }) => {
   const [user, setUser] = useState<UserDTO | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletingConversationId, setDeletingConversationId] = useState<number | null>(null);
+  const [deletingConversationPublicId, setDeletingConversationPublicId] = useState<string | null>(null);
   const [deletingConversationTitle, setDeletingConversationTitle] = useState('');
 
   const conversationListRef = useRef<HTMLDivElement>(null);
@@ -151,8 +151,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const handleNewChatClick = () => {
     if (!disabled) {
-      const defaultTitle = `新对话 ${new Date().toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
-      onCreateConversation(defaultTitle);
+      onCreateConversation();
     }
   };
 
@@ -172,30 +171,30 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const handleDelete = (e: React.MouseEvent, id: number) => {
+  const handleDelete = (e: React.MouseEvent, publicId: string) => {
     e.stopPropagation();
     if (disabled) return;
 
-    const conversation = conversations.find(c => c.id === id);
+    const conversation = conversations.find(c => c.publicId === publicId);
     if (conversation) {
-      setDeletingConversationId(id);
+      setDeletingConversationPublicId(publicId);
       setDeletingConversationTitle(conversation.title);
       setShowDeleteModal(true);
     }
   };
 
   const handleConfirmDelete = () => {
-    if (deletingConversationId !== null) {
-      onDeleteConversation(deletingConversationId);
+    if (deletingConversationPublicId !== null) {
+      onDeleteConversation(deletingConversationPublicId);
     }
     setShowDeleteModal(false);
-    setDeletingConversationId(null);
+    setDeletingConversationPublicId(null);
     setDeletingConversationTitle('');
   };
 
   const handleCancelDelete = () => {
     setShowDeleteModal(false);
-    setDeletingConversationId(null);
+    setDeletingConversationPublicId(null);
     setDeletingConversationTitle('');
   };
 
@@ -208,7 +207,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (conversation.learningMode && LEARNING_MODES[conversation.learningMode as LearningMode]) {
       return conversation.learningMode as LearningMode;
     }
-    return conversationLearningModes[conversation.id] || 'chat';
+    return conversationLearningModes[conversation.publicId] || 'chat';
   };
 
   const formatDate = (dateString: string) => {
@@ -295,9 +294,9 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             return (
               <div
-                key={conversation.id}
+                key={conversation.publicId}
                 className={`conversation-item-english compact ${
-                  currentConversation?.id === conversation.id ? 'active' : ''
+                  currentConversation?.publicId === conversation.publicId ? 'active' : ''
                 } ${disabled ? 'disabled' : ''}`}
                 onClick={() => handleSelect(conversation)}
               >
@@ -318,9 +317,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                         <ContextStatusTooltip
                           status={conversation.contextStatus}
                           onManualCompact={onManualCompact}
-                          conversationId={conversation.id}
+                          publicId={conversation.publicId}
                           isCompacting={isCompacting}
-                          compactingConversationId={compactingConversationId}
+                          compactingConversationPublicId={compactingConversationPublicId}
                         >
                           <div className="conversation-progress-inline">
                             <CircularProgress
@@ -330,7 +329,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                               showPercentage={false}
                               onDoubleClick={() => {
                                 if (onManualCompact && !isCompacting) {
-                                  onManualCompact(conversation.id);
+                                  onManualCompact(conversation.publicId);
                                 }
                               }}
                             />
@@ -343,7 +342,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                 <button
                   className={`delete-btn-english compact ${disabled ? 'disabled' : ''}`}
-                  onClick={(e) => handleDelete(e, conversation.id)}
+                  onClick={(e) => handleDelete(e, conversation.publicId)}
                   disabled={disabled}
                   title="删除对话"
                 >

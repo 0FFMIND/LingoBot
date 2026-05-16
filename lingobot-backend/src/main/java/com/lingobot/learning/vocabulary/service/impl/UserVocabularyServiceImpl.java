@@ -113,6 +113,39 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                 });
     }
 
+    // 仅创建/更新用户词汇记录（只同步展示字段，不增加学习次数，不改变学习状态）
+    @Override
+    @Transactional
+    public UserVocabulary upsertRecordOnly(Long userId, VocabularyCard card) {
+        if (card == null || card.getVocabularyWordId() == null) {
+            throw new IllegalArgumentException("Vocabulary card and vocabularyWordId are required");
+        }
+
+        UserVocabulary vocabulary = userVocabularyRepository
+                .findByUserIdAndVocabularyWordId(userId, card.getVocabularyWordId())
+                .orElseGet(() -> {
+                    log.info("Creating new UserVocabulary (record only) for userId={}, vocabularyWordId={}", 
+                            userId, card.getVocabularyWordId());
+                    return UserVocabulary.builder()
+                            .userId(userId)
+                            .vocabularyWordId(card.getVocabularyWordId())
+                            .word("")
+                            .status(VocabularyStatus.NEW)
+                            .masteryScore(BigDecimal.ZERO)
+                            .seenCount(0)
+                            .correctCount(0)
+                            .wrongCount(0)
+                            .firstSeenAt(null)
+                            .lastSeenAt(null)
+                            .lastEventType(null)
+                            .nextReviewAt(null)
+                            .build();
+                });
+
+        copyDisplayFields(vocabulary, card);
+        return userVocabularyRepository.save(vocabulary);
+    }
+
     // 更新用户学习进度（根据测验结果计算掌握程度和复习时间）
     @Override
     @Transactional
@@ -323,10 +356,11 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
     @Override
     @Transactional
     public void deleteVocabulary(Long userId, Long id) {
-        UserVocabulary vocabulary = userVocabularyRepository.findById(id)
+        userVocabularyRepository.findById(id)
                 .filter(item -> item.getUserId().equals(userId))
-                .orElseThrow(() -> ChatException.badRequest("Vocabulary not found: " + id));
-        userVocabularyRepository.delete(vocabulary);
+                .ifPresentOrElse(
+                        userVocabularyRepository::delete,
+                        () -> log.info("Vocabulary already deleted or not owned by userId={}, id={}", userId, id));
     }
 
     // 根据排序参数构建 Sort 对象

@@ -368,7 +368,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
           <div className="sentence-input-section">
             <div className="content-title" style={{ marginBottom: '8px' }}>
               <span className="title-icon">✍️</span>
-              <span>你的英文句子</span>
+              <span>你的造句</span>
             </div>
             <div className="sentence-input-hint">
               请根据上面的中文例句，写出对应的英文句子（必须包含新单词）
@@ -448,7 +448,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
             <div className="flashcard-content sentence-content expanded">
               <div className="content-title">
                 <span className="title-icon">✍️</span>
-                <span>你的英文句子</span>
+                <span>你的造句</span>
               </div>
               <div className="sentence-text">"{savedUserEnglishSentence}"</div>
             </div>
@@ -466,7 +466,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
 
           {!effectiveSentenceAnalysisCompleted && !isCompleted ? (
             <div className="sentence-waiting">
-              <span className="typing-english">⏳ 正在分析你的英文句子...</span>
+              <span className="typing-english">⏳ 正在分析你的英文造句...</span>
             </div>
           ) : effectiveSentenceAnalysisCompleted && (
             <>

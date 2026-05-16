@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class EditMessageRequest {
     
     private Long conversationId;
+    private String conversationPublicId;
     private Long userMessageId;
     private String newContent;
 }

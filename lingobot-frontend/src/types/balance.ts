@@ -1,7 +1,7 @@
 export type TransactionType = 'CHARGE' | 'RECHARGE' | 'ADMIN_ADJUSTMENT';
 
 export interface BalanceTransactionDTO {
-  id: number;
+  publicId: string;
   type: TransactionType;
   amount: number;
   balanceBefore: number;

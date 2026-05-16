@@ -73,6 +73,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
   const [editingItem, setEditingItem] = useState<UserVocabularyDTO | null>(null);
   const [editTab, setEditTab] = useState<'card' | 'state'>('card');
   const [deletingItem, setDeletingItem] = useState<UserVocabularyDTO | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [editForm, setEditForm] = useState({
     word: '',
     phonetic: '',
@@ -389,11 +390,12 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
   };
 
   const confirmDelete = async () => {
-    if (!deletingItem) return;
+    if (!deletingItem || deleting) return;
     
     const itemId = deletingItem.id;
     
     try {
+      setDeleting(true);
       await vocabularyService.deleteUserVocabulary(itemId);
       
       const newTotalElements = totalElements - 1;
@@ -421,6 +423,8 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
     } catch (error) {
       console.error('Failed to delete vocabulary:', error);
       alert('删除失败，请稍后再试');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -552,21 +556,22 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
         <div className="vocabulary-edit-overlay" onClick={() => setEditingItem(null)}>
           <div className="vocabulary-edit-modal" onClick={(event) => event.stopPropagation()}>
             <div className="vocabulary-edit-header">
-              <h3>{editTab === 'card' ? '编辑单词卡' : '编辑学习状态'}</h3>
-              <div className="vocabulary-edit-header-tabs">
+              <div className="vocabulary-edit-tabs-bar">
                 <button
-                  className={`edit-tab-btn ${editTab === 'card' ? 'active' : ''}`}
+                  className={`vocabulary-edit-tab ${editTab === 'card' ? 'active' : ''}`}
                   onClick={() => setEditTab('card')}
                   type="button"
                 >
-                  单词卡
+                  <span className="vocabulary-edit-tab-icon">📝</span>
+                  <span className="vocabulary-edit-tab-label">编辑单词卡</span>
                 </button>
                 <button
-                  className={`edit-tab-btn ${editTab === 'state' ? 'active' : ''}`}
+                  className={`vocabulary-edit-tab ${editTab === 'state' ? 'active' : ''}`}
                   onClick={() => setEditTab('state')}
                   type="button"
                 >
-                  学习状态
+                  <span className="vocabulary-edit-tab-icon">📊</span>
+                  <span className="vocabulary-edit-tab-label">编辑学习状态</span>
                 </button>
               </div>
               <button className="vocabulary-edit-close" onClick={() => setEditingItem(null)} type="button">×</button>
@@ -644,7 +649,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
                   <div className="learning-state-field">
                     <label className="learning-state-label">
                       学习状态
-                      <span className="learning-state-hint" title="NEW=新词，LEARNING=学习中（掌握度&lt;75%），REVIEWING=复习中（75%-90%），MASTERED=已掌握（≥90%）。每次正确答题提升掌握度，答错会降低。">❓</span>
+                      <span className="learning-state-hint" data-tooltip="学习状态由掌握度自动计算：NEW=新词（从未学习）、LEARNING=学习中（掌握度&lt;60%）、REVIEWING=复习中（60%-89%）、MASTERED=已掌握（≥90%）、IGNORED=已忽略。每次正确答题提升掌握度，答错会降低。">❓</span>
                     </label>
                     <select
                       value={learningStateForm.status}
@@ -661,7 +666,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
                   <div className="learning-state-field">
                     <label className="learning-state-label">
                       掌握度
-                      <span className="learning-state-hint" title="掌握度由正确率、学习次数和时间衰减共同决定。每次正确答题 +12%，答错 -20%，长时间不复习会自然衰减。">❓</span>
+                      <span className="learning-state-hint" data-tooltip="掌握度 = 正确答题次数 / (正确次数 + 答错次数)。每次答对或答错后，系统重新计算正确率。掌握度决定学习状态：≥90%=已掌握，≥60%=复习中，&lt;60%=学习中。">❓</span>
                     </label>
                     <div className="mastery-score-row">
                       <input
@@ -722,7 +727,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
       )}
 
       {deletingItem && (
-        <div className="vocabulary-edit-overlay" onClick={() => setDeletingItem(null)}>
+        <div className="vocabulary-edit-overlay" onClick={() => !deleting && setDeletingItem(null)}>
           <div className="auth-modal delete-conversation-modal" onClick={(event) => event.stopPropagation()}>
             <div className="delete-modal-header">
               <h2>删除单词卡？</h2>
@@ -739,6 +744,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
                 type="button"
                 className="delete-modal-cancel-btn"
                 onClick={() => setDeletingItem(null)}
+                disabled={deleting}
               >
                 取消
               </button>
@@ -746,8 +752,9 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
                 type="button"
                 className="delete-modal-delete-btn"
                 onClick={confirmDelete}
+                disabled={deleting}
               >
-                删除
+                {deleting ? '删除中...' : '删除'}
               </button>
             </div>
           </div>

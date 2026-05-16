@@ -6,6 +6,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * 余额交易记录实体。
@@ -37,6 +38,9 @@ public class BalanceTransaction {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "public_id", unique = true, nullable = false, updatable = false)
+    private String publicId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
@@ -82,6 +86,9 @@ public class BalanceTransaction {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        if (publicId == null) {
+            publicId = UUID.randomUUID().toString();
+        }
         if (status == null) {
             status = TransactionStatus.SUCCEEDED;
         }

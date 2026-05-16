@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class ConversationDTO {
     
-    private Long id;
+    private String publicId;
     private String title;
     private String learningMode;
     private LocalDateTime createdAt;

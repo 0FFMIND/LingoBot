@@ -52,45 +52,45 @@ public class ConversationController {
     }
     
     @PutMapping("/current")
-    public ResponseEntity<ApiResponse<ConversationDTO>> setCurrentConversation(@RequestBody Map<String, Long> request) {
-        Long conversationId = request.get("conversationId");
-        conversationService.setCurrentConversation(conversationId);
+    public ResponseEntity<ApiResponse<ConversationDTO>> setCurrentConversation(@RequestBody Map<String, String> request) {
+        String publicId = request.get("publicId");
+        conversationService.setCurrentConversation(publicId);
         
-        if (conversationId == null) {
+        if (publicId == null) {
             return ResponseEntity.ok(ApiResponse.success("已清除当前对话", null));
         }
 
-        ConversationDTO conversation = conversationService.getConversationById(conversationId);
+        ConversationDTO conversation = conversationService.getConversationByPublicId(publicId);
         return ResponseEntity.ok(ApiResponse.success("已设置当前对话", conversation));
     }
     
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ConversationDTO>> getConversationById(@PathVariable Long id) {
-        ConversationDTO conversation = conversationService.getConversationById(id);
+    @GetMapping("/{publicId}")
+    public ResponseEntity<ApiResponse<ConversationDTO>> getConversationByPublicId(@PathVariable String publicId) {
+        ConversationDTO conversation = conversationService.getConversationByPublicId(publicId);
         return ResponseEntity.ok(ApiResponse.success(conversation));
     }
     
-    @PutMapping("/{id}")
+    @PutMapping("/{publicId}")
     public ResponseEntity<ApiResponse<ConversationDTO>> updateConversationTitle(
-            @PathVariable Long id,
+            @PathVariable String publicId,
             @RequestBody Map<String, String> request) {
         String title = request.get("title");
-        ConversationDTO updated = conversationService.updateConversationTitle(id, title);
+        ConversationDTO updated = conversationService.updateConversationTitle(publicId, title);
         return ResponseEntity.ok(ApiResponse.success("对话标题更新成功", updated));
     }
     
-    @PutMapping("/{id}/learning-mode")
+    @PutMapping("/{publicId}/learning-mode")
     public ResponseEntity<ApiResponse<ConversationDTO>> updateConversationLearningMode(
-            @PathVariable Long id,
+            @PathVariable String publicId,
             @RequestBody Map<String, String> request) {
         String learningMode = request.get("learningMode");
-        ConversationDTO updated = conversationService.updateConversationLearningMode(id, learningMode);
+        ConversationDTO updated = conversationService.updateConversationLearningMode(publicId, learningMode);
         return ResponseEntity.ok(ApiResponse.success("对话学习模式更新成功", updated));
     }
     
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteConversation(@PathVariable Long id) {
-        conversationService.deleteConversation(id);
+    @DeleteMapping("/{publicId}")
+    public ResponseEntity<Void> deleteConversation(@PathVariable String publicId) {
+        conversationService.deleteConversation(publicId);
         return ResponseEntity.noContent().build();
     }
 }

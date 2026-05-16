@@ -11,7 +11,7 @@ export interface ContextStatusDTO {
 }
 
 export interface ConversationDTO {
-  id: number;
+  publicId: string;
   title: string;
   learningMode?: string;
   createdAt: string;

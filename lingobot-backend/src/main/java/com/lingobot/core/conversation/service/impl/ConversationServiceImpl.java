@@ -67,20 +67,29 @@ public class ConversationServiceImpl implements ConversationService {
         return toDTO(saved);
     }
     
-    @Override
-    public ConversationDTO getConversationById(Long id) {
+    private Conversation getConversationEntityByPublicId(String publicId) {
         Long currentUserId = authService.getCurrentUserId();
         
         Conversation conversation;
         if (currentUserId != null) {
-            conversation = conversationRepository.findByIdAndUserId(id, currentUserId)
-                    .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + id));
+            conversation = conversationRepository.findByPublicIdAndUserId(publicId, currentUserId)
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + publicId));
         } else {
-            conversation = conversationRepository.findById(id)
-                    .orElseThrow(() -> ChatException.badRequest("对话不存在 " + id));
+            conversation = conversationRepository.findByPublicId(publicId)
+                    .orElseThrow(() -> ChatException.badRequest("对话不存在 " + publicId));
         }
         
-        return toDTO(conversation);
+        return conversation;
+    }
+    
+    @Override
+    public Long resolvePublicIdToId(String publicId) {
+        return getConversationEntityByPublicId(publicId).getId();
+    }
+    
+    @Override
+    public ConversationDTO getConversationByPublicId(String publicId) {
+        return toDTO(getConversationEntityByPublicId(publicId));
     }
     
     @Override
@@ -131,18 +140,8 @@ public class ConversationServiceImpl implements ConversationService {
     
     @Override
     @Transactional
-    public ConversationDTO updateConversationTitle(Long id, String title) {
-        Long currentUserId = authService.getCurrentUserId();
-        
-        Conversation conversation;
-        if (currentUserId != null) {
-            conversation = conversationRepository.findByIdAndUserId(id, currentUserId)
-                    .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + id));
-        } else {
-            conversation = conversationRepository.findById(id)
-                    .orElseThrow(() -> ChatException.badRequest("对话不存在 " + id));
-        }
-        
+    public ConversationDTO updateConversationTitle(String publicId, String title) {
+        Conversation conversation = getConversationEntityByPublicId(publicId);
         conversation.setTitle(title);
         Conversation saved = conversationRepository.save(conversation);
         return toDTO(saved);
@@ -150,18 +149,8 @@ public class ConversationServiceImpl implements ConversationService {
     
     @Override
     @Transactional
-    public ConversationDTO updateConversationLearningMode(Long id, String learningMode) {
-        Long currentUserId = authService.getCurrentUserId();
-        
-        Conversation conversation;
-        if (currentUserId != null) {
-            conversation = conversationRepository.findByIdAndUserId(id, currentUserId)
-                    .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + id));
-        } else {
-            conversation = conversationRepository.findById(id)
-                    .orElseThrow(() -> ChatException.badRequest("对话不存在 " + id));
-        }
-        
+    public ConversationDTO updateConversationLearningMode(String publicId, String learningMode) {
+        Conversation conversation = getConversationEntityByPublicId(publicId);
         conversation.setLearningMode(learningMode);
         Conversation saved = conversationRepository.save(conversation);
         return toDTO(saved);
@@ -187,7 +176,7 @@ public class ConversationServiceImpl implements ConversationService {
     
     @Override
     @Transactional
-    public void setCurrentConversation(Long conversationId) {
+    public void setCurrentConversation(String publicId) {
         Long currentUserId = authService.getCurrentUserId();
         if (currentUserId == null) {
             return;
@@ -198,15 +187,11 @@ public class ConversationServiceImpl implements ConversationService {
             return;
         }
         
-        if (conversationId == null) {
+        if (publicId == null) {
             user.setCurrentConversationId(null);
         } else {
-            Conversation conversation = conversationRepository.findByIdAndUserId(conversationId, currentUserId)
-                    .orElse(null);
-            if (conversation == null) {
-                throw ChatException.badRequest("对话不存在或无权访问: " + conversationId);
-            }
-            user.setCurrentConversationId(conversationId);
+            Conversation conversation = getConversationEntityByPublicId(publicId);
+            user.setCurrentConversationId(conversation.getId());
         }
         
         userRepository.save(user);
@@ -214,19 +199,9 @@ public class ConversationServiceImpl implements ConversationService {
     
     @Override
     @Transactional
-    public void deleteConversation(Long id) {
-        Long currentUserId = authService.getCurrentUserId();
-        
-        if (currentUserId != null) {
-            if (!conversationRepository.existsByIdAndUserId(id, currentUserId)) {
-                throw ChatException.badRequest("对话不存在或无权访问: " + id);
-            }
-        } else {
-            if (!conversationRepository.existsById(id)) {
-                throw ChatException.badRequest("对话不存在 " + id);
-            }
-        }
-        
+    public void deleteConversation(String publicId) {
+        Conversation conversation = getConversationEntityByPublicId(publicId);
+        Long id = conversation.getId();
         vocabularyCardRepository.deleteByConversationId(id);
         conversationRepository.deleteById(id);
     }
@@ -428,7 +403,7 @@ public class ConversationServiceImpl implements ConversationService {
         }
         
         return ConversationDTO.builder()
-                .id(conversation.getId())
+                .publicId(conversation.getPublicId())
                 .title(conversation.getTitle())
                 .learningMode(conversation.getLearningMode())
                 .createdAt(conversation.getCreatedAt())

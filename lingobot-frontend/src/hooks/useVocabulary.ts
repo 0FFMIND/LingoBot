@@ -30,7 +30,7 @@ export interface UseVocabularyResult {
 }
 
 export function useVocabulary(
-  conversationId: number | null,
+  conversationPublicId: string | null,
   isAuthenticated: boolean
 ): UseVocabularyResult {
   const [currentVocabularyCard, setCurrentVocabularyCard] = useState<VocabularyCardDTO | null>(null);
@@ -41,23 +41,23 @@ export function useVocabulary(
   const [userEnglishSentenceInput, setUserEnglishSentenceInput] = useState('');
 
   const loadCurrentCard = useCallback(async () => {
-    if (!isAuthenticated || !conversationId) return;
+    if (!isAuthenticated || !conversationPublicId) return;
 
     setVocabularyCardLoading(true);
     try {
-      const existingCard = await vocabularyService.getCurrentCard(conversationId);
+      const existingCard = await vocabularyService.getCurrentCard(conversationPublicId);
       if (existingCard) {
         setCurrentVocabularyCard(existingCard);
         setUserMeaningInput(existingCard.userMeaningGuess || '');
         setUserEnglishSentenceInput(existingCard.userEnglishSentence || '');
       }
       try {
-        const totalCount = await vocabularyService.getCardCount(conversationId);
-        const usage = useTokenUsageStore.getState().usageByConversation[conversationId];
+        const totalCount = await vocabularyService.getCardCount(conversationPublicId);
+        const usage = useTokenUsageStore.getState().usageByConversationPublicId[conversationPublicId];
         const currentLocalCount = usage?.wordCardsCount ?? 0;
         if (totalCount > currentLocalCount) {
           for (let i = currentLocalCount; i < totalCount; i++) {
-            useTokenUsageStore.getState().recordWordCard(conversationId);
+            useTokenUsageStore.getState().recordWordCard(conversationPublicId);
           }
         }
       } catch (e) {
@@ -68,15 +68,15 @@ export function useVocabulary(
     } finally {
       setVocabularyCardLoading(false);
     }
-  }, [isAuthenticated, conversationId]);
+  }, [isAuthenticated, conversationPublicId]);
 
   const getPrevCard = useCallback(async () => {
-    if (!isAuthenticated || !conversationId || !currentVocabularyCard) return;
+    if (!isAuthenticated || !conversationPublicId || !currentVocabularyCard) return;
 
     setVocabularyCardLoading(true);
     try {
       const card = await vocabularyService.getPrevCard(
-        conversationId,
+        conversationPublicId,
         currentVocabularyCard.position
       );
       if (card) {
@@ -89,15 +89,15 @@ export function useVocabulary(
     } finally {
       setVocabularyCardLoading(false);
     }
-  }, [isAuthenticated, conversationId, currentVocabularyCard]);
+  }, [isAuthenticated, conversationPublicId, currentVocabularyCard]);
 
   const getNextCard = useCallback(async () => {
-    if (!isAuthenticated || !conversationId || !currentVocabularyCard) return;
+    if (!isAuthenticated || !conversationPublicId || !currentVocabularyCard) return;
 
     setVocabularyCardLoading(true);
     try {
       const card = await vocabularyService.getNextCard(
-        conversationId,
+        conversationPublicId,
         currentVocabularyCard.position,
         vocabularyCategory,
         vocabularyDifficulty
@@ -112,15 +112,15 @@ export function useVocabulary(
     } finally {
       setVocabularyCardLoading(false);
     }
-  }, [isAuthenticated, conversationId, currentVocabularyCard, vocabularyCategory, vocabularyDifficulty]);
+  }, [isAuthenticated, conversationPublicId, currentVocabularyCard, vocabularyCategory, vocabularyDifficulty]);
 
   const generateNextCard = useCallback(async () => {
-    if (!isAuthenticated || !conversationId) return;
+    if (!isAuthenticated || !conversationPublicId) return;
 
     setVocabularyCardLoading(true);
     try {
       const card = await vocabularyService.generateNextCard(
-        conversationId,
+        conversationPublicId,
         vocabularyCategory,
         vocabularyDifficulty
       );
@@ -128,23 +128,23 @@ export function useVocabulary(
         setCurrentVocabularyCard(card);
         setUserMeaningInput('');
         setUserEnglishSentenceInput('');
-        useTokenUsageStore.getState().recordWordCard(conversationId);
-        console.log('✅ 已记录新词汇卡到本地状态，conversationId:', conversationId);
+        useTokenUsageStore.getState().recordWordCard(conversationPublicId);
+        console.log('✅ 已记录新词汇卡到本地状态，conversationPublicId:', conversationPublicId);
       }
     } catch (error) {
       console.error('生成新单词失败:', error);
     } finally {
       setVocabularyCardLoading(false);
     }
-  }, [isAuthenticated, conversationId, vocabularyCategory, vocabularyDifficulty]);
+  }, [isAuthenticated, conversationPublicId, vocabularyCategory, vocabularyDifficulty]);
 
   const regenerateCard = useCallback(async () => {
-    if (!isAuthenticated || !conversationId) return;
+    if (!isAuthenticated || !conversationPublicId) return;
 
     setVocabularyCardLoading(true);
     try {
       const card = await vocabularyService.regenerateCard(
-        conversationId,
+        conversationPublicId,
         vocabularyCategory,
         vocabularyDifficulty
       );
@@ -158,7 +158,7 @@ export function useVocabulary(
     } finally {
       setVocabularyCardLoading(false);
     }
-  }, [isAuthenticated, conversationId, vocabularyCategory, vocabularyDifficulty]);
+  }, [isAuthenticated, conversationPublicId, vocabularyCategory, vocabularyDifficulty]);
 
   const saveUserMeaning = useCallback(async (cardId: number, meaning: string) => {
     try {

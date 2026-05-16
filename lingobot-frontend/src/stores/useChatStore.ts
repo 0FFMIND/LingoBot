@@ -22,10 +22,10 @@ interface ChatStore {
   agentStatus: AgentStatus
   mode: 'chat' | 'agent'
   isCompacting: boolean
-  compactingConversationId: number | null
-  lastCompactTime: Record<number, number>
+  compactingConversationPublicId: string | null
+  lastCompactTime: Record<string, number>
 
-  loadMessages: (conversationId: number) => Promise<void>
+  loadMessages: (conversationPublicId: string) => Promise<void>
   sendMessage: (request: ChatRequest) => Promise<void>
   sendAudioMessage: (request: ChatRequest) => Promise<void>
   sendImageMessage: (request: ChatRequest) => Promise<void>
@@ -35,14 +35,14 @@ interface ChatStore {
   editMessage: (request: EditMessageRequest) => Promise<void>
   editAudioMessage: (request: ChatRequest, userMessageId: number) => Promise<void>
   setMode: (mode: 'chat' | 'agent') => void
-  manualCompact: (conversationId: number) => Promise<void>
+  manualCompact: (conversationPublicId: string) => Promise<void>
   reset: () => void
 }
 
-const makeStreamCallbacks = (get: () => ChatStore, set: (partial: Partial<ChatStore> | ((s: ChatStore) => Partial<ChatStore>)) => void, conversationId: number, originalMessages?: MessageDTO[]) => ({
+const makeStreamCallbacks = (get: () => ChatStore, set: (partial: Partial<ChatStore> | ((s: ChatStore) => Partial<ChatStore>)) => void, conversationPublicId: string, originalMessages?: MessageDTO[]) => ({
   onChunk: (chunk: string) => set(s => ({ streamingContent: s.streamingContent + chunk })),
   onFinal: (_final: any) => {
-    get().loadMessages(conversationId)
+    get().loadMessages(conversationPublicId)
     set({ streamingContent: '', loading: false, agentStatus: { thinking: '', toolCalls: [] } })
   },
   onError: (error: string) => {
@@ -79,12 +79,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   agentStatus: { thinking: '', toolCalls: [] },
   mode: 'chat',
   isCompacting: false,
-  compactingConversationId: null,
+  compactingConversationPublicId: null,
   lastCompactTime: {},
 
-  loadMessages: async (conversationId: number) => {
+  loadMessages: async (conversationPublicId: string) => {
     try {
-      const data = await chatApi.getMessages(conversationId)
+      const data = await chatApi.getMessages(conversationPublicId)
       set({ messages: data })
     } catch (error) {
       console.error('加载消息失败:', error)
@@ -97,7 +97,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
-      conversationId: request.conversationId || 0,
+      conversationId: 0,
       content: request.content,
       role: 'user',
       timestamp: new Date().toISOString(),
@@ -106,7 +106,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ messages: [...messages, tempUserMessage] })
 
     const { onChunk, onFinal, onError, onThinking, onToolCall, onToolResult } =
-      makeStreamCallbacks(get, set, request.conversationId!, messages)
+      makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     try {
       await chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
@@ -123,7 +123,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
-      conversationId: request.conversationId || 0,
+      conversationId: 0,
       content: request.content || '',
       role: 'user',
       timestamp: new Date().toISOString(),
@@ -135,7 +135,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ messages: [...messages, tempUserMessage] })
 
     const { onChunk, onFinal, onError, onThinking, onToolCall, onToolResult } =
-      makeStreamCallbacks(get, set, request.conversationId!, messages)
+      makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     try {
       await chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
@@ -152,7 +152,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
-      conversationId: request.conversationId || 0,
+      conversationId: 0,
       content: request.content || '',
       role: 'user',
       timestamp: new Date().toISOString(),
@@ -163,7 +163,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ messages: [...messages, tempUserMessage] })
 
     const { onChunk, onFinal, onError, onThinking, onToolCall, onToolResult } =
-      makeStreamCallbacks(get, set, request.conversationId!, messages)
+      makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     try {
       await chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
@@ -181,7 +181,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const messageContent = request.content
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
-      conversationId: request.conversationId || 0,
+      conversationId: 0,
       content: messageContent,
       role: 'user',
       timestamp: new Date().toISOString(),
@@ -190,7 +190,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       const response = await chatApi.sendVocabularySentenceMessage(request)
-      get().loadMessages(request.conversationId!)
+      get().loadMessages(request.conversationPublicId!)
       set({ loading: false })
       return response
     } catch (error) {
@@ -223,7 +223,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     })
 
     const { onChunk, onFinal, onThinking, onToolCall, onToolResult } =
-      makeStreamCallbacks(get, set, request.conversationId, messages)
+      makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     const onError = (error: string) => {
       console.error('重试消息错误:', error)
@@ -262,7 +262,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     })
 
     const { onChunk, onFinal, onThinking, onToolCall, onToolResult } =
-      makeStreamCallbacks(get, set, request.conversationId, messages)
+      makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     const onError = (error: string) => {
       console.error('重试消息错误:', error)
@@ -299,7 +299,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ loading: true, streamingContent: '', agentStatus: { thinking: '', toolCalls: [] }, messages: updatedMessages })
 
     const { onChunk, onFinal, onThinking, onToolCall, onToolResult } =
-      makeStreamCallbacks(get, set, request.conversationId, messages)
+      makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     const onError = (error: string) => {
       console.error('编辑消息错误:', error)
@@ -344,7 +344,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     )
     set({ loading: true, streamingContent: '', agentStatus: { thinking: '', toolCalls: [] }, messages: updatedMessages })
 
-    // Compose final request merging existing audio if no new provided
     const finalRequest: ChatRequest = {
       ...request,
       messageType: request.audioData ? 'audio' : (userMessage.audioData ? 'audio' : 'text'),
@@ -354,7 +353,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     const { onChunk, onFinal, onThinking, onToolCall, onToolResult } =
-      makeStreamCallbacks(get, set, request.conversationId!, messages)
+      makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     const onError = (error: string) => {
       console.error('编辑消息错误:', error)
@@ -373,7 +372,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setMode: (mode) => set({ mode }),
 
-  manualCompact: async (conversationId: number) => {
+  manualCompact: async (conversationPublicId: string) => {
     const { isCompacting, lastCompactTime } = get()
 
     if (isCompacting) {
@@ -382,20 +381,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     const now = Date.now()
-    const lastTime = lastCompactTime[conversationId] || 0
+    const lastTime = lastCompactTime[conversationPublicId] || 0
     if (now - lastTime < COMPACT_COOLDOWN_MS) {
       const remainingSeconds = Math.ceil((COMPACT_COOLDOWN_MS - (now - lastTime)) / 1000)
       alert(`操作过于频繁，请 ${remainingSeconds} 秒后再试`)
       return
     }
 
-    set({ isCompacting: true, compactingConversationId: conversationId })
+    set({ isCompacting: true, compactingConversationPublicId: conversationPublicId })
 
     try {
-      console.log('手动执行Compact，conversationId:', conversationId)
-      const result = await conversationApi.executeCompact(conversationId)
+      console.log('手动执行Compact，conversationPublicId:', conversationPublicId)
+      const result = await conversationApi.executeCompact(conversationPublicId)
 
-      set(s => ({ lastCompactTime: { ...s.lastCompactTime, [conversationId]: Date.now() } }))
+      set(s => ({ lastCompactTime: { ...s.lastCompactTime, [conversationPublicId]: Date.now() } }))
 
       if (result.executed) {
         console.log('Compact执行成功，节省了', result.savedTokens, 'tokens')
@@ -410,7 +409,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       console.error('手动Compact失败:', error)
       alert('压缩失败: ' + (error instanceof Error ? error.message : '未知错误'))
     } finally {
-      set({ isCompacting: false, compactingConversationId: null })
+      set({ isCompacting: false, compactingConversationPublicId: null })
     }
   },
 
@@ -420,6 +419,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     streamingContent: '',
     agentStatus: { thinking: '', toolCalls: [] },
     isCompacting: false,
-    compactingConversationId: null,
+    compactingConversationPublicId: null,
   }),
 }))

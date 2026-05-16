@@ -54,7 +54,7 @@ export interface SendMessageOptions {
 }
 
 export function useChat(
-  conversationId: number | null,
+  conversationPublicId: string | null,
   isAuthenticated: boolean,
   options: {
     mode: 'chat' | 'agent';
@@ -74,14 +74,14 @@ export function useChat(
 
   const { mode, model, learningMode, vocabularyCategory, vocabularyDifficulty } = options;
 
-  const recordTokensFromMessage = useCallback((message: MessageDTO | undefined, convId: number | null) => {
-    if (!message || !convId) return;
+  const recordTokensFromMessage = useCallback((message: MessageDTO | undefined, convPublicId: string | null) => {
+    if (!message || !convPublicId) return;
 
     const { promptTokens, completionTokens, totalTokens } = message;
     if (promptTokens !== undefined || completionTokens !== undefined || totalTokens !== undefined) {
-      console.log('🔢 记录 Token 用量:', { convId, promptTokens, completionTokens, totalTokens });
+      console.log('🔢 记录 Token 用量:', { convPublicId, promptTokens, completionTokens, totalTokens });
       useTokenUsageStore.getState().recordTokenUsage(
-        convId,
+        convPublicId,
         promptTokens || 0,
         completionTokens || 0,
         totalTokens || 0
@@ -90,15 +90,15 @@ export function useChat(
   }, []);
 
   const loadMessages = useCallback(async () => {
-    if (!isAuthenticated || !conversationId) return;
+    if (!isAuthenticated || !conversationPublicId) return;
     
     try {
-      const data = await chatService.getMessages(conversationId);
+      const data = await chatService.getMessages(conversationPublicId);
       setMessages(data);
     } catch (error) {
       console.error('加载消息失败:', error);
     }
-  }, [isAuthenticated, conversationId]);
+  }, [isAuthenticated, conversationPublicId]);
 
   const createBaseRequest = useCallback((): Partial<ChatRequest> => ({
     mode,
@@ -115,7 +115,7 @@ export function useChat(
 
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
-      conversationId: request.conversationId || 0,
+      conversationId: 0,
       content: request.content,
       role: 'user',
       timestamp: new Date().toISOString(),
@@ -132,7 +132,7 @@ export function useChat(
     try {
       const response = await chatService.sendMessage(request);
       console.log('✅ 非流式消息响应:', response);
-      recordTokensFromMessage(response, request.conversationId || null);
+      recordTokensFromMessage(response, request.conversationPublicId || null);
       loadMessages();
       setLoading(false);
       setAgentStatus({ thinking: '', toolCalls: [] });
@@ -152,7 +152,7 @@ export function useChat(
 
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
-      conversationId: request.conversationId || 0,
+      conversationId: 0,
       content: request.content,
       role: 'user',
       timestamp: new Date().toISOString(),
@@ -173,7 +173,7 @@ export function useChat(
           setStreamingContent((prev) => prev + chunk);
         },
         (finalMessage) => {
-          recordTokensFromMessage(finalMessage, request.conversationId || null);
+          recordTokensFromMessage(finalMessage, request.conversationPublicId || null);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -230,10 +230,10 @@ export function useChat(
   }, [messages, loadMessages, recordTokensFromMessage]);
 
   const sendMessage = useCallback(async (content: string, options?: SendMessageOptions) => {
-    if (!isAuthenticated || !conversationId || loading) return;
+    if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const request: ChatRequest = {
-      conversationId,
+      conversationPublicId,
       content,
       ...createBaseRequest(),
       ...options,
@@ -246,13 +246,13 @@ export function useChat(
     } else {
       await sendMessageStream(request);
     }
-  }, [isAuthenticated, conversationId, loading, learningMode, createBaseRequest, sendMessageNonStream, sendMessageStream]);
+  }, [isAuthenticated, conversationPublicId, loading, learningMode, createBaseRequest, sendMessageNonStream, sendMessageStream]);
 
   const sendAudioMessage = useCallback(async (audioData: string, audioFormat: string, duration: number) => {
-    if (!isAuthenticated || !conversationId || loading) return;
+    if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const request: ChatRequest = {
-      conversationId,
+      conversationPublicId,
       content: '',
       ...createBaseRequest(),
       messageType: 'audio',
@@ -262,13 +262,13 @@ export function useChat(
     };
 
     await sendMessageStream(request);
-  }, [isAuthenticated, conversationId, loading, createBaseRequest, sendMessageStream]);
+  }, [isAuthenticated, conversationPublicId, loading, createBaseRequest, sendMessageStream]);
 
   const sendImageMessage = useCallback(async (content: string, imageData: string, imageFormat: string) => {
-    if (!isAuthenticated || !conversationId || loading) return;
+    if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const request: ChatRequest = {
-      conversationId,
+      conversationPublicId,
       content: content || '',
       ...createBaseRequest(),
       messageType: 'image',
@@ -277,17 +277,17 @@ export function useChat(
     };
 
     await sendMessageStream(request);
-  }, [isAuthenticated, conversationId, loading, createBaseRequest, sendMessageStream]);
+  }, [isAuthenticated, conversationPublicId, loading, createBaseRequest, sendMessageStream]);
 
   const sendMessageWithIntent = useCallback(async (content: string, intent: string, currentWord: string) => {
-    if (!isAuthenticated || !conversationId || loading) return;
+    if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const messageContent = content.trim()
       ? `[intent:${intent}][current_word:${currentWord}][user_input:${content.trim()}]`
       : `[intent:${intent}][current_word:${currentWord}]`;
 
     const request: ChatRequest = {
-      conversationId,
+      conversationPublicId,
       content: messageContent,
       ...createBaseRequest(),
       intent: intent as any,
@@ -296,10 +296,10 @@ export function useChat(
 
     console.log('📚 词汇学习意图消息：使用非流式接口，intent:', intent);
     await sendMessageNonStream(request);
-  }, [isAuthenticated, conversationId, loading, createBaseRequest, sendMessageNonStream]);
+  }, [isAuthenticated, conversationPublicId, loading, createBaseRequest, sendMessageNonStream]);
 
   const retryMessage = useCallback(async (assistantMessageId: number) => {
-    if (!isAuthenticated || !conversationId || loading) return;
+    if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const assistantMessageIndex = messages.findIndex((m) => m.id === assistantMessageId);
     
@@ -323,7 +323,7 @@ export function useChat(
     setMessages(updatedMessages);
 
     const request: RetryMessageRequest = {
-      conversationId,
+      conversationPublicId,
       assistantMessageId,
       model,
       mode,
@@ -339,7 +339,7 @@ export function useChat(
           setStreamingContent((prev) => prev + chunk);
         },
         (finalMessage) => {
-          recordTokensFromMessage(finalMessage, conversationId);
+          recordTokensFromMessage(finalMessage, conversationPublicId);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -393,10 +393,10 @@ export function useChat(
       setLoading(false);
       alert('重试消息失败');
     }
-  }, [isAuthenticated, conversationId, loading, messages, model, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
+  }, [isAuthenticated, conversationPublicId, loading, messages, model, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
 
   const retryMessageWithModel = useCallback(async (assistantMessageId: number, targetModel: ModelType) => {
-    if (!isAuthenticated || !conversationId || loading) return;
+    if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const assistantMessageIndex = messages.findIndex((m) => m.id === assistantMessageId);
     
@@ -420,7 +420,7 @@ export function useChat(
     setMessages(updatedMessages);
 
     const request: RetryMessageRequest = {
-      conversationId,
+      conversationPublicId,
       assistantMessageId,
       model: targetModel,
       mode,
@@ -436,7 +436,7 @@ export function useChat(
           setStreamingContent((prev) => prev + chunk);
         },
         (finalMessage) => {
-          recordTokensFromMessage(finalMessage, conversationId);
+          recordTokensFromMessage(finalMessage, conversationPublicId);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -490,10 +490,10 @@ export function useChat(
       setLoading(false);
       alert('重试消息失败');
     }
-  }, [isAuthenticated, conversationId, loading, messages, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
+  }, [isAuthenticated, conversationPublicId, loading, messages, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
 
   const editMessage = useCallback(async (userMessageId: number, newContent: string) => {
-    if (!isAuthenticated || !conversationId || loading) return;
+    if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const userMessageIndex = messages.findIndex((m) => m.id === userMessageId);
     
@@ -523,7 +523,7 @@ export function useChat(
     setMessages(updatedMessages);
 
     const request: EditMessageRequest = {
-      conversationId,
+      conversationPublicId,
       userMessageId,
       newContent,
     };
@@ -535,7 +535,7 @@ export function useChat(
           setStreamingContent((prev) => prev + chunk);
         },
         (finalMessage) => {
-          recordTokensFromMessage(finalMessage, conversationId);
+          recordTokensFromMessage(finalMessage, conversationPublicId);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -589,7 +589,7 @@ export function useChat(
       setLoading(false);
       alert('编辑消息失败');
     }
-  }, [isAuthenticated, conversationId, loading, messages, loadMessages, recordTokensFromMessage]);
+  }, [isAuthenticated, conversationPublicId, loading, messages, loadMessages, recordTokensFromMessage]);
 
   const editAudioMessage = useCallback(async (
     userMessageId: number, 
@@ -598,7 +598,7 @@ export function useChat(
     audioFormat?: string, 
     audioDuration?: number
   ) => {
-    if (!isAuthenticated || !conversationId || loading) return;
+    if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const userMessageIndex = messages.findIndex((m) => m.id === userMessageId);
     
@@ -636,7 +636,7 @@ export function useChat(
     setMessages(updatedMessages);
 
     const request: ChatRequest = {
-      conversationId,
+      conversationPublicId,
       content: newContent,
       ...createBaseRequest(),
       messageType: finalAudioData ? 'audio' : 'text',
@@ -652,7 +652,7 @@ export function useChat(
           setStreamingContent((prev) => prev + chunk);
         },
         (finalMessage) => {
-          recordTokensFromMessage(finalMessage, request.conversationId || null);
+          recordTokensFromMessage(finalMessage, request.conversationPublicId || null);
           loadMessages();
           setStreamingContent('');
           setLoading(false);
@@ -706,7 +706,7 @@ export function useChat(
       setLoading(false);
       alert('编辑消息失败');
     }
-  }, [isAuthenticated, conversationId, loading, messages, createBaseRequest, loadMessages, recordTokensFromMessage]);
+  }, [isAuthenticated, conversationPublicId, loading, messages, createBaseRequest, loadMessages, recordTokensFromMessage]);
 
   return {
     messages,

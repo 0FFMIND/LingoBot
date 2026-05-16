@@ -24,35 +24,35 @@ export const conversationService = {
     return httpClient.post<ConversationDTO>('/conversations', request);
   },
 
-  getById: async (id: number): Promise<ConversationDTO> => {
-    return httpClient.get<ConversationDTO>(`/conversations/${id}`);
+  getByPublicId: async (publicId: string): Promise<ConversationDTO> => {
+    return httpClient.get<ConversationDTO>(`/conversations/${publicId}`);
   },
 
   getCurrent: async (): Promise<ConversationDTO | null> => {
     return httpClient.get<ConversationDTO | null>('/conversations/current');
   },
 
-  setCurrent: async (conversationId: number | null): Promise<ConversationDTO | null> => {
-    return httpClient.put<ConversationDTO | null>('/conversations/current', { conversationId });
+  setCurrent: async (publicId: string | null): Promise<ConversationDTO | null> => {
+    return httpClient.put<ConversationDTO | null>('/conversations/current', { publicId });
   },
 
-  updateTitle: async (id: number, title: string): Promise<ConversationDTO> => {
-    return httpClient.put<ConversationDTO>(`/conversations/${id}`, { title });
+  updateTitle: async (publicId: string, title: string): Promise<ConversationDTO> => {
+    return httpClient.put<ConversationDTO>(`/conversations/${publicId}`, { title });
   },
 
-  updateLearningMode: async (id: number, learningMode: string): Promise<ConversationDTO> => {
-    return httpClient.put<ConversationDTO>(`/conversations/${id}/learning-mode`, { learningMode });
+  updateLearningMode: async (publicId: string, learningMode: string): Promise<ConversationDTO> => {
+    return httpClient.put<ConversationDTO>(`/conversations/${publicId}/learning-mode`, { learningMode });
   },
 
-  delete: async (id: number): Promise<void> => {
-    return httpClient.delete<void>(`/conversations/${id}`);
+  delete: async (publicId: string): Promise<void> => {
+    return httpClient.delete<void>(`/conversations/${publicId}`);
   },
 
-  getContextStatus: async (conversationId: number): Promise<ContextStatusDTO> => {
-    return httpClient.get<ContextStatusDTO>(`/context/status/${conversationId}`);
+  getContextStatus: async (publicId: string): Promise<ContextStatusDTO> => {
+    return httpClient.get<ContextStatusDTO>(`/context/status/${publicId}`);
   },
 
-  executeCompact: async (conversationId: number): Promise<CompactResult> => {
-    return httpClient.post<CompactResult>(`/context/compact/${conversationId}`);
+  executeCompact: async (publicId: string): Promise<CompactResult> => {
+    return httpClient.post<CompactResult>(`/context/compact/${publicId}`);
   },
 };

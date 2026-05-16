@@ -6,10 +6,10 @@ interface VocabularyStore {
   currentVocabularyCard: VocabularyCardDTO | null
   vocabularyCardLoading: boolean
 
-  loadCard: (conversationId: number, vocabularyCategory?: VocabularyCategory, vocabularyDifficulty?: VocabularyDifficulty) => Promise<void>
-  handlePrevWord: (conversationId: number, currentPosition: number, vocabularyDifficulty: VocabularyDifficulty) => Promise<void>
-  handleNextWord: (conversationId: number, currentPosition: number, vocabularyCategory: VocabularyCategory, vocabularyDifficulty: VocabularyDifficulty) => Promise<void>
-  handleRegenerateWord: (conversationId: number, vocabularyCategory: VocabularyCategory, vocabularyDifficulty: VocabularyDifficulty) => Promise<void>
+  loadCard: (conversationPublicId: string, vocabularyCategory?: VocabularyCategory, vocabularyDifficulty?: VocabularyDifficulty) => Promise<void>
+  handlePrevWord: (conversationPublicId: string, currentPosition: number, vocabularyDifficulty: VocabularyDifficulty) => Promise<void>
+  handleNextWord: (conversationPublicId: string, currentPosition: number, vocabularyCategory: VocabularyCategory, vocabularyDifficulty: VocabularyDifficulty) => Promise<void>
+  handleRegenerateWord: (conversationPublicId: string, vocabularyCategory: VocabularyCategory, vocabularyDifficulty: VocabularyDifficulty) => Promise<void>
   saveUserMeaning: (cardId: number, meaning: string) => Promise<void>
   saveUserEnglishSentence: (cardId: number, sentence: string) => Promise<void>
   analyzeUserSentence: (cardId: number) => Promise<void>
@@ -24,15 +24,15 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
   currentVocabularyCard: null,
   vocabularyCardLoading: false,
 
-  loadCard: async (conversationId: number, vocabularyCategory?: VocabularyCategory, vocabularyDifficulty?: VocabularyDifficulty) => {
+  loadCard: async (conversationPublicId: string, vocabularyCategory?: VocabularyCategory, vocabularyDifficulty?: VocabularyDifficulty) => {
     set({ vocabularyCardLoading: true })
     try {
-      const existingCard = await vocabularyApi.getCurrentCard(conversationId)
+      const existingCard = await vocabularyApi.getCurrentCard(conversationPublicId)
       if (existingCard) {
         set({ currentVocabularyCard: existingCard })
       } else {
         if (vocabularyDifficulty) {
-          const newCard = await vocabularyApi.generateNextCard(conversationId, vocabularyCategory, vocabularyDifficulty)
+          const newCard = await vocabularyApi.generateNextCard(conversationPublicId, vocabularyCategory, vocabularyDifficulty)
           if (newCard) {
             set({ currentVocabularyCard: newCard })
           }
@@ -47,10 +47,10 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
     }
   },
 
-  handlePrevWord: async (conversationId: number, currentPosition: number, _vocabularyDifficulty: string) => {
+  handlePrevWord: async (conversationPublicId: string, currentPosition: number, _vocabularyDifficulty: string) => {
     set({ vocabularyCardLoading: true })
     try {
-      const card = await vocabularyApi.getPrevCard(conversationId, currentPosition)
+      const card = await vocabularyApi.getPrevCard(conversationPublicId, currentPosition)
       if (card) {
         set({ currentVocabularyCard: card })
       }
@@ -61,14 +61,14 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
     }
   },
 
-  handleNextWord: async (conversationId: number, currentPosition: number, vocabularyCategory: VocabularyCategory, vocabularyDifficulty: VocabularyDifficulty) => {
+  handleNextWord: async (conversationPublicId: string, currentPosition: number, vocabularyCategory: VocabularyCategory, vocabularyDifficulty: VocabularyDifficulty) => {
     set({ vocabularyCardLoading: true })
     try {
-      const card = await vocabularyApi.getNextCard(conversationId, currentPosition, vocabularyCategory, vocabularyDifficulty)
+      const card = await vocabularyApi.getNextCard(conversationPublicId, currentPosition, vocabularyCategory, vocabularyDifficulty)
       if (card) {
         set({ currentVocabularyCard: card })
       } else {
-        const newCard = await vocabularyApi.generateNextCard(conversationId, vocabularyCategory, vocabularyDifficulty)
+        const newCard = await vocabularyApi.generateNextCard(conversationPublicId, vocabularyCategory, vocabularyDifficulty)
         if (newCard) {
           set({ currentVocabularyCard: newCard })
         }
@@ -80,10 +80,10 @@ export const useVocabularyStore = create<VocabularyStore>((set, get) => ({
     }
   },
 
-  handleRegenerateWord: async (conversationId: number, vocabularyCategory: VocabularyCategory, vocabularyDifficulty: VocabularyDifficulty) => {
+  handleRegenerateWord: async (conversationPublicId: string, vocabularyCategory: VocabularyCategory, vocabularyDifficulty: VocabularyDifficulty) => {
     set({ vocabularyCardLoading: true })
     try {
-      const card = await vocabularyApi.regenerateCard(conversationId, vocabularyCategory, vocabularyDifficulty)
+      const card = await vocabularyApi.regenerateCard(conversationPublicId, vocabularyCategory, vocabularyDifficulty)
       if (card) {
         set({ currentVocabularyCard: card })
       }

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 export interface ConversationTokenUsage {
-  conversationId: number
+  publicId: string
   totalTokens: number
   promptTokens: number
   completionTokens: number
@@ -12,25 +12,25 @@ export interface ConversationTokenUsage {
 }
 
 export interface TokenUsageStore {
-  usageByConversation: Record<number, ConversationTokenUsage>
+  usageByConversationPublicId: Record<string, ConversationTokenUsage>
   globalTotalTokens: number
   globalPromptTokens: number
   globalCompletionTokens: number
   maxTokensPerConversation: number
 
-  recordTokenUsage: (conversationId: number, promptTokens: number, completionTokens: number, totalTokens: number) => void
-  recordWordCard: (conversationId: number) => void
-  getUsageForConversation: (conversationId: number | null) => ConversationTokenUsage | null
-  resetConversationUsage: (conversationId: number) => void
+  recordTokenUsage: (publicId: string, promptTokens: number, completionTokens: number, totalTokens: number) => void
+  recordWordCard: (publicId: string) => void
+  getUsageForConversation: (publicId: string | null) => ConversationTokenUsage | null
+  resetConversationUsage: (publicId: string) => void
   resetAll: () => void
   setMaxTokens: (max: number) => void
-  getTokenRatio: (conversationId: number | null) => number
+  getTokenRatio: (publicId: string | null) => number
 }
 
 const DEFAULT_MAX_TOKENS = 4096 * 2
 
-const createEmptyUsage = (conversationId: number): ConversationTokenUsage => ({
-  conversationId,
+const createEmptyUsage = (publicId: string): ConversationTokenUsage => ({
+  publicId,
   totalTokens: 0,
   promptTokens: 0,
   completionTokens: 0,
@@ -42,15 +42,15 @@ const createEmptyUsage = (conversationId: number): ConversationTokenUsage => ({
 export const useTokenUsageStore = create<TokenUsageStore>()(
   persist(
     (set, get) => ({
-      usageByConversation: {},
+      usageByConversationPublicId: {},
       globalTotalTokens: 0,
       globalPromptTokens: 0,
       globalCompletionTokens: 0,
       maxTokensPerConversation: DEFAULT_MAX_TOKENS,
 
-      recordTokenUsage: (conversationId, promptTokens, completionTokens, totalTokens) => {
-        const { usageByConversation } = get()
-        const existing = usageByConversation[conversationId] || createEmptyUsage(conversationId)
+      recordTokenUsage: (publicId, promptTokens, completionTokens, totalTokens) => {
+        const { usageByConversationPublicId } = get()
+        const existing = usageByConversationPublicId[publicId] || createEmptyUsage(publicId)
 
         const updated: ConversationTokenUsage = {
           ...existing,
@@ -62,9 +62,9 @@ export const useTokenUsageStore = create<TokenUsageStore>()(
         }
 
         set(state => ({
-          usageByConversation: {
-            ...state.usageByConversation,
-            [conversationId]: updated,
+          usageByConversationPublicId: {
+            ...state.usageByConversationPublicId,
+            [publicId]: updated,
           },
           globalTotalTokens: state.globalTotalTokens + (totalTokens || (promptTokens + completionTokens)),
           globalPromptTokens: state.globalPromptTokens + promptTokens,
@@ -72,9 +72,9 @@ export const useTokenUsageStore = create<TokenUsageStore>()(
         }))
       },
 
-      recordWordCard: (conversationId) => {
-        const { usageByConversation } = get()
-        const existing = usageByConversation[conversationId] || createEmptyUsage(conversationId)
+      recordWordCard: (publicId) => {
+        const { usageByConversationPublicId } = get()
+        const existing = usageByConversationPublicId[publicId] || createEmptyUsage(publicId)
 
         const updated: ConversationTokenUsage = {
           ...existing,
@@ -83,30 +83,30 @@ export const useTokenUsageStore = create<TokenUsageStore>()(
         }
 
         set(state => ({
-          usageByConversation: {
-            ...state.usageByConversation,
-            [conversationId]: updated,
+          usageByConversationPublicId: {
+            ...state.usageByConversationPublicId,
+            [publicId]: updated,
           },
         }))
       },
 
-      getUsageForConversation: (conversationId) => {
-        if (!conversationId) return null
-        return get().usageByConversation[conversationId] || null
+      getUsageForConversation: (publicId) => {
+        if (!publicId) return null
+        return get().usageByConversationPublicId[publicId] || null
       },
 
-      resetConversationUsage: (conversationId) => {
-        const { usageByConversation } = get()
-        const existing = usageByConversation[conversationId]
+      resetConversationUsage: (publicId) => {
+        const { usageByConversationPublicId } = get()
+        const existing = usageByConversationPublicId[publicId]
 
         if (!existing) return
 
         set(state => {
-          const newUsage = { ...state.usageByConversation }
-          delete newUsage[conversationId]
+          const newUsage = { ...state.usageByConversationPublicId }
+          delete newUsage[publicId]
 
           return {
-            usageByConversation: newUsage,
+            usageByConversationPublicId: newUsage,
             globalTotalTokens: Math.max(0, state.globalTotalTokens - existing.totalTokens),
             globalPromptTokens: Math.max(0, state.globalPromptTokens - existing.promptTokens),
             globalCompletionTokens: Math.max(0, state.globalCompletionTokens - existing.completionTokens),
@@ -116,7 +116,7 @@ export const useTokenUsageStore = create<TokenUsageStore>()(
 
       resetAll: () => {
         set({
-          usageByConversation: {},
+          usageByConversationPublicId: {},
           globalTotalTokens: 0,
           globalPromptTokens: 0,
           globalCompletionTokens: 0,
@@ -127,8 +127,8 @@ export const useTokenUsageStore = create<TokenUsageStore>()(
         set({ maxTokensPerConversation: max })
       },
 
-      getTokenRatio: (conversationId) => {
-        const usage = conversationId ? get().usageByConversation[conversationId] : null
+      getTokenRatio: (publicId) => {
+        const usage = publicId ? get().usageByConversationPublicId[publicId] : null
         if (!usage) return 0
         return Math.min(usage.totalTokens / get().maxTokensPerConversation, 1)
       },
@@ -136,7 +136,7 @@ export const useTokenUsageStore = create<TokenUsageStore>()(
     {
       name: 'lingobot-token-usage',
       partialize: (state) => ({
-        usageByConversation: state.usageByConversation,
+        usageByConversationPublicId: state.usageByConversationPublicId,
         globalTotalTokens: state.globalTotalTokens,
         globalPromptTokens: state.globalPromptTokens,
         globalCompletionTokens: state.globalCompletionTokens,

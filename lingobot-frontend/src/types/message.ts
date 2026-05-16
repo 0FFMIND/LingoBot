@@ -42,6 +42,7 @@ export type ExecutionMode = 'loop' | 'onetime';
 
 export interface ChatRequest {
   conversationId?: number;
+  conversationPublicId?: string;
   content: string;
   mode?: 'chat' | 'agent';
   model?: ModelType;
@@ -67,13 +68,15 @@ export interface AudioRecordingState {
 }
 
 export interface EditMessageRequest {
-  conversationId: number;
+  conversationId?: number;
+  conversationPublicId?: string;
   userMessageId: number;
   newContent: string;
 }
 
 export interface RetryMessageRequest {
-  conversationId: number;
+  conversationId?: number;
+  conversationPublicId?: string;
   assistantMessageId: number;
   model?: ModelType;
   mode?: 'chat' | 'agent';

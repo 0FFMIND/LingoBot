@@ -15,23 +15,25 @@ public interface ConversationService {
     
     ConversationDTO createConversation(CreateConversationRequest request);
     
-    ConversationDTO getConversationById(Long id);
+    ConversationDTO getConversationByPublicId(String publicId);
     
     List<ConversationDTO> getAllConversations();
     
     PageResponseDTO<ConversationDTO> getConversationsByPage(int page, int size);
     
-    ConversationDTO updateConversationTitle(Long id, String title);
+    ConversationDTO updateConversationTitle(String publicId, String title);
     
-    ConversationDTO updateConversationLearningMode(Long id, String learningMode);
+    ConversationDTO updateConversationLearningMode(String publicId, String learningMode);
     
-    void deleteConversation(Long id);
+    void deleteConversation(String publicId);
     
     Conversation getConversationEntityById(Long id);
     
     Optional<ConversationDTO> getCurrentConversation();
     
-    void setCurrentConversation(Long conversationId);
+    void setCurrentConversation(String publicId);
+    
+    Long resolvePublicIdToId(String publicId);
     
     MessageDTO addUserMessage(Long conversationId, String content);
     

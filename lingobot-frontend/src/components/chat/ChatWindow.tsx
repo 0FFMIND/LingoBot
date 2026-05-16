@@ -97,7 +97,7 @@ const ChatWindow: React.FC = () => {
   const modeMenuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const previousConversationIdRef = useRef<number | null>(null)
+  const previousConversationPublicIdRef = useRef<string | null>(null)
 
   const learningConfig = LEARNING_MODES[learningMode]
 
@@ -182,7 +182,7 @@ const ChatWindow: React.FC = () => {
       : `[intent:${intent}][current_word:${currentWord}]`
 
     const response = await sendVocabularyMessage({
-      conversationId: currentConversation.id,
+      conversationPublicId: currentConversation.publicId,
       content: messageContent,
       mode,
       model: vocabularyModel,
@@ -196,7 +196,7 @@ const ChatWindow: React.FC = () => {
     if (learningMode === 'vocabulary') {
       try {
         const { vocabularyApi } = await import('../../api')
-        const updatedCard = await vocabularyApi.getCurrentCard(currentConversation.id)
+        const updatedCard = await vocabularyApi.getCurrentCard(currentConversation.publicId)
         if (updatedCard) useVocabularyStore.setState({ currentVocabularyCard: updatedCard })
       } catch (e) {
         console.error('重新加载词汇卡失败:', e)
@@ -205,20 +205,37 @@ const ChatWindow: React.FC = () => {
   }
 
   const getLatestVocabularyData = () => {
+    let latestData: any = null
     let flashcardData: any = null
 
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i]
-      if (message.role === 'assistant') {
-        const vocabData = isVocabularyJson(message.content)
-        if (vocabData && !flashcardData) {
-          flashcardData = vocabData
-          break
-        }
+      if (message.role !== 'assistant') continue
+
+      const vocabData = isVocabularyJson(message.content)
+      if (!vocabData) continue
+
+      if (!latestData) {
+        latestData = vocabData
+      }
+
+      if (vocabData.action === 'display_flashcard' || (vocabData.synonyms && vocabData.synonyms.length > 0)) {
+        flashcardData = vocabData
+        break
       }
     }
 
-    return flashcardData
+    if (!latestData) return null
+
+    if (flashcardData && latestData !== flashcardData) {
+      return {
+        ...flashcardData,
+        ...latestData,
+        synonyms: latestData.synonyms?.length ? latestData.synonyms : flashcardData.synonyms,
+      }
+    }
+
+    return latestData
   }
 
   const renderVocabularyView = () => {
@@ -242,9 +259,9 @@ const ChatWindow: React.FC = () => {
           <VocabularyFlashcard
             data={vocabData}
             onSendWithIntent={handleSendWithIntent}
-            onPrevWord={() => handlePrevWord(currentConversation!.id, currentVocabularyCard.position, vocabularyDifficulty)}
-            onNextWord={() => handleNextWord(currentConversation!.id, currentVocabularyCard.position, vocabularyCategory, vocabularyDifficulty)}
-            onRegenerate={() => handleRegenerateWord(currentConversation!.id, vocabularyCategory, vocabularyDifficulty)}
+            onPrevWord={() => handlePrevWord(currentConversation!.publicId, currentVocabularyCard.position, vocabularyDifficulty)}
+            onNextWord={() => handleNextWord(currentConversation!.publicId, currentVocabularyCard.position, vocabularyCategory, vocabularyDifficulty)}
+            onRegenerate={() => handleRegenerateWord(currentConversation!.publicId, vocabularyCategory, vocabularyDifficulty)}
             onSaveMeaning={(meaning: string) => saveUserMeaning(currentVocabularyCard.id, meaning)}
             onSaveEnglishSentence={(sentence: string) => saveUserEnglishSentence(currentVocabularyCard.id, sentence)}
             onAnalyzeSentence={() => analyzeUserSentence(currentVocabularyCard.id)}
@@ -298,9 +315,9 @@ const ChatWindow: React.FC = () => {
         <VocabularyFlashcard
           data={vocabData}
           onSendWithIntent={handleSendWithIntent}
-          onPrevWord={currentConversation ? () => handlePrevWord(currentConversation.id, 0, vocabularyDifficulty) : undefined}
-          onNextWord={currentConversation ? () => handleNextWord(currentConversation.id, 0, vocabularyCategory, vocabularyDifficulty) : undefined}
-          onRegenerate={currentConversation ? () => handleRegenerateWord(currentConversation.id, vocabularyCategory, vocabularyDifficulty) : undefined}
+          onPrevWord={currentConversation ? () => handlePrevWord(currentConversation.publicId, 0, vocabularyDifficulty) : undefined}
+          onNextWord={currentConversation ? () => handleNextWord(currentConversation.publicId, 0, vocabularyCategory, vocabularyDifficulty) : undefined}
+          onRegenerate={currentConversation ? () => handleRegenerateWord(currentConversation.publicId, vocabularyCategory, vocabularyDifficulty) : undefined}
           isStandalone={true}
           isLoading={vocabularyCardLoading || loading}
         />
@@ -368,12 +385,12 @@ const ChatWindow: React.FC = () => {
   }, [messages, currentVocabularyCard?.id])
 
   useEffect(() => {
-    const conversationId = currentConversation?.id ?? null
-    if (previousConversationIdRef.current !== conversationId) {
-      previousConversationIdRef.current = conversationId
+    const conversationPublicId = currentConversation?.publicId ?? null
+    if (previousConversationPublicIdRef.current !== conversationPublicId) {
+      previousConversationPublicIdRef.current = conversationPublicId
       useVocabularyStore.getState().reset()
     }
-  }, [currentConversation?.id])
+  }, [currentConversation?.publicId])
 
   useEffect(() => {
     if (
@@ -385,7 +402,7 @@ const ChatWindow: React.FC = () => {
       !loading
     ) {
       console.log('📚 词汇学习模式：自动初始化词汇卡，难度:', vocabularyDifficulty)
-      useVocabularyStore.getState().loadCard(currentConversation.id, vocabularyCategory, vocabularyDifficulty)
+      useVocabularyStore.getState().loadCard(currentConversation.publicId, vocabularyCategory, vocabularyDifficulty)
     }
   }, [learningMode, isAuthenticated, currentConversation, currentVocabularyCard, vocabularyCardLoading, loading, vocabularyDifficulty])
 
@@ -398,7 +415,7 @@ const ChatWindow: React.FC = () => {
 
     if (selectedImage) {
       sendImageMessage({
-        conversationId: currentConversation.id,
+        conversationPublicId: currentConversation.publicId,
         content: inputValue.trim(),
         mode,
         model,
@@ -415,7 +432,7 @@ const ChatWindow: React.FC = () => {
       if (learningMode === 'vocabulary') {
         // vocabulary mode uses sendVocabularyMessage via handleSendWithIntent pattern
         sendMessage({
-          conversationId: currentConversation.id,
+          conversationPublicId: currentConversation.publicId,
           content: inputValue.trim(),
           mode,
           model,
@@ -425,7 +442,7 @@ const ChatWindow: React.FC = () => {
         })
       } else {
         sendMessage({
-          conversationId: currentConversation.id,
+          conversationPublicId: currentConversation.publicId,
           content: inputValue.trim(),
           mode,
           model,
@@ -445,7 +462,7 @@ const ChatWindow: React.FC = () => {
   const handleAudioRecordingComplete = useCallback((audioData: string, audioFormat: string, duration: number) => {
     if (!loading && !disabled && currentConversation) {
       sendAudioMessage({
-        conversationId: currentConversation.id,
+        conversationPublicId: currentConversation.publicId,
         content: '',
         mode,
         model,
@@ -584,7 +601,7 @@ const ChatWindow: React.FC = () => {
     }
     if (!disabled && currentConversation) {
       editMessage({
-        conversationId: currentConversation.id,
+        conversationPublicId: currentConversation.publicId,
         userMessageId: message.id,
         newContent: editContent.trim(),
       })
@@ -618,7 +635,7 @@ const ChatWindow: React.FC = () => {
 
       editAudioMessage(
         {
-          conversationId: currentConversation.id,
+          conversationPublicId: currentConversation.publicId,
           content: editContent.trim(),
           mode,
           model,
@@ -646,7 +663,7 @@ const ChatWindow: React.FC = () => {
   const handleRetryWithModel = (assistantMessageId: number, modelType: ModelType) => {
     if (!disabled && currentConversation) {
       retryMessageWithModel({
-        conversationId: currentConversation.id,
+        conversationPublicId: currentConversation.publicId,
         assistantMessageId,
         model: modelType,
         mode,
@@ -661,7 +678,7 @@ const ChatWindow: React.FC = () => {
   const handleRetry = (assistantMessageId: number) => {
     if (!disabled && currentConversation) {
       retryMessage({
-        conversationId: currentConversation.id,
+        conversationPublicId: currentConversation.publicId,
         assistantMessageId,
         model,
         mode,

@@ -7597,9 +7597,10 @@
 
 .flashcard-content.expanded {
   max-height: 500px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px 72px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  column-gap: 8px;
   padding: 11px 16px;
   margin-bottom: 0;
   opacity: 1;
@@ -7613,24 +7614,38 @@
 }
 
 .content-title {
-  display: flex;
+  display: contents;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.sentence-input-section .content-title {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #475569;
-  margin-bottom: 0;
-  min-width: 90px;
-  flex-shrink: 0;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
 }
 
 .title-icon {
-  font-size: 16px;
-  flex-shrink: 0;
+  grid-column: 1;
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+}
+
+.content-title > span:not(.title-icon) {
+  grid-column: 2;
+  white-space: nowrap;
 }
 
 .meaning-text {
-  flex: 1;
+  grid-column: 3;
+  min-width: 0;
   font-size: 16px;
   font-weight: 500;
   color: #1e293b;
@@ -7638,8 +7653,9 @@
 }
 
 .example-text {
-  flex: 1;
-  font-size: 15px;
+  grid-column: 3;
+  min-width: 0;
+  font-size: 16px;
   color: #334155;
   font-style: italic;
   line-height: 1.6;
@@ -7659,7 +7675,8 @@
 
 .synonyms-list,
 .antonyms-list {
-  flex: 1;
+  grid-column: 3;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -7883,15 +7900,15 @@
    ============================================= */
 
 .meaning-check-result {
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: 28px 72px minmax(0, 1fr);
   align-items: flex-start;
-  gap: 8px;
+  column-gap: 8px;
   margin-top: 0;
   margin-bottom: 0;
   padding: 11px 16px;
   border-radius: 10px;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .meaning-check-result.correct {
@@ -7907,20 +7924,23 @@
 }
 
 .meaning-check-icon {
+  grid-column: 1;
   font-weight: 700;
-  font-size: 15px;
-  flex-shrink: 0;
+  font-size: 18px;
+  text-align: center;
 }
 
 .meaning-check-label {
-  font-weight: 600;
+  grid-column: 2;
+  font-weight: 700;
   white-space: nowrap;
 }
 
 .meaning-check-feedback {
-  flex: 1;
+  grid-column: 3;
+  min-width: 0;
   margin: 0;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.6;
   opacity: 0.9;
 }
@@ -7933,7 +7953,7 @@
 }
 
 .sentence-input-section {
-  margin-top: 16px;
+  margin-top: 18px;
   padding: 16px;
   background-color: #eff6ff;
   border: 1px solid #bfdbfe;
@@ -7941,9 +7961,10 @@
 }
 
 .sentence-input-hint {
-  font-size: 13px;
+  margin-left: 36px;
+  font-size: 16px;
   color: #1d4ed8;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   display: block;
 }
 
@@ -8099,8 +8120,9 @@
 }
 
 .sentence-text {
-  flex: 1;
-  font-size: 15px;
+  grid-column: 3;
+  min-width: 0;
+  font-size: 16px;
   color: #166534;
   font-style: italic;
   line-height: 1.6;
@@ -8112,8 +8134,9 @@
 }
 
 .feedback-text {
-  flex: 1;
-  font-size: 14px;
+  grid-column: 3;
+  min-width: 0;
+  font-size: 16px;
   color: #92400e;
   line-height: 1.6;
 }
@@ -8420,6 +8443,7 @@
 .vocabulary-progress-left {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   flex: 1;
   min-width: 0;
@@ -8438,7 +8462,7 @@
 }
 
 .vocabulary-progress-track {
-  width: min(360px, 42vw);
+  width: min(500px, 60vw);
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
@@ -8470,15 +8494,15 @@
   flex: 1;
   display: flex;
   align-items: stretch;
-  justify-content: center;
-  padding: 28px 36px 36px;
+  justify-content: stretch;
+  padding: 12px 8px 12px;
   overflow-y: auto;
 }
 
 .vocabulary-view {
   position: relative;
   width: 100%;
-  max-width: 760px;
+  max-width: none;
   min-height: 100%;
   display: flex;
 }
@@ -8487,8 +8511,9 @@
   width: 100%;
   max-width: none;
   min-width: auto;
-  min-height: min(680px, calc(100vh - 190px));
-  padding: 32px 36px 28px;
+  min-height: calc(100vh - 142px);
+  margin: 0;
+  padding: 40px 48px 32px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: none;
   background: #ffffff;
@@ -8502,6 +8527,11 @@
   line-height: 1.1;
 }
 
+.vocabulary-flashcard-standalone .flashcard-word-section {
+  margin-top: -84px;
+  margin-bottom: 14px;
+}
+
 .vocabulary-flashcard-standalone .flashcard-phonetic {
   font-size: 20px;
 }
@@ -8511,7 +8541,7 @@
   justify-content: center;
   margin-top: auto;
   padding-top: 20px;
-  border-top: 1px dashed #e2e8f0;
+  border-top: none;
 }
 
 .next-word-btn {
@@ -8692,23 +8722,25 @@
   justify-content: center;
   padding: 60px 40px;
   text-align: center;
+  flex: 1;
+  min-height: 400px;
 }
 
 .vocabulary-view-empty .empty-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
+  font-size: 96px;
+  margin-bottom: 24px;
 }
 
 .vocabulary-view-empty h3 {
   color: #1e293b;
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 8px;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 12px;
 }
 
 .vocabulary-view-empty p {
   color: #64748b;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .vocabulary-loading-overlay {
@@ -10415,7 +10447,7 @@
 
 .vocabulary-edit-modal {
   width: min(680px, 100%);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #ffffff;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
   overflow: hidden;
@@ -10423,10 +10455,12 @@
 
 .vocabulary-edit-header {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 20px;
+  align-items: flex-end;
+  gap: 8px;
+  min-height: 64px;
+  padding: 12px 8px 0;
   border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
 }
 
 .vocabulary-edit-header h3 {
@@ -10440,6 +10474,15 @@
   display: flex;
   gap: 4px;
   flex: 1;
+}
+
+.vocabulary-edit-tabs-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  margin-left: -2px;
 }
 
 .edit-tab-btn {
@@ -10458,6 +10501,49 @@
   border-color: #c4b5fd;
   color: #5b21b6;
   font-weight: 600;
+}
+
+.vocabulary-edit-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 50px;
+  padding: 0 22px;
+  border: 0.3px solid #dbe2ea;
+  border-bottom-color: #e5e7eb;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transform: translateY(1px);
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vocabulary-edit-tab + .vocabulary-edit-tab {
+  margin-left: 0;
+}
+
+.vocabulary-edit-tab.active {
+  position: relative;
+  z-index: 1;
+  min-height: 54px;
+  border-color: #e5e7eb;
+  border-bottom-color: #ffffff;
+  background: #ffffff;
+  color: #6d28d9;
+  box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.vocabulary-edit-tab-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.vocabulary-edit-tab-label {
+  white-space: nowrap;
 }
 
 .learning-state-panel {
@@ -10514,9 +10600,68 @@
 }
 
 .learning-state-hint {
-  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #eef2ff;
+  color: #6366f1;
   font-size: 12px;
-  color: #9ca3af;
+  cursor: help;
+  position: relative;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.learning-state-hint:hover {
+  background: #6366f1;
+  color: #ffffff;
+}
+
+.learning-state-hint::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  padding: 10px 14px;
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.6;
+  border-radius: 8px;
+  white-space: normal;
+  width: 280px;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  pointer-events: none;
+  z-index: 1000;
+  margin-left: 10px;
+}
+
+.learning-state-hint::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-right-color: #1e293b;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  pointer-events: none;
+  margin-left: -2px;
+}
+
+.learning-state-hint:hover::after,
+.learning-state-hint:hover::before {
+  opacity: 1;
+  visibility: visible;
 }
 
 .learning-state-field select,
@@ -10592,6 +10737,8 @@
   color: #4b5563;
   cursor: pointer;
   font-size: 22px;
+  align-self: flex-start;
+  margin-top: 4px;
 }
 
 .vocabulary-edit-grid {

@@ -420,7 +420,7 @@ const BalanceHistoryPanel: React.FC = () => {
               </thead>
               <tbody>
                 {currentPageTransactions.map((transaction) => (
-                  <tr key={transaction.id} className="transaction-row">
+                  <tr key={transaction.publicId} className="transaction-row">
                     <td className="td-time">
                       {formatDateTime(transaction.createdAt)}
                     </td>
@@ -436,7 +436,7 @@ const BalanceHistoryPanel: React.FC = () => {
                         {transaction.description || '-'}
                       </div>
                       <div className="description-sub">
-                        交易 ID: txn_{transaction.id.toString().padStart(10, '0')}
+                        交易 ID: {transaction.publicId}
                       </div>
                     </td>
                     <td className="td-change">

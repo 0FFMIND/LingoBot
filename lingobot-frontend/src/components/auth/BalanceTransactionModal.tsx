@@ -183,7 +183,7 @@ const BalanceTransactionModal: React.FC<BalanceTransactionModalProps> = ({
             <>
               {transactions.map((transaction) => (
                 <div
-                  key={transaction.id}
+                  key={transaction.publicId}
                   style={{
                     padding: '12px 20px',
                     borderBottom: '1px solid #f0f0f0',

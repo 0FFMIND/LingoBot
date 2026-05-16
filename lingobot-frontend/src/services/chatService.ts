@@ -40,12 +40,12 @@ export const chatService = {
     return result.data;
   },
 
-  getMessages: async (conversationId: number): Promise<MessageDTO[]> => {
-    return httpClient.get<MessageDTO[]>(`/chat/conversations/${conversationId}/messages`);
+  getMessages: async (conversationPublicId: string): Promise<MessageDTO[]> => {
+    return httpClient.get<MessageDTO[]>(`/chat/conversations/${conversationPublicId}/messages`);
   },
 
-  retryMessage: async (conversationId: number, assistantMessageId: number): Promise<MessageDTO> => {
-    return httpClient.post<MessageDTO>(`/chat/retry/${conversationId}/${assistantMessageId}`);
+  retryMessage: async (conversationPublicId: string, assistantMessageId: number): Promise<MessageDTO> => {
+    return httpClient.post<MessageDTO>(`/chat/retry/${conversationPublicId}/${assistantMessageId}`);
   },
 
   retryMessageStream: async (

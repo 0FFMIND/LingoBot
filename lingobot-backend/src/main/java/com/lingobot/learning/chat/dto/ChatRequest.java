@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class ChatRequest {
     
     private Long conversationId;
+    private String conversationPublicId;
     private String content;
     private String mode;
     private String model;

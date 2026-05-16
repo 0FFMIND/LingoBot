@@ -6,6 +6,8 @@ import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.dto.openai.OpenAiTool;
 import com.lingobot.learning.llm.tool.service.McpService;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,7 @@ public class SentenceAnalysisService {
     private final VocabularyPromptService vocabularyPromptService;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final UserVocabularyService userVocabularyService;
+    private final VocabularyMemoryService vocabularyMemoryService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
 
@@ -124,6 +127,11 @@ public class SentenceAnalysisService {
             if (userId != null && vocabularyWordId != null) {
                 boolean overallCorrect = Boolean.TRUE.equals(meaningMatches) && Boolean.TRUE.equals(hasNewWord);
                 userVocabularyService.updateProgress(userId, vocabularyWordId, overallCorrect);
+                vocabularyCardRepository.findById(cardId).ifPresent(card ->
+                        vocabularyMemoryService.recordInteraction(
+                                userId,
+                                card,
+                                overallCorrect ? VocabularyMemoryEventType.CORRECT : VocabularyMemoryEventType.WRONG));
             }
 
             // Keep sentence status updates on the same direct-update path as meaning checks.

@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 public class RetryMessageRequest {
     
     private Long conversationId;
+    private String conversationPublicId;
     private Long assistantMessageId;
     private String model;
     private String mode;

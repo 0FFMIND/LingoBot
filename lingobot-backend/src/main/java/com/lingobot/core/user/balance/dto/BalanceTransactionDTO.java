@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 @Builder
 public class BalanceTransactionDTO {
 
-    private Long id;
+    private String publicId;
     private String type;
     private String status;
     private BigDecimal amount;
@@ -33,7 +33,7 @@ public class BalanceTransactionDTO {
     // 将 BalanceTransaction 实体转换为 DTO，枚举字段转为字符串
     public static BalanceTransactionDTO fromEntity(BalanceTransaction t) {
         return BalanceTransactionDTO.builder()
-                .id(t.getId())
+                .publicId(t.getPublicId())
                 .type(t.getType() != null ? t.getType().name() : null)
                 .status(t.getStatus() != null ? t.getStatus().name() : null)
                 .amount(t.getAmount())

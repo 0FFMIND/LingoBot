@@ -6,19 +6,19 @@ import { conversationService } from '../../services/conversationService';
 
 interface ContextStatusTooltipProps {
   status: ContextStatusDTO;
-  onManualCompact?: (conversationId: number) => void;
-  conversationId: number;
+  onManualCompact?: (publicId: string) => void;
+  publicId: string;
   isCompacting?: boolean;
-  compactingConversationId?: number | null;
+  compactingConversationPublicId?: string | null;
   children: React.ReactNode;
 }
 
 const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
   status,
   onManualCompact,
-  conversationId,
+  publicId,
   isCompacting = false,
-  compactingConversationId = null,
+  compactingConversationPublicId = null,
   children,
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -27,9 +27,9 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
   const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<number | null>(null);
-  const isCurrentlyCompacting = isCompacting && compactingConversationId === conversationId;
+  const isCurrentlyCompacting = isCompacting && compactingConversationPublicId === publicId;
 
-  const localUsage = useTokenUsageStore((state) => state.usageByConversation[conversationId]);
+  const localUsage = useTokenUsageStore((state) => state.usageByConversationPublicId[publicId]);
   const maxTokens = useTokenUsageStore((state) => state.maxTokensPerConversation);
   const activeStatus = freshStatus || status;
 
@@ -78,7 +78,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
   const handleCompact = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onManualCompact && !isCurrentlyCompacting) {
-      onManualCompact(conversationId);
+      onManualCompact(publicId);
       setShowTooltip(false);
       setIsTooltipFadingOut(false);
     }
@@ -112,7 +112,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
     cancelHide();
     updatePosition();
     setShowTooltip(true);
-    conversationService.getContextStatus(conversationId)
+    conversationService.getContextStatus(publicId)
       .then(setFreshStatus)
       .catch(() => {
         setFreshStatus(null);

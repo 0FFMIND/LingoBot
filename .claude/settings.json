@@ -48,7 +48,12 @@
       "Bash(Remove-Item \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\components\\\\chat\\\\InsufficientBalanceModal.tsx\")",
       "PowerShell(Get-ChildItem -Recurse \"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\components\" | Where-Object { !$_.PSIsContainer } | ForEach-Object { $_.FullName.Replace\\(\"c:\\\\Users\\\\ALIENWARE\\\\Downloads\\\\新建文件夹 \\(2\\)\\\\lingobot-frontend\\\\src\\\\components\\\\\", \"\"\\) } | Sort-Object)",
       "Bash(python3 -c ' *)",
-      "Bash(python -c \"s = '麼腊汦绳旀'; b = s.encode\\('utf-8'\\); print\\('bytes:', b.hex\\(\\)\\); [print\\(enc, b.decode\\(enc, errors='replace'\\)\\) for enc in ['gbk','gb2312','big5','latin-1']]\")"
+      "Bash(python -c \"s = '麼腊汦绳旀'; b = s.encode\\('utf-8'\\); print\\('bytes:', b.hex\\(\\)\\); [print\\(enc, b.decode\\(enc, errors='replace'\\)\\) for enc in ['gbk','gb2312','big5','latin-1']]\")",
+      "PowerShell(Get-PSDrive C | Select-Object Used, Free, @{N='UsedGB';E={[math]::Round\\($_.Used/1GB,2\\)}}, @{N='FreeGB';E={[math]::Round\\($_.Free/1GB,2\\)}}, @{N='TotalGB';E={[math]::Round\\(\\($_.Used+$_.Free\\)/1GB,2\\)}})",
+      "PowerShell(Get-PSDrive C | Select-Object @{N='FreeGB';E={[math]::Round\\($_.Free/1GB,2\\)}}, @{N='UsedGB';E={[math]::Round\\($_.Used/1GB,2\\)}})",
+      "PowerShell($d = Get-PSDrive C; Write-Host \"Free: $\\([math]::Round\\($d.Free/1GB,2\\)\\) GB  Used: $\\([math]::Round\\($d.Used/1GB,2\\)\\) GB\")",
+      "PowerShell(pip cache purge 2>&1)",
+      "PowerShell($d = Get-PSDrive C; Write-Host \"C 盘空闲: $\\([math]::Round\\($d.Free/1GB,2\\)\\) GB\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\ALIENWARE\\Downloads\\�½��ļ��� (2)\\lingobot-backend\\src\\main\\java\\com",

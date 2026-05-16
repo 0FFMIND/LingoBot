@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/chat/Sidebar';
 import ChatWindow from './components/chat/ChatWindow';
 import AuthModal from './components/auth/AuthModal';
@@ -9,13 +9,25 @@ import LogPage from './components/admin/LogPage';
 import RightPanel from './components/chat/RightPanel';
 import AccountSettings from './components/auth/AccountSettings';
 import VocabularyManager from './components/vocabulary/VocabularyManager';
-import { UserDTO } from './types';
-import { authApi } from './api';
+import { UserDTO, ConversationDTO } from './types';
+import { authApi, conversationApi } from './api';
 import { useAuthStore, useChatStore, useConversationStore } from './stores';
 import './App.css';
 
 type Route = 'chat' | 'log' | 'admin';
 type MainView = 'chat' | 'settings' | 'vocabulary-manager';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const extractPublicIdFromPath = (path: string): string | null => {
+  if (path.startsWith('/v/')) {
+    const publicId = path.slice(3).split('/')[0];
+    if (UUID_REGEX.test(publicId)) {
+      return publicId;
+    }
+  }
+  return null;
+};
 
 function ChatApp() {
   const {
@@ -49,22 +61,87 @@ function ChatApp() {
     createConversation,
     deleteConversation,
     setMainView,
+    startNewChatWithModeSelection,
     reset: resetConversations,
   } = useConversationStore();
 
   const {
     isCompacting,
-    compactingConversationId,
+    compactingConversationPublicId,
     manualCompact,
     reset: resetChat,
   } = useChatStore();
 
-  // Initialize auth on mount
+  const [initialPathConversationLoaded, setInitialPathConversationLoaded] = useState(false);
+
+  const syncUrlWithConversation = useCallback((conversation: ConversationDTO | null) => {
+    if (!conversation) {
+      if (window.location.pathname !== '/' && !window.location.pathname.startsWith('/admin') && !window.location.pathname.startsWith('/log')) {
+        window.history.pushState({}, '', '/');
+      }
+      return;
+    }
+
+    const currentPublicId = extractPublicIdFromPath(window.location.pathname);
+    if (currentPublicId !== conversation.publicId) {
+      window.history.pushState({}, '', `/v/${conversation.publicId}`);
+    }
+  }, []);
+
+  const loadConversationFromPath = useCallback(async () => {
+    const publicId = extractPublicIdFromPath(window.location.pathname);
+    if (!publicId || !isAuthenticated) {
+      return;
+    }
+
+    const existingConv = conversations.find(c => c.publicId === publicId);
+    if (existingConv) {
+      selectConversation(existingConv);
+      return;
+    }
+
+    try {
+      const conv = await conversationApi.getByPublicId(publicId);
+      selectConversation(conv);
+    } catch (e) {
+      console.error('Failed to load conversation from URL:', e);
+      window.history.pushState({}, '', '/');
+    }
+  }, [conversations, isAuthenticated, selectConversation]);
+
   useEffect(() => {
     initAuth();
   }, []);
 
-  // Load conversations when authenticated
+  useEffect(() => {
+    if (isAuthenticated && !initialPathConversationLoaded) {
+      setInitialPathConversationLoaded(true);
+      loadConversationFromPath();
+    }
+  }, [isAuthenticated, initialPathConversationLoaded, loadConversationFromPath]);
+
+  useEffect(() => {
+    if (!initialPathConversationLoaded) return;
+    loadConversationFromPath();
+  }, [initialPathConversationLoaded, loadConversationFromPath]);
+
+  useEffect(() => {
+    if (initialPathConversationLoaded && mainView === 'chat') {
+      syncUrlWithConversation(currentConversation);
+    }
+  }, [currentConversation, mainView, initialPathConversationLoaded, syncUrlWithConversation]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (isAuthenticated) {
+        loadConversationFromPath();
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isAuthenticated, loadConversationFromPath]);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadConversations();
@@ -174,7 +251,7 @@ function ChatApp() {
         conversations={conversations}
         currentConversation={currentConversation}
         onSelectConversation={selectConversation}
-        onCreateConversation={createConversation}
+        onCreateConversation={startNewChatWithModeSelection}
         onDeleteConversation={deleteConversation}
         onLoginClick={() => setShowAuthModal(true)}
         onLogout={handleLogoutComplete}
@@ -190,7 +267,7 @@ function ChatApp() {
         loadingMore={loadingMoreConversations}
         hasMore={hasMoreConversations}
         isCompacting={isCompacting}
-        compactingConversationId={compactingConversationId}
+        compactingConversationPublicId={compactingConversationPublicId}
       />
 
       <div className="main-content-wrapper">

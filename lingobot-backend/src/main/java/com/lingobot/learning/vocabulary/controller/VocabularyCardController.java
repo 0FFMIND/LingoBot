@@ -1,5 +1,6 @@
 package com.lingobot.learning.vocabulary.controller;
 
+import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.response.ApiResponse;
@@ -35,17 +36,23 @@ public class VocabularyCardController {
     private final VocabularyCardRepository vocabularyCardRepository;
     private final BalanceService balanceService;
     private final ApiConfigProperties apiConfigProperties;
+    private final ConversationService conversationService;
+
+    private Long resolvePublicId(String publicId) {
+        return conversationService.resolvePublicIdToId(publicId);
+    }
 
     /**
      * 创建新的词汇卡
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @param request 词汇卡创建请求
      * @return 创建成功的词汇卡
      */
     @PostMapping("/cards")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> createCard(
-            @RequestParam Long conversationId,
+            @RequestParam String conversationPublicId,
             @RequestBody CreateVocabularyCardRequest request) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         VocabularyCardDTO created = vocabularyCardService.createCard(conversationId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("词汇卡创建成功", created));
@@ -64,24 +71,26 @@ public class VocabularyCardController {
 
     /**
      * 获取对话的所有词汇卡
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @return 词汇卡列表
      */
-    @GetMapping("/conversations/{conversationId}/cards")
+    @GetMapping("/conversations/{conversationPublicId}/cards")
     public ResponseEntity<ApiResponse<List<VocabularyCardDTO>>> getAllCards(
-            @PathVariable Long conversationId) {
+            @PathVariable String conversationPublicId) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         List<VocabularyCardDTO> cards = vocabularyCardService.getAllCards(conversationId);
         return ResponseEntity.ok(ApiResponse.success(cards));
     }
 
     /**
      * 获取当前正在学习的词汇卡（第一个未完成的，或最后一个）
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @return 当前词汇卡
      */
-    @GetMapping("/conversations/{conversationId}/current")
+    @GetMapping("/conversations/{conversationPublicId}/current")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> getCurrentCard(
-            @PathVariable Long conversationId) {
+            @PathVariable String conversationPublicId) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         VocabularyCardDTO card = vocabularyCardService.getCurrentCard(conversationId);
         if (card == null) {
             return ResponseEntity.ok(ApiResponse.success("该对话没有词汇卡", null));
@@ -91,17 +100,18 @@ public class VocabularyCardController {
 
     /**
      * 获取下一个词汇卡
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @param currentPosition 当前位置（可选）
      * @return 下一个词汇卡
      */
-    @GetMapping("/conversations/{conversationId}/next")
+    @GetMapping("/conversations/{conversationPublicId}/next")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> getNextCard(
-            @PathVariable Long conversationId,
+            @PathVariable String conversationPublicId,
             @RequestParam(required = false) Integer currentPosition,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String difficulty) {
         try {
+            Long conversationId = resolvePublicId(conversationPublicId);
             VocabularyCardDTO card = vocabularyCardService.getNextCard(conversationId, currentPosition, category, difficulty);
             return ResponseEntity.ok(ApiResponse.success(card));
         } catch (Exception e) {
@@ -111,15 +121,16 @@ public class VocabularyCardController {
 
     /**
      * 获取上一个词汇卡
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @param currentPosition 当前位置（可选）
      * @return 上一个词汇卡
      */
-    @GetMapping("/conversations/{conversationId}/prev")
+    @GetMapping("/conversations/{conversationPublicId}/prev")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> getPrevCard(
-            @PathVariable Long conversationId,
+            @PathVariable String conversationPublicId,
             @RequestParam(required = false) Integer currentPosition) {
         try {
+            Long conversationId = resolvePublicId(conversationPublicId);
             VocabularyCardDTO card = vocabularyCardService.getPrevCard(conversationId, currentPosition);
             return ResponseEntity.ok(ApiResponse.success(card));
         } catch (Exception e) {
@@ -129,14 +140,15 @@ public class VocabularyCardController {
 
     /**
      * 生成下一个词汇卡（通过AI生成新单词）
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @param request 包含词汇类别和难度级别
      * @return 生成的词汇卡
      */
-    @PostMapping("/conversations/{conversationId}/generate")
+    @PostMapping("/conversations/{conversationPublicId}/generate")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> generateNextCard(
-            @PathVariable Long conversationId,
+            @PathVariable String conversationPublicId,
             @RequestBody(required = false) Map<String, String> request) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("vocabulary", "generate-card"));
         Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "generate-card", "生成词汇卡", conversationId);
         log.info("冻结点数: {}，用于生成词汇卡", cost);
@@ -158,14 +170,15 @@ public class VocabularyCardController {
 
     /**
      * 重新生成当前词汇卡（删除当前未完成的，生成新的）
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @param request 包含词汇类别和难度级别
      * @return 重新生成的词汇卡
      */
-    @PostMapping("/conversations/{conversationId}/regenerate")
+    @PostMapping("/conversations/{conversationPublicId}/regenerate")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> regenerateCard(
-            @PathVariable Long conversationId,
+            @PathVariable String conversationPublicId,
             @RequestBody(required = false) Map<String, String> request) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("vocabulary", "regenerate-card"));
         Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "regenerate-card", "重新生成词汇卡", conversationId);
         log.info("冻结点数: {}，用于重新生成词汇卡", cost);
@@ -272,23 +285,25 @@ public class VocabularyCardController {
 
     /**
      * 删除对话的所有词汇卡
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @return 删除成功响应
      */
-    @DeleteMapping("/conversations/{conversationId}/cards")
-    public ResponseEntity<Void> deleteAllCards(@PathVariable Long conversationId) {
+    @DeleteMapping("/conversations/{conversationPublicId}/cards")
+    public ResponseEntity<Void> deleteAllCards(@PathVariable String conversationPublicId) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         vocabularyCardService.deleteAllCards(conversationId);
         return ResponseEntity.noContent().build();
     }
 
     /**
      * 获取对话的词汇卡数量
-     * @param conversationId 对话ID
+     * @param conversationPublicId 对话的publicId
      * @return 词汇卡数量
      */
-    @GetMapping("/conversations/{conversationId}/count")
+    @GetMapping("/conversations/{conversationPublicId}/count")
     public ResponseEntity<ApiResponse<Long>> getCardCount(
-            @PathVariable Long conversationId) {
+            @PathVariable String conversationPublicId) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         long count = vocabularyCardService.getCardCount(conversationId);
         return ResponseEntity.ok(ApiResponse.success(count));
     }

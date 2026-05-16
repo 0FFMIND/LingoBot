@@ -1,5 +1,6 @@
 package com.lingobot.learning.chat.controller;
 
+import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.learning.chat.dto.ChatRequest;
 import com.lingobot.learning.chat.dto.EditMessageRequest;
 import com.lingobot.learning.chat.dto.RetryMessageRequest;
@@ -20,20 +21,34 @@ import java.util.List;
 public class ChatController {
     
     private final ChatService chatService;
+    private final ConversationService conversationService;
+    
+    private Long resolvePublicId(String publicId) {
+        return conversationService.resolvePublicIdToId(publicId);
+    }
     
     @PostMapping
     public ResponseEntity<ApiResponse<MessageDTO>> sendMessage(@RequestBody ChatRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         MessageDTO response = chatService.sendMessage(request);
         return ResponseEntity.ok(ApiResponse.success("消息发送成功", response));
     }
     
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendMessageStream(@RequestBody ChatRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         return chatService.sendMessageStream(request);
     }
     
     @PostMapping("/onetime")
     public ResponseEntity<ApiResponse<MessageDTO>> sendOnetimeMessage(@RequestBody ChatRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         request.setExecutionMode(ChatRequest.EXECUTION_MODE_ONETIME);
         if (request.getMessageType() == null) {
             request.setMessageType(ChatRequest.MESSAGE_TYPE_VOCABULARY);
@@ -44,6 +59,9 @@ public class ChatController {
     
     @PostMapping(value = "/onetime/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendOnetimeMessageStream(@RequestBody ChatRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         request.setExecutionMode(ChatRequest.EXECUTION_MODE_ONETIME);
         if (request.getMessageType() == null) {
             request.setMessageType(ChatRequest.MESSAGE_TYPE_VOCABULARY);
@@ -53,6 +71,9 @@ public class ChatController {
     
     @PostMapping("/vocabulary")
     public ResponseEntity<ApiResponse<MessageDTO>> sendVocabularyMessage(@RequestBody ChatRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         request.setMessageType(ChatRequest.MESSAGE_TYPE_VOCABULARY);
         request.setExecutionMode(ChatRequest.EXECUTION_MODE_ONETIME);
         if (request.getLearningMode() == null) {
@@ -64,6 +85,9 @@ public class ChatController {
     
     @PostMapping(value = "/vocabulary/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendVocabularyMessageStream(@RequestBody ChatRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         request.setMessageType(ChatRequest.MESSAGE_TYPE_VOCABULARY);
         request.setExecutionMode(ChatRequest.EXECUTION_MODE_ONETIME);
         if (request.getLearningMode() == null) {
@@ -72,40 +96,52 @@ public class ChatController {
         return chatService.sendVocabularyMessageStream(request);
     }
     
-    @GetMapping("/conversations/{conversationId}/messages")
-    public ResponseEntity<ApiResponse<List<MessageDTO>>> getMessages(@PathVariable Long conversationId) {
+    @GetMapping("/conversations/{conversationPublicId}/messages")
+    public ResponseEntity<ApiResponse<List<MessageDTO>>> getMessages(@PathVariable String conversationPublicId) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         List<MessageDTO> messages = chatService.getMessagesByConversationId(conversationId);
         return ResponseEntity.ok(ApiResponse.success(messages));
     }
     
-    @PostMapping("/retry/{conversationId}/{assistantMessageId}")
+    @PostMapping("/retry/{conversationPublicId}/{assistantMessageId}")
     public ResponseEntity<ApiResponse<MessageDTO>> retryMessage(
-            @PathVariable Long conversationId,
+            @PathVariable String conversationPublicId,
             @PathVariable Long assistantMessageId) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         MessageDTO response = chatService.retryMessage(conversationId, assistantMessageId);
         return ResponseEntity.ok(ApiResponse.success("消息重试成功", response));
     }
     
-    @PostMapping(value = "/retry/stream/{conversationId}/{assistantMessageId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(value = "/retry/stream/{conversationPublicId}/{assistantMessageId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter retryMessageStream(
-            @PathVariable Long conversationId,
+            @PathVariable String conversationPublicId,
             @PathVariable Long assistantMessageId) {
+        Long conversationId = resolvePublicId(conversationPublicId);
         return chatService.retryMessageStream(conversationId, assistantMessageId);
     }
     
     @PostMapping(value = "/retry/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter retryMessageStream(@RequestBody RetryMessageRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         return chatService.retryMessageStream(request);
     }
     
     @PostMapping("/edit")
     public ResponseEntity<ApiResponse<MessageDTO>> editMessage(@RequestBody EditMessageRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         MessageDTO response = chatService.editMessage(request);
         return ResponseEntity.ok(ApiResponse.success("消息编辑成功", response));
     }
     
     @PostMapping(value = "/edit/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter editMessageStream(@RequestBody EditMessageRequest request) {
+        if (request.getConversationPublicId() != null) {
+            request.setConversationId(resolvePublicId(request.getConversationPublicId()));
+        }
         return chatService.editMessageStream(request);
     }
 }

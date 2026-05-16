@@ -7,9 +7,9 @@ export interface UseConversationResult {
   currentConversation: ConversationDTO | null;
   loading: boolean;
   createConversation: (title: string) => Promise<ConversationDTO | null>;
-  deleteConversation: (id: number) => Promise<void>;
+  deleteConversation: (publicId: string) => Promise<void>;
   selectConversation: (conversation: ConversationDTO) => void;
-  updateLearningMode: (id: number, mode: LearningMode) => Promise<void>;
+  updateLearningMode: (publicId: string, mode: LearningMode) => Promise<void>;
   loadConversations: () => Promise<void>;
 }
 
@@ -30,7 +30,7 @@ export function useConversation(isAuthenticated: boolean): UseConversationResult
         const currentConvFromBackend = await conversationService.getCurrent();
         
         if (currentConvFromBackend) {
-          const matchingConv = data.find(c => c.id === currentConvFromBackend.id);
+          const matchingConv = data.find(c => c.publicId === currentConvFromBackend.publicId);
           if (matchingConv) {
             setCurrentConversation(matchingConv);
             setLoading(false);
@@ -40,7 +40,7 @@ export function useConversation(isAuthenticated: boolean): UseConversationResult
         
         setCurrentConversation(data[0]);
         try {
-          await conversationService.setCurrent(data[0].id);
+          await conversationService.setCurrent(data[0].publicId);
         } catch (e) {
           console.warn('保存当前对话到后端失败:', e);
         }
@@ -61,7 +61,7 @@ export function useConversation(isAuthenticated: boolean): UseConversationResult
       setCurrentConversation(newConversation);
       
       try {
-        await conversationService.setCurrent(newConversation.id);
+        await conversationService.setCurrent(newConversation.publicId);
       } catch (e) {
         console.warn('保存当前对话到后端失败:', e);
       }
@@ -74,21 +74,21 @@ export function useConversation(isAuthenticated: boolean): UseConversationResult
     }
   }, [isAuthenticated, conversations]);
 
-  const deleteConversation = useCallback(async (id: number) => {
+  const deleteConversation = useCallback(async (publicId: string) => {
     if (!isAuthenticated) return;
 
     try {
-      await conversationService.delete(id);
-      setConversations(conversations.filter((c) => c.id !== id));
+      await conversationService.delete(publicId);
+      setConversations(conversations.filter((c) => c.publicId !== publicId));
       
-      if (currentConversation?.id === id) {
-        const remaining = conversations.filter((c) => c.id !== id);
+      if (currentConversation?.publicId === publicId) {
+        const remaining = conversations.filter((c) => c.publicId !== publicId);
         const newCurrent = remaining.length > 0 ? remaining[0] : null;
         setCurrentConversation(newCurrent);
         
         try {
           if (newCurrent) {
-            await conversationService.setCurrent(newCurrent.id);
+            await conversationService.setCurrent(newCurrent.publicId);
           } else {
             await conversationService.setCurrent(null);
           }
@@ -105,19 +105,19 @@ export function useConversation(isAuthenticated: boolean): UseConversationResult
   const selectConversation = useCallback((conversation: ConversationDTO) => {
     setCurrentConversation(conversation);
     try {
-      conversationService.setCurrent(conversation.id);
+      conversationService.setCurrent(conversation.publicId);
     } catch (e) {
       console.warn('保存当前对话到后端失败:', e);
     }
   }, []);
 
-  const updateLearningMode = useCallback(async (id: number, mode: LearningMode) => {
+  const updateLearningMode = useCallback(async (publicId: string, mode: LearningMode) => {
     try {
-      await conversationService.updateLearningMode(id, mode);
+      await conversationService.updateLearningMode(publicId, mode);
       setConversations((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, learningMode: mode } : c))
+        prev.map((c) => (c.publicId === publicId ? { ...c, learningMode: mode } : c))
       );
-      if (currentConversation?.id === id) {
+      if (currentConversation?.publicId === publicId) {
         setCurrentConversation({
           ...currentConversation,
           learningMode: mode,

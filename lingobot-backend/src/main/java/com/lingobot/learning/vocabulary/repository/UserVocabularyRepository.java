@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,6 +33,10 @@ public interface UserVocabularyRepository extends JpaRepository<UserVocabulary, 
 
     // 统计用户某个状态的词汇数量
     long countByUserIdAndStatus(Long userId, VocabularyStatus status);
+
+    // 查询用户所有词汇（不带分页）
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId")
+    List<UserVocabulary> findByUserId(@Param("userId") Long userId);
 
     // 分页查询用户所有词汇
     @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId")
