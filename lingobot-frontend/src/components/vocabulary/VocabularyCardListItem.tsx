@@ -13,7 +13,6 @@ const statusLabels: Record<string, string> = {
   LEARNING: '学习中',
   REVIEWING: '复习中',
   MASTERED: '已掌握',
-  IGNORED: '已忽略',
 };
 
 const statusClassNames: Record<string, string> = {
@@ -21,7 +20,6 @@ const statusClassNames: Record<string, string> = {
   LEARNING: 'learning',
   REVIEWING: 'reviewing',
   MASTERED: 'mastered',
-  IGNORED: 'ignored',
 };
 
 const VocabularyCardListItem: React.FC<VocabularyCardListItemProps> = ({
@@ -32,7 +30,8 @@ const VocabularyCardListItem: React.FC<VocabularyCardListItemProps> = ({
 }) => {
   const masteryPercent = Math.max(0, Math.min(100, Math.round((item.masteryScore || 0) * 100)));
 
-  const formatNextReview = (dateStr?: string) => {
+  const formatNextReview = (dateStr?: string, neverReview?: boolean) => {
+    if (neverReview) return '永不';
     if (!dateStr) return '未设置';
     const date = new Date(dateStr);
     const now = new Date();
@@ -105,7 +104,9 @@ const VocabularyCardListItem: React.FC<VocabularyCardListItemProps> = ({
         </div>
         <div className="vocabulary-stat-item">
           <span className="stat-icon">◷</span>
-          <span>下次复习 {formatNextReview(item.nextReviewAt)}</span>
+          <span title={item.neverReview ? '已设置为不再复习' : item.nextReviewAt ? `下次复习时间：${new Date(item.nextReviewAt).toLocaleString()}` : '未设置下次复习时间'}>
+            下次复习 {formatNextReview(item.nextReviewAt, item.neverReview)}
+          </span>
         </div>
       </div>
 

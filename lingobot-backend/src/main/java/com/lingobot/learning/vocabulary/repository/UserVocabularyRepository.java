@@ -49,29 +49,29 @@ public interface UserVocabularyRepository extends JpaRepository<UserVocabulary, 
             @Param("status") VocabularyStatus status,
             Pageable pageable);
 
-    // 统计用户待复习的词汇数量（nextReviewAt <= 当前时间）
+    // 统计用户待复习的词汇数量（nextReviewAt <= 当前时间 且 未设置永不复习）
     @Query("SELECT COUNT(uv) FROM UserVocabulary uv WHERE uv.userId = :userId " +
-           "AND uv.nextReviewAt IS NOT NULL AND uv.nextReviewAt <= :now")
+           "AND uv.neverReview = false AND uv.nextReviewAt IS NOT NULL AND uv.nextReviewAt <= :now")
     long countToReviewByUserId(@Param("userId") Long userId, @Param("now") LocalDateTime now);
 
-    // 分页查询用户待复习的词汇
+    // 分页查询用户待复习的词汇（未设置永不复习）
     @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
-           "AND uv.nextReviewAt IS NOT NULL AND uv.nextReviewAt <= :now")
+           "AND uv.neverReview = false AND uv.nextReviewAt IS NOT NULL AND uv.nextReviewAt <= :now")
     Page<UserVocabulary> findToReviewByUserId(
             @Param("userId") Long userId,
             @Param("now") LocalDateTime now,
             Pageable pageable);
 
-    // 分页查询用户的困难词汇（掌握程度 <= 0.40）
+    // 分页查询用户的困难词汇（掌握程度 < 0.80 且有答错记录）
     @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
-           "AND uv.masteryScore <= 0.40")
+           "AND uv.masteryScore < 0.80 AND uv.wrongCount > 0")
     Page<UserVocabulary> findDifficultByUserId(
             @Param("userId") Long userId,
             Pageable pageable);
 
-    // 统计用户的困难词汇数量（掌握程度 <= 0.40）
+    // 统计用户的困难词汇数量（掌握程度 < 0.80 且有答错记录）
     @Query("SELECT COUNT(uv) FROM UserVocabulary uv WHERE uv.userId = :userId " +
-           "AND uv.masteryScore <= 0.40")
+           "AND uv.masteryScore < 0.80 AND uv.wrongCount > 0")
     long countDifficultByUserId(@Param("userId") Long userId);
 
     // 分页查询用户词汇（支持按单词搜索，通过关联 VocabularyWord）
@@ -94,9 +94,9 @@ public interface UserVocabularyRepository extends JpaRepository<UserVocabulary, 
             @Param("keyword") String keyword,
             Pageable pageable);
 
-    // 分页查询用户待复习的词汇（支持搜索）
+    // 分页查询用户待复习的词汇（支持搜索，未设置永不复习）
     @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
-           "AND uv.nextReviewAt IS NOT NULL AND uv.nextReviewAt <= :now " +
+           "AND uv.neverReview = false AND uv.nextReviewAt IS NOT NULL AND uv.nextReviewAt <= :now " +
            "AND (LOWER(COALESCE(uv.word, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
            "OR LOWER(COALESCE(uv.meaning, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     Page<UserVocabulary> findToReviewByUserIdAndKeyword(
@@ -107,7 +107,7 @@ public interface UserVocabularyRepository extends JpaRepository<UserVocabulary, 
 
     // 分页查询用户困难词汇（支持搜索）
     @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
-           "AND uv.masteryScore <= 0.40 " +
+           "AND uv.masteryScore < 0.80 AND uv.wrongCount > 0 " +
            "AND (LOWER(COALESCE(uv.word, '')) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
            "OR LOWER(COALESCE(uv.meaning, '')) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     Page<UserVocabulary> findDifficultByUserIdAndKeyword(

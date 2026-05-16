@@ -15,6 +15,6 @@ public enum VocabularyStatus {
     REVIEWING,
     // 已掌握（掌握程度达到阈值，视为已学会）
     MASTERED,
-    // 已忽略（用户标记为不关注，不再参与学习和复习）
-    IGNORED
+    // 未知状态
+    UNKNOWN
 }

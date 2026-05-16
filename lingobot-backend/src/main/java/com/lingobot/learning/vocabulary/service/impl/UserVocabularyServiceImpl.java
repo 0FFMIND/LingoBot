@@ -82,9 +82,8 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                         existing.setStatus(VocabularyStatus.LEARNING);
                     }
 
-                    if (existing.getMasteryScore() == null
-                            || existing.getMasteryScore().compareTo(new BigDecimal("0.12")) < 0) {
-                        existing.setMasteryScore(new BigDecimal("0.12"));
+                    if (existing.getMasteryScore() == null) {
+                        existing.setMasteryScore(BigDecimal.ZERO);
                     }
                     
                     if (existing.getNextReviewAt() == null) {
@@ -100,7 +99,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                             .vocabularyWordId(vocabularyWordId)
                             .word("")
                             .status(VocabularyStatus.LEARNING)
-                            .masteryScore(new BigDecimal("0.12"))
+                            .masteryScore(BigDecimal.ZERO)
                             .seenCount(1)
                             .correctCount(0)
                             .wrongCount(0)
@@ -211,7 +210,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                     .divide(BigDecimal.valueOf(totalAttempts), 2, RoundingMode.HALF_UP);
             progress.setMasteryScore(newScore);
 
-            if (newScore.compareTo(new BigDecimal("0.90")) >= 0) {
+            if (newScore.compareTo(new BigDecimal("1.00")) == 0) {
                 progress.setStatus(VocabularyStatus.MASTERED);
             } else if (newScore.compareTo(new BigDecimal("0.60")) >= 0) {
                 progress.setStatus(VocabularyStatus.REVIEWING);
@@ -230,7 +229,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
         if (!isCorrect) {
             return now.plusHours(4);
         }
-        if (masteryScore.compareTo(new BigDecimal("0.90")) >= 0) {
+        if (masteryScore.compareTo(new BigDecimal("1.00")) == 0) {
             return now.plusDays(14);
         }
         if (masteryScore.compareTo(new BigDecimal("0.60")) >= 0) {
@@ -249,8 +248,8 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                 .learningCount(userVocabularyRepository.countByUserIdAndStatus(userId, VocabularyStatus.LEARNING))
                 .reviewingCount(userVocabularyRepository.countByUserIdAndStatus(userId, VocabularyStatus.REVIEWING))
                 .masteredCount(userVocabularyRepository.countByUserIdAndStatus(userId, VocabularyStatus.MASTERED))
-                .ignoredCount(userVocabularyRepository.countByUserIdAndStatus(userId, VocabularyStatus.IGNORED))
                 .toReviewCount(userVocabularyRepository.countToReviewByUserId(userId, LocalDateTime.now()))
+                .difficultCount(userVocabularyRepository.countDifficultByUserId(userId))
                 .build();
     }
 
@@ -334,7 +333,10 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
 
         if (request.getStatus() != null) {
             try {
-                vocabulary.setStatus(VocabularyStatus.valueOf(request.getStatus()));
+                VocabularyStatus newStatus = VocabularyStatus.valueOf(request.getStatus());
+                if (newStatus != VocabularyStatus.UNKNOWN) {
+                    vocabulary.setStatus(newStatus);
+                }
             } catch (IllegalArgumentException ignored) {
             }
         }
@@ -342,9 +344,13 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
             BigDecimal score = request.getMasteryScore().max(BigDecimal.ZERO).min(BigDecimal.ONE);
             vocabulary.setMasteryScore(score);
         }
-        if (Boolean.TRUE.equals(request.getNeverReview())) {
-            vocabulary.setNextReviewAt(null);
-        } else if (request.getNextReviewAt() != null) {
+        if (request.getNeverReview() != null) {
+            vocabulary.setNeverReview(request.getNeverReview());
+            if (Boolean.TRUE.equals(request.getNeverReview())) {
+                vocabulary.setNextReviewAt(null);
+            }
+        }
+        if (!Boolean.TRUE.equals(request.getNeverReview()) && request.getNextReviewAt() != null) {
             vocabulary.setNextReviewAt(request.getNextReviewAt());
         }
 
@@ -404,6 +410,7 @@ public class UserVocabularyServiceImpl implements UserVocabularyService {
                 .firstSeenAt(uv.getFirstSeenAt())
                 .lastSeenAt(uv.getLastSeenAt())
                 .nextReviewAt(uv.getNextReviewAt())
+                .neverReview(uv.getNeverReview())
                 .lastEventType(uv.getLastEventType())
                 .createdAt(uv.getCreatedAt())
                 .updatedAt(uv.getUpdatedAt())

@@ -7,6 +7,7 @@ import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.dto.openai.OpenAiTool;
 import com.lingobot.learning.llm.tool.service.McpService;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryInteractionType;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
@@ -95,7 +96,7 @@ public class SentenceAnalysisService {
             Long userId = learningContext.getUserId();
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
                     null, messages, tools, DEFAULT_MODEL);
-            persistSentenceAnalysisResult(cardId, conversationId, vocabularyWordId, userId, result);
+            persistSentenceAnalysisResult(cardId, conversationId, vocabularyWordId, userId, userEnglishSentence, result);
             log.info("Sentence analysis completed for cardId={}", cardId);
         } catch (Exception e) {
             log.error("Sentence analysis failed for cardId={}", cardId, e);
@@ -104,7 +105,7 @@ public class SentenceAnalysisService {
 
     // 解析 AI 工具返回结果并通过原生 SQL 持久化句子分析状态，同步更新用户学习进度
     private void persistSentenceAnalysisResult(Long cardId, Long conversationId, Long vocabularyWordId, Long userId,
-                                               ToolLoopService.ToolLoopResult result) {
+                                               String userEnglishSentence, ToolLoopService.ToolLoopResult result) {
         if (result == null || !result.hasToolCalls() || result.getToolResultText() == null) {
             log.warn("Sentence analysis returned no tool result for cardId={}", cardId);
             return;
@@ -125,13 +126,19 @@ public class SentenceAnalysisService {
             String finalAnalysis = !feedback.isEmpty() ? feedback : analysis;
 
             if (userId != null && vocabularyWordId != null) {
-                boolean overallCorrect = Boolean.TRUE.equals(meaningMatches) && Boolean.TRUE.equals(hasNewWord);
-                userVocabularyService.updateProgress(userId, vocabularyWordId, overallCorrect);
+                VocabularyMemoryEventType eventType = VocabularyMemoryEventType.SEEN;
+                if (meaningMatches != null) {
+                    eventType = meaningMatches ? VocabularyMemoryEventType.CORRECT : VocabularyMemoryEventType.WRONG;
+                }
+                VocabularyMemoryEventType finalEventType = eventType;
                 vocabularyCardRepository.findById(cardId).ifPresent(card ->
                         vocabularyMemoryService.recordInteraction(
                                 userId,
                                 card,
-                                overallCorrect ? VocabularyMemoryEventType.CORRECT : VocabularyMemoryEventType.WRONG));
+                                finalEventType,
+                                userEnglishSentence,
+                                finalAnalysis,
+                                VocabularyMemoryInteractionType.SENTENCE_ANALYSIS));
             }
 
             // Keep sentence status updates on the same direct-update path as meaning checks.

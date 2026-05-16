@@ -95,7 +95,7 @@ public class UserVocabularyController {
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
-    // 忽略词汇（将学习状态标记为 IGNORED，不再参与学习和复习）
+    // 忽略词汇（将学习状态标记为 UNKNOWN，不再参与学习和复习）
     @PutMapping("/{id}/ignore")
     public ResponseEntity<ApiResponse<Void>> ignoreVocabulary(@PathVariable Long id) {
         Long userId = authService.getCurrentUserId();
@@ -172,7 +172,6 @@ public class UserVocabularyController {
                 .learningCount(0)
                 .reviewingCount(0)
                 .masteredCount(0)
-                .ignoredCount(0)
                 .toReviewCount(0)
                 .build();
     }

@@ -27,8 +27,8 @@ public class VocabularyStatsDTO {
     private long reviewingCount;
     // 已掌握词汇数（状态为 MASTERED）
     private long masteredCount;
-    // 已忽略词汇数（状态为 IGNORED）
-    private long ignoredCount;
     // 待复习词汇数（nextReviewAt <= 当前时间）
     private long toReviewCount;
+    // 易错词汇数（掌握程度 <= 0.40）
+    private long difficultCount;
 }

@@ -65,49 +65,75 @@ public class TextToSpeechService {
         log.info("获取单词发音: {}, 语音类型: {}", word, type.name());
         log.debug("请求 URL: {}", urlString);
         
-        try {
-            URL url = new URL(urlString);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            connection.setRequestProperty("Accept", "audio/mpeg,audio/*;q=0.9");
-            connection.setRequestProperty("Referer", "https://dict.youdao.com/");
-            
-            int responseCode = connection.getResponseCode();
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                log.error("获取发音失败，HTTP 状态码: {}", responseCode);
-                return null;
-            }
-            
-            String contentType = connection.getContentType();
-            log.debug("响应 Content-Type: {}", contentType);
-            
-            try (InputStream inputStream = connection.getInputStream();
-                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+        int maxRetries = 3;
+        long[] retryDelays = {500, 1000, 2000};
+        
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            HttpURLConnection connection = null;
+            try {
+                URL url = new URL(urlString);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(8000);
+                connection.setReadTimeout(8000);
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                connection.setRequestProperty("Accept", "audio/mpeg,audio/*;q=0.9");
+                connection.setRequestProperty("Referer", "https://dict.youdao.com/");
                 
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-                while ((bytesRead = inputStream.read(buffer)) != -1) {
-                    outputStream.write(buffer, 0, bytesRead);
+                int responseCode = connection.getResponseCode();
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    log.warn("获取发音尝试 {}/{} 失败，HTTP 状态码: {}", attempt, maxRetries, responseCode);
+                    if (attempt < maxRetries) {
+                        Thread.sleep(retryDelays[attempt - 1]);
+                        continue;
+                    }
+                    log.error("获取发音失败，已重试 {} 次，最终 HTTP 状态码: {}", maxRetries, responseCode);
+                    return null;
                 }
                 
-                byte[] audioData = outputStream.toByteArray();
-                log.info("获取发音成功，单词: {}, 音频大小: {} bytes", word, audioData.length);
+                String contentType = connection.getContentType();
+                log.debug("响应 Content-Type: {}", contentType);
                 
-                if (audioData.length > 0) {
-                    audioCache.put(cacheKey, new CacheEntry(audioData, System.currentTimeMillis()));
-                    log.debug("已缓存单词发音: {} ({})", word, type.name());
+                try (InputStream inputStream = connection.getInputStream();
+                     ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+                    
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = inputStream.read(buffer)) != -1) {
+                        outputStream.write(buffer, 0, bytesRead);
+                    }
+                    
+                    byte[] audioData = outputStream.toByteArray();
+                    log.info("获取发音成功，单词: {}, 音频大小: {} bytes, 尝试次数: {}", word, audioData.length, attempt);
+                    
+                    if (audioData.length > 0) {
+                        audioCache.put(cacheKey, new CacheEntry(audioData, System.currentTimeMillis()));
+                        log.debug("已缓存单词发音: {} ({})", word, type.name());
+                    }
+                    
+                    return audioData;
                 }
                 
-                return audioData;
+            } catch (Exception e) {
+                log.warn("获取发音尝试 {}/{} 失败: {} - {}", attempt, maxRetries, word, e.getMessage());
+                if (attempt < maxRetries) {
+                    try {
+                        Thread.sleep(retryDelays[attempt - 1]);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return null;
+                    }
+                } else {
+                    log.error("获取单词发音失败，已重试 {} 次: {} - {}", maxRetries, word, e.getMessage(), e);
+                }
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
             }
-            
-        } catch (Exception e) {
-            log.error("获取单词发音失败: {} - {}", word, e.getMessage(), e);
-            return null;
         }
+        
+        return null;
     }
     
     public byte[] getWordPronunciation(String word) {

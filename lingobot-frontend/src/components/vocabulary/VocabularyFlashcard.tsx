@@ -180,10 +180,14 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
 
     audio.src = audioUrl
     audio.load()
+    pronunciationAudioRef.current = audio
 
     return () => {
       audio.removeEventListener('canplaythrough', handleCanPlayThrough)
       audio.removeEventListener('error', handleError)
+      if (pronunciationAudioRef.current === audio) {
+        pronunciationAudioRef.current = null
+      }
     }
   }, [data.word, data.current_word])
 
@@ -220,7 +224,7 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
 
     if (isPlayingPronunciation && pronunciationAudioRef.current) {
       pronunciationAudioRef.current.pause()
-      pronunciationAudioRef.current = null
+      pronunciationAudioRef.current.currentTime = 0
       setIsPlayingPronunciation(false)
       return
     }
@@ -232,22 +236,26 @@ const VocabularyFlashcard: React.FC<VocabularyFlashcardProps> = ({
 
     try {
       setIsPlayingPronunciation(true)
-      const audioUrl = `/api/tts/word?word=${encodeURIComponent(word)}&voiceType=us`
-      const audio = new Audio()
-      pronunciationAudioRef.current = audio
+      
+      let audio = pronunciationAudioRef.current
+      
+      if (!audio) {
+        const audioUrl = `/api/tts/word?word=${encodeURIComponent(word)}&voiceType=us`
+        audio = new Audio()
+        audio.src = audioUrl
+        pronunciationAudioRef.current = audio
+      }
 
       audio.onended = () => {
         setIsPlayingPronunciation(false)
-        pronunciationAudioRef.current = null
       }
 
       audio.onerror = () => {
         setIsPlayingPronunciation(false)
         setAudioAvailable(false)
-        pronunciationAudioRef.current = null
       }
 
-      audio.src = audioUrl
+      audio.currentTime = 0
       await audio.play()
     } catch (error) {
       console.error('播放发音失败:', error)

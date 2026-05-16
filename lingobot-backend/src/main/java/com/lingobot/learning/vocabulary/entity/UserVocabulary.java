@@ -71,7 +71,7 @@ public class UserVocabulary {
     @Column(name = "difficulty", length = 20)
     private String difficulty;
 
-    // 学习状态（NEW/LEARNING/REVIEWING/MASTERED/IGNORED）
+    // 学习状态（NEW/LEARNING/REVIEWING/MASTERED/UNKNOWN）
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
@@ -108,6 +108,11 @@ public class UserVocabulary {
     // 下次复习时间（根据艾宾浩斯遗忘曲线计算）
     @Column(name = "next_review_at")
     private LocalDateTime nextReviewAt;
+
+    // 是否不再复习（true表示永不复习，false表示正常复习）
+    @Column(name = "never_review", nullable = false)
+    @Builder.Default
+    private Boolean neverReview = false;
 
     // 最后事件类型（NEW_LEARNING/REVIEW/HYBRID）
     @Enumerated(EnumType.STRING)

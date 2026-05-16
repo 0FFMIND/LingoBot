@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Builder
@@ -22,4 +24,20 @@ public class VocabularyMemoryRecord {
     private boolean isMastered;
     private VocabularyMemoryEventType eventType;
     private LocalDateTime eventTimestamp;
+    private Integer position;
+    private Integer regenerationIndex;
+    private Boolean isRegenerated;
+    private String userAnswer;
+    private String aiFeedback;
+    private VocabularyMemoryInteractionType interactionType;
+    private String meaningCheckUserAnswer;
+    private String meaningCheckAiFeedback;
+    private Boolean meaningCheckIsCorrect;
+    private String sentenceAnalysisUserAnswer;
+    private String sentenceAnalysisAiFeedback;
+    private Boolean sentenceAnalysisIsCorrect;
+    @Builder.Default
+    private List<VocabularyMemoryTier> sourceTiers = new ArrayList<>();
+    @Builder.Default
+    private List<String> learningEvents = new ArrayList<>();
 }

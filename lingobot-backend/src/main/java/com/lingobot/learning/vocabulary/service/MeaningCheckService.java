@@ -7,6 +7,7 @@ import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.dto.openai.OpenAiTool;
 import com.lingobot.learning.llm.tool.service.McpService;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryInteractionType;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
@@ -88,7 +89,7 @@ public class MeaningCheckService {
 
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
                     null, messages, tools, DEFAULT_MODEL);
-            persistMeaningCheckResult(cardId, resolvedConversationId, vocabularyWordId, userId, result);
+            persistMeaningCheckResult(cardId, resolvedConversationId, vocabularyWordId, userId, userMeaning, result);
             log.info("Meaning check completed for cardId={}", cardId);
         } catch (Exception e) {
             log.error("Meaning check failed for cardId={}, conversationId={}", cardId, conversationId, e);
@@ -97,7 +98,7 @@ public class MeaningCheckService {
 
     // 解析 AI 工具返回结果并通过原生 SQL 持久化释义检查状态，同步更新用户学习进度
     private void persistMeaningCheckResult(Long cardId, Long conversationId, Long vocabularyWordId, Long userId,
-                                           ToolLoopService.ToolLoopResult result) {
+                                           String userMeaning, ToolLoopService.ToolLoopResult result) {
         if (result == null || !result.hasToolCalls() || result.getToolResultText() == null) {
             log.warn("Meaning check returned no tool result for cardId={}", cardId);
             return;
@@ -125,7 +126,10 @@ public class MeaningCheckService {
                         vocabularyMemoryService.recordInteraction(
                                 userId,
                                 card,
-                                isCorrect ? VocabularyMemoryEventType.CORRECT : VocabularyMemoryEventType.WRONG));
+                                isCorrect ? VocabularyMemoryEventType.CORRECT : VocabularyMemoryEventType.WRONG,
+                                userMeaning,
+                                feedback,
+                                VocabularyMemoryInteractionType.MEANING_CHECK));
             }
 
             int updatedRows = chineseSentenceForTranslation.isBlank()

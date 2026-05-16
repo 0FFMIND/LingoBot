@@ -90,6 +90,26 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
   });
   const [savingLearningState, setSavingLearningState] = useState(false);
   const [aiModifying, setAiModifying] = useState(false);
+  const [visibleTooltip, setVisibleTooltip] = useState<string | null>(null);
+  const hideTooltipTimerRef = React.useRef<number | null>(null);
+
+  const showTooltip = (tooltipId: string) => {
+    if (hideTooltipTimerRef.current) {
+      clearTimeout(hideTooltipTimerRef.current);
+      hideTooltipTimerRef.current = null;
+    }
+    setVisibleTooltip(tooltipId);
+  };
+
+  const hideTooltipDelayed = () => {
+    if (hideTooltipTimerRef.current) {
+      clearTimeout(hideTooltipTimerRef.current);
+    }
+    hideTooltipTimerRef.current = window.setTimeout(() => {
+      setVisibleTooltip(null);
+      hideTooltipTimerRef.current = null;
+    }, 200);
+  };
 
   const getTabCount = (tab: VocabularyTab): number => {
     if (!stats) return 0;
@@ -98,7 +118,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
       case 'to_review': return stats.toReviewCount;
       case 'learning': return stats.learningCount;
       case 'mastered': return stats.masteredCount;
-      case 'difficult': return stats.learningCount;
+      case 'difficult': return stats.difficultCount;
       default: return 0;
     }
   };
@@ -236,8 +256,14 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
       status: item.status || '',
       masteryScore: Math.round((item.masteryScore || 0) * 100),
       nextReviewAt: nextReview,
-      neverReview: !item.nextReviewAt,
+      neverReview: item.neverReview || false,
     });
+  };
+
+  const getStatusFromMastery = (masteryScore: number): VocabularyStatus => {
+    if (masteryScore === 100) return 'MASTERED';
+    if (masteryScore >= 60) return 'REVIEWING';
+    return 'LEARNING';
   };
 
   const handleSaveLearningState = async () => {
@@ -257,7 +283,6 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
       const updated = await vocabularyService.updateLearningState(editingItem.id, request);
       setItems(prev => prev.map(item => item.id === updated.id ? updated : item));
       setEditingItem(updated);
-      setEditTab('card');
       loadStats();
     } catch (error) {
       console.error('Failed to update learning state:', error);
@@ -273,6 +298,29 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
       masteryScore: 100,
       nextReviewAt: '',
       neverReview: true,
+    });
+  };
+
+  const handleMasteryScoreChange = (newScore: number) => {
+    const autoStatus = getStatusFromMastery(newScore);
+    setLearningStateForm(prev => ({
+      ...prev,
+      masteryScore: newScore,
+      status: prev.status === 'NEW'
+        ? prev.status
+        : autoStatus,
+    }));
+  };
+
+  const handleStatusChange = (newStatus: VocabularyStatus) => {
+    setLearningStateForm(prev => {
+      const updates: Partial<typeof learningStateForm> = { status: newStatus };
+      if (newStatus === 'MASTERED') {
+        updates.masteryScore = 100;
+        updates.neverReview = true;
+        updates.nextReviewAt = '';
+      }
+      return { ...prev, ...updates };
     });
   };
 
@@ -649,24 +697,53 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
                   <div className="learning-state-field">
                     <label className="learning-state-label">
                       学习状态
-                      <span className="learning-state-hint" data-tooltip="学习状态由掌握度自动计算：NEW=新词（从未学习）、LEARNING=学习中（掌握度&lt;60%）、REVIEWING=复习中（60%-89%）、MASTERED=已掌握（≥90%）、IGNORED=已忽略。每次正确答题提升掌握度，答错会降低。">❓</span>
+                      <span
+                        className="learning-state-hint"
+                        onMouseEnter={() => showTooltip('status')}
+                        onMouseLeave={hideTooltipDelayed}
+                      >
+                        ❓
+                        {visibleTooltip === 'status' && (
+                          <div
+                            className="learning-state-tooltip-panel"
+                            onMouseEnter={() => showTooltip('status')}
+                            onMouseLeave={hideTooltipDelayed}
+                          >
+                            学习状态由掌握度自动计算：NEW=新词（从未学习）、LEARNING=学习中（掌握度&lt;60%）、REVIEWING=复习中（60%-99%）、MASTERED=已掌握（100%）。每次正确答题提升掌握度，答错会降低。
+                          </div>
+                        )}
+                      </span>
                     </label>
                     <select
                       value={learningStateForm.status}
-                      onChange={(e) => setLearningStateForm(prev => ({ ...prev, status: e.target.value as VocabularyStatus }))}
+                      onChange={(e) => handleStatusChange(e.target.value as VocabularyStatus)}
                     >
                       <option value="NEW">新词</option>
                       <option value="LEARNING">学习中</option>
                       <option value="REVIEWING">复习中</option>
                       <option value="MASTERED">已掌握</option>
-                      <option value="IGNORED">已忽略</option>
                     </select>
                   </div>
 
                   <div className="learning-state-field">
                     <label className="learning-state-label">
                       掌握度
-                      <span className="learning-state-hint" data-tooltip="掌握度 = 正确答题次数 / (正确次数 + 答错次数)。每次答对或答错后，系统重新计算正确率。掌握度决定学习状态：≥90%=已掌握，≥60%=复习中，&lt;60%=学习中。">❓</span>
+                      <span
+                        className="learning-state-hint"
+                        onMouseEnter={() => showTooltip('mastery')}
+                        onMouseLeave={hideTooltipDelayed}
+                      >
+                        ❓
+                        {visibleTooltip === 'mastery' && (
+                          <div
+                            className="learning-state-tooltip-panel"
+                            onMouseEnter={() => showTooltip('mastery')}
+                            onMouseLeave={hideTooltipDelayed}
+                          >
+                            掌握度 = 正确答题次数 / (正确次数 + 答错次数)。每次答对或答错后，系统重新计算正确率。掌握度决定学习状态：≥90%=已掌握，≥60%=复习中，&lt;60%=学习中。易错词标准：掌握度&lt;80%且有答错记录。
+                          </div>
+                        )}
+                      </span>
                     </label>
                     <div className="mastery-score-row">
                       <input
@@ -674,7 +751,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
                         min={0}
                         max={100}
                         value={learningStateForm.masteryScore}
-                        onChange={(e) => setLearningStateForm(prev => ({ ...prev, masteryScore: Number(e.target.value) }))}
+                        onChange={(e) => handleMasteryScoreChange(Number(e.target.value))}
                         className="mastery-score-slider"
                       />
                       <span className="mastery-score-value">{learningStateForm.masteryScore}%</span>
@@ -682,7 +759,25 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
                   </div>
 
                   <div className="learning-state-field">
-                    <label className="learning-state-label">下次复习时间</label>
+                    <label className="learning-state-label">
+                      下次复习时间
+                      <span
+                        className="learning-state-hint"
+                        onMouseEnter={() => showTooltip('nextReview')}
+                        onMouseLeave={hideTooltipDelayed}
+                      >
+                        ❓
+                        {visibleTooltip === 'nextReview' && (
+                          <div
+                            className="learning-state-tooltip-panel"
+                            onMouseEnter={() => showTooltip('nextReview')}
+                            onMouseLeave={hideTooltipDelayed}
+                          >
+                            设置下次复习的时间。系统会根据学习情况自动计算复习时间：答错4小时后，答对且掌握度100%则14天后，答对且掌握度60%-99%则3天后，答对且掌握度&lt;60%则1天后。勾选"不再复习"后，该单词将永远不会出现在复习任务中（显示为"永不"）。如果不设置时间，则显示为"未设置"。
+                          </div>
+                        )}
+                      </span>
+                    </label>
                     <div className="next-review-row">
                       <input
                         type="datetime-local"
@@ -710,7 +805,7 @@ const VocabularyManager: React.FC<VocabularyManagerProps> = ({ onBack }) => {
                 </div>
 
                 <div className="vocabulary-edit-actions">
-                  <button className="vocabulary-edit-cancel" onClick={() => setEditTab('card')} type="button">返回</button>
+                  <button className="vocabulary-edit-cancel" onClick={() => setEditingItem(null)} type="button">关闭</button>
                   <button
                     className="vocabulary-edit-save"
                     onClick={handleSaveLearningState}

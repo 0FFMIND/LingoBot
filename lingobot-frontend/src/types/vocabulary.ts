@@ -1,6 +1,6 @@
 export type LearningMode = 'chat' | 'vocabulary';
 
-export type VocabularyStatus = 'NEW' | 'LEARNING' | 'REVIEWING' | 'MASTERED' | 'IGNORED';
+export type VocabularyStatus = 'NEW' | 'LEARNING' | 'REVIEWING' | 'MASTERED';
 export type VocabularyEventType = 'NEW_LEARNING' | 'REVIEW' | 'HYBRID';
 export type VocabularyTab = 'all' | 'to_review' | 'learning' | 'mastered' | 'difficult';
 export type VocabularySortBy = 'last_seen' | 'first_seen' | 'mastery_desc' | 'mastery_asc' | 'seen_count' | 'wrong_count' | 'next_review';
@@ -11,8 +11,8 @@ export interface VocabularyStatsDTO {
   learningCount: number;
   reviewingCount: number;
   masteredCount: number;
-  ignoredCount: number;
   toReviewCount: number;
+  difficultCount: number;
 }
 
 export interface UserVocabularyDTO {
@@ -38,6 +38,7 @@ export interface UserVocabularyDTO {
   firstSeenAt?: string;
   lastSeenAt?: string;
   nextReviewAt?: string;
+  neverReview?: boolean;
   lastEventType?: VocabularyEventType;
   createdAt?: string;
   updatedAt?: string;

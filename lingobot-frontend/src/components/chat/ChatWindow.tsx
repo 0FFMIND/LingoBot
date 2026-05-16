@@ -244,6 +244,7 @@ const ChatWindow: React.FC = () => {
         action: 'new_word',
         word: currentVocabularyCard.word,
         phonetic: currentVocabularyCard.phonetic,
+        partOfSpeech: currentVocabularyCard.partOfSpeech,
         meaning: currentVocabularyCard.meaning,
         example: currentVocabularyCard.example,
         exampleTranslation: currentVocabularyCard.exampleTranslation,

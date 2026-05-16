@@ -60,6 +60,22 @@ public class Conversation {
     @Builder.Default
     private Long totalTokensEstimate = 0L;
     
+    @Column(name = "vocabulary_compacted_summary", columnDefinition = "TEXT")
+    private String vocabularyCompactedSummary;
+    
+    @Column(name = "vocabulary_last_compacted_card_id")
+    private Long vocabularyLastCompactedCardId;
+    
+    @Column(name = "vocabulary_last_compacted_position")
+    private Integer vocabularyLastCompactedPosition;
+    
+    @Column(name = "vocabulary_last_compacted_at")
+    private LocalDateTime vocabularyLastCompactedAt;
+    
+    @Column(name = "vocabulary_compacted_card_count")
+    @Builder.Default
+    private Integer vocabularyCompactedCardCount = 0;
+    
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

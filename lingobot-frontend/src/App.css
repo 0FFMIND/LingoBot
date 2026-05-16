@@ -7375,12 +7375,10 @@
 }
 
 .flashcard-pos {
-  font-size: 14px;
-  color: #8b5cf6;
-  font-weight: 600;
-  background-color: #f5f3ff;
-  padding: 4px 10px;
-  border-radius: 6px;
+  font-size: 20px;
+  color: #64748b;
+  font-weight: 500;
+  font-style: italic;
 }
 
 .flashcard-phonetic {
@@ -7953,7 +7951,7 @@
 }
 
 .sentence-input-section {
-  margin-top: 18px;
+  margin-top: 0;
   padding: 16px;
   background-color: #eff6ff;
   border: 1px solid #bfdbfe;
@@ -8032,7 +8030,7 @@
 }
 
 .sentence-waiting {
-  margin-top: 16px;
+  margin-top: 0;
   padding: 16px;
   background-color: #fef3c7;
   border: 1px solid #fde68a;
@@ -10336,7 +10334,7 @@
   background: #dcfce7;
 }
 
-.vocabulary-status-tag.ignored {
+.vocabulary-status-tag.unknown {
   color: #4b5563;
   background: #f3f4f6;
 }
@@ -10619,8 +10617,7 @@
   color: #ffffff;
 }
 
-.learning-state-hint::after {
-  content: attr(data-tooltip);
+.learning-state-tooltip-panel {
   position: absolute;
   top: 50%;
   left: 100%;
@@ -10635,33 +10632,19 @@
   white-space: normal;
   width: 280px;
   text-align: left;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-  pointer-events: none;
   z-index: 1000;
   margin-left: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.learning-state-hint::before {
+.learning-state-tooltip-panel::before {
   content: '';
   position: absolute;
   top: 50%;
-  left: 100%;
+  left: -12px;
   transform: translateY(-50%);
   border: 6px solid transparent;
   border-right-color: #1e293b;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-  pointer-events: none;
-  margin-left: -2px;
-}
-
-.learning-state-hint:hover::after,
-.learning-state-hint:hover::before {
-  opacity: 1;
-  visibility: visible;
 }
 
 .learning-state-field select,

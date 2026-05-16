@@ -24,6 +24,7 @@ import com.lingobot.learning.vocabulary.service.VocabularyCardService;
 import com.lingobot.learning.vocabulary.service.VocabularyCardSnapshotService;
 import com.lingobot.learning.vocabulary.service.VocabularyPromptService;
 import com.lingobot.learning.vocabulary.service.VocabularyWordService;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryContext;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryPromptBuilder;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
@@ -261,9 +262,9 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         VocabularyCard saved = vocabularyCardRepository.save(card);
         if (conversation.getUser() != null && conversation.getUser().getId() != null) {
             Long userId = conversation.getUser().getId();
-            userVocabularyService.upsertProgress(userId, saved);
+            userVocabularyService.upsertRecordOnly(userId, saved);
             vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
-            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
+            log.info("Created UserVocabulary record for userId={}, vocabularyWordId={}",
                     userId, vocabularyWord.getId());
         }
         evictConversationCache(conversationId);
@@ -491,18 +492,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         
         card.setIsCompleted(true);
         VocabularyCard saved = vocabularyCardRepository.save(card);
-        if (card.getVocabularyWordId() != null
-                && card.getConversation() != null
-                && card.getConversation().getUser() != null
-                && card.getConversation().getUser().getId() != null) {
-            Long userId = card.getConversation().getUser().getId();
-            userVocabularyService.upsertProgress(
-                    userId,
-                    saved);
-            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
-        }
         // 更新后清除缓存
-        evictCardAndConversationCache(cardId, card.getConversation().getId());
         evictCardAndConversationCache(cardId, card.getConversation().getId());
         log.info("Marked card as completed and evicted cache: cardId={}", cardId);
         return toDTOWithNavigation(saved);
@@ -551,9 +541,9 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         VocabularyCard saved = vocabularyCardRepository.save(card);
         if (conversation.getUser() != null && conversation.getUser().getId() != null) {
             Long userId = conversation.getUser().getId();
-            userVocabularyService.upsertProgress(userId, saved);
+            userVocabularyService.upsertRecordOnly(userId, saved);
             vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
-            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
+            log.info("Created UserVocabulary record for userId={}, vocabularyWordId={}",
                     userId, vocabularyWord.getId());
         }
         evictConversationCache(conversationId);
@@ -626,9 +616,9 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
         VocabularyCard saved = vocabularyCardRepository.save(newCard);
         if (userId != null) {
-            userVocabularyService.upsertProgress(userId, saved);
+            userVocabularyService.upsertRecordOnly(userId, saved);
             vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
-            log.info("Updated UserVocabulary for userId={}, vocabularyWordId={}",
+            log.info("Created UserVocabulary record for userId={}, vocabularyWordId={}",
                     userId, vocabularyWord.getId());
         }
         log.info("重新生成词汇卡成功: id={}, word={}, position={}, regenerationIndex={}",
@@ -868,67 +858,33 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
 
     /**
-     * 构建历史单词记录，用于注入到System Prompt中避免AI生成重复单词
-     * 包含重新生成的历史，让AI知道用户对哪些单词不满意
-     * @param conversationId 对话ID
-     * @return 格式化的历史记录字符串
+     * 构建记忆上下文，注入到 System Prompt 中避免 AI 生成重复单词
+     * 使用 VocabularyMemoryService + VocabularyMemoryPromptBuilder 整合 L1 短时记忆和 conversation 全量记忆
+     * @param conversationId 对话 ID
+     * @return 格式化的记忆上下文字符串
      */
     private String buildVocabularyHistoryForPrompt(Long conversationId) {
-        // 获取所有卡片（包括已重新生成的）用于构建历史
-                List<VocabularyCard> allCards = vocabularyCardRepository.findByConversationIdOrderByPositionAsc(conversationId);
-        if (allCards == null || allCards.isEmpty()) {
-            return "";
-        }
-        
-        // 按position分组，构建每个位置的历史
-        Map<Integer, List<VocabularyCard>> cardsByPosition = allCards.stream()
-                .collect(Collectors.groupingBy(VocabularyCard::getPosition));
-        
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n\n## 历史单词卡学习记录\n");
-        sb.append("用户之前已经学习了以下单词，请在生成新单词时确保不重复：\n\n");
-        
-        // 按position顺序遍历
-        List<Integer> positions = cardsByPosition.keySet().stream()
-                .sorted()
-                .collect(Collectors.toList());
-        
-        for (Integer position : positions) {
-            List<VocabularyCard> cardsAtPosition = cardsByPosition.get(position).stream()
-                    .sorted((a, b) -> a.getRegenerationIndex().compareTo(b.getRegenerationIndex()))
-                    .collect(Collectors.toList());
-            
-            sb.append("### 位置 ").append(position + 1).append("\n");
+        try {
+            Conversation conversation = getConversation(conversationId);
+            Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
 
-            // 显示每个重新生成的版本
-            for (VocabularyCard card : cardsAtPosition) {
-                if (card.getIsRegenerated()) {
-                    // 已重新生成的单词，标记为用户不满意
-                    sb.append("- [重新生成过的单词（用户不满意）] ").append(card.getWord() != null ? card.getWord() : "");
-                    if (card.getRegenerationIndex() > 0) {
-                        sb.append(" (第").append(card.getRegenerationIndex()).append("版)");
-                    }
-                    sb.append("\n");
-                } else {
-                    // 当前有效的单词
-                    sb.append("- [当前单词] ").append(card.getWord() != null ? card.getWord() : "");
-                    if (card.getRegenerationIndex() > 0) {
-                        sb.append(" (第").append(card.getRegenerationIndex()).append("版)");
-                    }
-                    sb.append("\n");
-                }
-                if (card.getPhonetic() != null && !card.getPhonetic().isEmpty()) {
-                    sb.append("  音标: ").append(card.getPhonetic()).append("\n");
-                }
-                if (card.getMeaning() != null && !card.getMeaning().isEmpty()) {
-                    sb.append("  释义: ").append(card.getMeaning()).append("\n");
-                }
+            VocabularyMemoryContext memoryContext = vocabularyMemoryService.retrieveMemory(
+                    userId,
+                    conversationId,
+                    null,
+                    null);
+
+            String memoryPrompt = memoryPromptBuilder.buildPromptContext(memoryContext);
+
+            if (memoryPrompt != null && !memoryPrompt.isEmpty()) {
+                log.info("已为 conversationId {} 构建记忆上下文，总记忆项 {} 条",
+                        conversationId, memoryContext.totalMemoryItems());
+                return "\n\n" + memoryPrompt;
             }
-            sb.append("\n");
+        } catch (Exception e) {
+            log.warn("使用 VocabularyMemoryService 构建记忆上下文失败，fallback 到空记忆，conversationId: {}", conversationId, e);
         }
-        
-        log.info("已为 conversationId {} 构建历史信息，包含 {} 个位置的单词记录", conversationId, positions.size());
-        return sb.toString();
+        return "";
     }
 
     /**

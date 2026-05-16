@@ -45,7 +45,7 @@ public class UserVocabularyDTO {
     private String category;
     // 难度级别（从最新词汇卡获取）
     private String difficulty;
-    // 学习状态（NEW/LEARNING/REVIEWING/MASTERED/IGNORED）
+    // 学习状态（NEW/LEARNING/REVIEWING/MASTERED）
     private VocabularyStatus status;
     // 掌握程度得分（0.00-1.00）
     private BigDecimal masteryScore;
@@ -61,6 +61,8 @@ public class UserVocabularyDTO {
     private LocalDateTime lastSeenAt;
     // 下次复习时间
     private LocalDateTime nextReviewAt;
+    // 是否不再复习（true表示永不复习）
+    private Boolean neverReview;
     // 最后事件类型（NEW_LEARNING/REVIEW/HYBRID）
     private VocabularyEventType lastEventType;
     // 创建时间
