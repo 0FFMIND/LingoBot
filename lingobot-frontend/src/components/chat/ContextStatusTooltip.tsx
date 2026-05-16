@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { ContextStatusDTO } from '../../types';
-import { useTokenUsageStore, ConversationTokenUsage } from '../../stores';
+import { useTokenUsageStore, useChatStore, ConversationTokenUsage } from '../../stores';
 import { conversationService } from '../../services/conversationService';
 
 interface ContextStatusTooltipProps {
@@ -31,6 +31,8 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
 
   const localUsage = useTokenUsageStore((state) => state.usageByConversationPublicId[publicId]);
   const maxTokens = useTokenUsageStore((state) => state.maxTokensPerConversation);
+  const compactResult = useChatStore((state) => state.compactResult[publicId]);
+  const clearCompactResult = useChatStore((state) => state.clearCompactResult);
   const activeStatus = freshStatus || status;
 
   const getCombinedUsage = (): {
@@ -79,8 +81,6 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
     e.stopPropagation();
     if (onManualCompact && !isCurrentlyCompacting) {
       onManualCompact(publicId);
-      setShowTooltip(false);
-      setIsTooltipFadingOut(false);
     }
   };
 
@@ -249,6 +249,102 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
               }}
             >
               💡 {activeStatus.compactReason}
+            </div>
+          )}
+
+          {isCurrentlyCompacting && (
+            <div
+              style={{
+                padding: '8px 10px',
+                background: '#e3f2fd',
+                borderRadius: '6px',
+                marginBottom: '10px',
+                color: '#0c5460',
+                fontSize: '11px',
+                lineHeight: '1.4',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⏳</span>
+              <span>正在压缩上下文...</span>
+            </div>
+          )}
+
+          {compactResult && !isCurrentlyCompacting && (
+            <div
+              style={{
+                padding: '8px 10px',
+                background: compactResult.success ? '#d4edda' : '#f8d7da',
+                borderRadius: '6px',
+                marginBottom: '10px',
+                color: compactResult.success ? '#155724' : '#721c24',
+                fontSize: '11px',
+                lineHeight: '1.5',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                    {compactResult.success ? '✅' : '❌'} {compactResult.message}
+                  </div>
+                  {compactResult.success && compactResult.savedTokens !== undefined && (
+                    <div style={{
+                      marginTop: '6px',
+                      paddingTop: '6px',
+                      borderTop: '1px solid rgba(0,0,0,0.1)',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '4px 12px',
+                    }}>
+                      <span style={{ opacity: 0.8 }}>压缩前:</span>
+                      <span style={{ fontWeight: '500' }}>{compactResult.beforeTokens?.toLocaleString()} tokens</span>
+                      <span style={{ opacity: 0.8 }}>压缩后:</span>
+                      <span style={{ fontWeight: '500' }}>{compactResult.afterTokens?.toLocaleString()} tokens</span>
+                      <span style={{ opacity: 0.8 }}>节省:</span>
+                      <span style={{ fontWeight: '600', color: '#28a745' }}>{compactResult.savedTokens.toLocaleString()} tokens</span>
+                      {compactResult.compactedCardsCount !== undefined && (
+                        <>
+                          <span style={{ opacity: 0.8 }}>压缩卡片:</span>
+                          <span style={{ fontWeight: '500' }}>{compactResult.compactedCardsCount} 张</span>
+                        </>
+                      )}
+                      {compactResult.recentCardsCount !== undefined && (
+                        <>
+                          <span style={{ opacity: 0.8 }}>保留卡片:</span>
+                          <span style={{ fontWeight: '500' }}>{compactResult.recentCardsCount} 张</span>
+                        </>
+                      )}
+                      {compactResult.totalCompactedCards !== undefined && (
+                        <>
+                          <span style={{ opacity: 0.8 }}>累计压缩:</span>
+                          <span style={{ fontWeight: '500' }}>{compactResult.totalCompactedCards} 张</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearCompactResult(publicId);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'inherit',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    opacity: 0.6,
+                    padding: '0 4px',
+                    lineHeight: 1,
+                  }}
+                  title="关闭"
+                >
+                  ×
+                </button>
+              </div>
             </div>
           )}
 

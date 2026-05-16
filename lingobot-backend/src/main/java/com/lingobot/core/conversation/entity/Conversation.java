@@ -32,6 +32,9 @@ public class Conversation {
     @Column(name = "learning_mode", length = 50)
     private String learningMode;
     
+    @Column(name = "vocabulary_intent", length = 50)
+    private String vocabularyIntent;
+    
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
     

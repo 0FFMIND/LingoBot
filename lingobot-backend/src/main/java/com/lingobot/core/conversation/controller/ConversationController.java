@@ -88,6 +88,15 @@ public class ConversationController {
         return ResponseEntity.ok(ApiResponse.success("对话学习模式更新成功", updated));
     }
     
+    @PutMapping("/{publicId}/vocabulary-intent")
+    public ResponseEntity<ApiResponse<ConversationDTO>> updateVocabularyIntent(
+            @PathVariable String publicId,
+            @RequestBody Map<String, String> request) {
+        String vocabularyIntent = request.get("vocabularyIntent");
+        ConversationDTO updated = conversationService.updateVocabularyIntent(publicId, vocabularyIntent);
+        return ResponseEntity.ok(ApiResponse.success("词汇学习意图更新成功", updated));
+    }
+    
     @DeleteMapping("/{publicId}")
     public ResponseEntity<Void> deleteConversation(@PathVariable String publicId) {
         conversationService.deleteConversation(publicId);

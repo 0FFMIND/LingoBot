@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -18,7 +19,9 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VocabularyCardDTO {
+public class VocabularyCardDTO implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     // 词汇卡ID
     private Long id;
@@ -66,6 +69,8 @@ public class VocabularyCardDTO {
     private Boolean sentenceMeaningMatches;
     // 是否已完成学习
     private Boolean isCompleted;
+    // 是否已揭露（用于批量生成后渐进式揭露）
+    private Boolean isRevealed;
     // 创建时间
     private LocalDateTime createdAt;
     // 更新时间

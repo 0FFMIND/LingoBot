@@ -14,6 +14,7 @@ export interface ConversationDTO {
   publicId: string;
   title: string;
   learningMode?: string;
+  vocabularyIntent?: string;
   createdAt: string;
   updatedAt: string;
   messageCount: number;
@@ -22,6 +23,8 @@ export interface ConversationDTO {
 
 export interface CreateConversationRequest {
   title: string;
+  learningMode?: string;
+  vocabularyIntent?: string;
 }
 
 export interface PageResponseDTO<T> {

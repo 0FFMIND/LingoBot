@@ -115,9 +115,6 @@ public class MeaningCheckService {
             }
 
             String feedback = payload.get("check_feedback") instanceof String value ? value : "";
-            String chineseSentenceForTranslation = payload.get("chineseSentenceForTranslation") instanceof String value
-                    ? value
-                    : "";
             // Write by card id instead of saving the previously loaded entity. Otherwise an old
             // managed VocabularyCard can overwrite meaning_check_completed back to false.
             if (userId != null && vocabularyWordId != null) {
@@ -132,16 +129,10 @@ public class MeaningCheckService {
                                 VocabularyMemoryInteractionType.MEANING_CHECK));
             }
 
-            int updatedRows = chineseSentenceForTranslation.isBlank()
-                    ? vocabularyCardRepository.updateMeaningCheckResult(
-                            cardId,
-                            isCorrect,
-                            feedback != null ? feedback : "")
-                    : vocabularyCardRepository.updateMeaningCheckResultWithChineseSentence(
-                            cardId,
-                            isCorrect,
-                            feedback != null ? feedback : "",
-                            chineseSentenceForTranslation);
+            int updatedRows = vocabularyCardRepository.updateMeaningCheckResult(
+                    cardId,
+                    isCorrect,
+                    feedback != null ? feedback : "");
             evictCardAndConversationCache(cardId, conversationId);
             log.info("Persisted meaning check by cardId={}, rows={}, isCorrect={}",
                     cardId, updatedRows, isCorrect);

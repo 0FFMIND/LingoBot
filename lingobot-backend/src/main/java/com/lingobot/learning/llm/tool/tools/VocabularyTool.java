@@ -72,12 +72,19 @@ public class VocabularyTool implements McpToolHandler {
 
         properties.put("action", McpTool.Property.builder()
                 .type("string")
-                .description("操作类型：display_flashcard（展示单词卡）、check_meaning_accuracy（检查用户释义准确性）、analyze_sentence（分析用户英文造句）")
+                .description("操作类型：display_flashcard（展示单词卡）、display_flashcard_batch（批量展示单词卡）、check_meaning_accuracy（检查用户释义准确性）、analyze_sentence（分析用户英文造句）")
                 .enums(Arrays.asList(
                         "display_flashcard",
+                        "display_flashcard_batch",
                         "check_meaning_accuracy",
                         "analyze_sentence"
                 ))
+                .build());
+
+        properties.put("cards", McpTool.Property.builder()
+                .type("array")
+                .description("单词卡数组（用于 display_flashcard_batch），每个元素包含 word、phonetic、partOfSpeech、meaning、example、exampleTranslation、synonyms、vocabularyCategory、vocabularyDifficulty")
+                .items(McpTool.Items.builder().type("object").build())
                 .build());
 
         properties.put("word", McpTool.Property.builder()
@@ -144,7 +151,7 @@ public class VocabularyTool implements McpToolHandler {
 
         properties.put("chineseSentenceForTranslation", McpTool.Property.builder()
                 .type("string")
-                .description("一个自然的中文句子，供用户翻译成英文（用于check_meaning_accuracy），难度须与单词难度匹配")
+                .description("一个自然的中文句子，供用户翻译成英文，难度须与单词难度匹配")
                 .build());
 
         properties.put("meaning_matches", McpTool.Property.builder()
@@ -189,6 +196,9 @@ public class VocabularyTool implements McpToolHandler {
             switch (action) {
                 case "display_flashcard":
                     result = displayFlashcard(args, conversationId);
+                    break;
+                case "display_flashcard_batch":
+                    result = displayFlashcardBatch(args, conversationId);
                     break;
                 case "check_meaning_accuracy":
                     result = checkMeaningAccuracy(args, conversationId);
@@ -299,6 +309,87 @@ public class VocabularyTool implements McpToolHandler {
         return result;
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> displayFlashcardBatch(Map<String, Object> args, Long conversationId) {
+        List<Map<String, Object>> cardsData = args != null && args.containsKey("cards")
+                ? (List<Map<String, Object>>) args.get("cards")
+                : new ArrayList<>();
+
+        List<Map<String, Object>> processedCards = new ArrayList<>();
+        String firstWord = null;
+        String firstPhonetic = null;
+
+        for (int i = 0; i < cardsData.size(); i++) {
+            Map<String, Object> cardData = cardsData.get(i);
+            String word = cardData != null && cardData.containsKey("word")
+                    ? (String) cardData.get("word")
+                    : null;
+            String phonetic = cardData != null && cardData.containsKey("phonetic")
+                    ? (String) cardData.get("phonetic")
+                    : "";
+            String partOfSpeech = cardData != null && cardData.containsKey("partOfSpeech")
+                    ? (String) cardData.get("partOfSpeech")
+                    : "";
+            String meaning = cardData != null && cardData.containsKey("meaning")
+                    ? (String) cardData.get("meaning")
+                    : "";
+            String example = cardData != null && cardData.containsKey("example")
+                    ? (String) cardData.get("example")
+                    : "";
+            String exampleTranslation = cardData != null && cardData.containsKey("exampleTranslation")
+                    ? (String) cardData.get("exampleTranslation")
+                    : "";
+            String vocabularyCategory = cardData != null && cardData.containsKey("vocabularyCategory")
+                    ? (String) cardData.get("vocabularyCategory")
+                    : "cefr";
+            String vocabularyDifficulty = cardData != null && cardData.containsKey("vocabularyDifficulty")
+                    ? (String) cardData.get("vocabularyDifficulty")
+                    : "b2";
+
+            List<String> synonyms = new ArrayList<>();
+            if (cardData != null && cardData.containsKey("synonyms")) {
+                Object synonymsObj = cardData.get("synonyms");
+                if (synonymsObj instanceof List) {
+                    synonyms = (List<String>) synonymsObj;
+                }
+            }
+
+            if (i == 0) {
+                firstWord = word;
+                firstPhonetic = phonetic;
+                if (conversationId != null) {
+                    vocabularyStateService.saveCurrentWord(
+                            conversationId, word, phonetic, partOfSpeech, meaning,
+                            synonyms, vocabularyCategory, vocabularyDifficulty
+                    );
+                }
+            }
+
+            Map<String, Object> card = new HashMap<>();
+            card.put("word", word);
+            card.put("phonetic", phonetic);
+            card.put("partOfSpeech", partOfSpeech);
+            card.put("meaning", meaning);
+            card.put("example", example);
+            card.put("exampleTranslation", exampleTranslation);
+            card.put("synonyms", synonyms);
+            card.put("vocabularyCategory", vocabularyCategory);
+            card.put("vocabularyDifficulty", vocabularyDifficulty);
+            processedCards.add(card);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("action", "display_flashcard_batch");
+        result.put("cards", processedCards);
+        result.put("display_mode", "batch");
+        result.put("message", firstWord != null && firstPhonetic != null
+                ? String.format("已生成 %d 张单词卡，首张: %s [%s]", processedCards.size(), firstWord, firstPhonetic)
+                : String.format("已生成 %d 张单词卡", processedCards.size()));
+
+        return result;
+    }
+
     private Map<String, Object> checkMeaningAccuracy(Map<String, Object> args, Long conversationId) {
         String userMeaning = args != null && args.containsKey("user_meaning")
                 ? (String) args.get("user_meaning")
@@ -311,9 +402,6 @@ public class VocabularyTool implements McpToolHandler {
                 : "";
         String targetWord = args != null && args.containsKey("word")
                 ? (String) args.get("word")
-                : "";
-        String chineseSentenceForTranslation = args != null && args.containsKey("chineseSentenceForTranslation")
-                ? (String) args.get("chineseSentenceForTranslation")
                 : "";
 
         Map<String, Object> cachedState = null;
@@ -345,10 +433,6 @@ public class VocabularyTool implements McpToolHandler {
             result.put("correct_meaning", cachedState.get("meaning"));
         }
 
-        if (!chineseSentenceForTranslation.isEmpty()) {
-            result.put("chineseSentenceForTranslation", chineseSentenceForTranslation);
-        }
-
         // 持久化检查结果到数据库
         if (conversationId != null && isCorrect != null) {
             try {
@@ -362,11 +446,8 @@ public class VocabularyTool implements McpToolHandler {
                 }
                 if (target.isPresent()) {
                     VocabularyCard card = target.get();
-                    int updatedRows = chineseSentenceForTranslation.isEmpty()
-                            ? vocabularyCardRepository.updateMeaningCheckResult(
-                                    card.getId(), isCorrect, checkFeedback)
-                            : vocabularyCardRepository.updateMeaningCheckResultWithChineseSentence(
-                                    card.getId(), isCorrect, checkFeedback, chineseSentenceForTranslation);
+                    int updatedRows = vocabularyCardRepository.updateMeaningCheckResult(
+                            card.getId(), isCorrect, checkFeedback);
                     evictCardAndConversationCache(card.getId(), conversationId);
                     log.info("Persisted meaning check for cardId={}, word={}, isCorrect={}, rows={}",
                             card.getId(), card.getWord(), isCorrect, updatedRows);

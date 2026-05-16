@@ -5,13 +5,16 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
 import java.util.List;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VocabularyGenerationConstraints {
+public class VocabularyGenerationConstraints implements Serializable {
+
+    private static final long serialVersionUID = 1L;
     private String category;
     private String difficulty;
     private List<String> excludeWords;

@@ -1,14 +1,11 @@
 package com.lingobot.learning.vocabulary.service.impl;
 
-import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.repository.ConversationRepository;
-import com.lingobot.core.user.preference.dto.UserPreferenceDTO;
-import com.lingobot.core.user.preference.service.UserPreferenceService;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
-import com.lingobot.learning.llm.dto.openai.OpenAiTool;
-import com.lingobot.learning.llm.tool.service.McpService;
+import com.lingobot.learning.langgraph.vocabulary.VocabularyGraph;
+import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
+import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
 import com.lingobot.learning.vocabulary.dto.CreateVocabularyCardRequest;
 import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
 import com.lingobot.learning.vocabulary.dto.WordCardData;
@@ -22,23 +19,20 @@ import com.lingobot.learning.vocabulary.service.UserVocabularyEventService;
 import com.lingobot.learning.vocabulary.service.UserVocabularyService;
 import com.lingobot.learning.vocabulary.service.VocabularyCardService;
 import com.lingobot.learning.vocabulary.service.VocabularyCardSnapshotService;
-import com.lingobot.learning.vocabulary.service.VocabularyPromptService;
 import com.lingobot.learning.vocabulary.service.VocabularyWordService;
-import com.lingobot.learning.memory.vocabulary.VocabularyMemoryContext;
-import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
-import com.lingobot.learning.memory.vocabulary.VocabularyMemoryPromptBuilder;
+import com.lingobot.learning.langgraph.vocabulary.VocabularyBatchGraph;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
+import com.lingobot.learning.vocabulary.dto.VocabularyBatchGenerationResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -56,10 +50,6 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
     private final VocabularyCardRepository vocabularyCardRepository;
     private final ConversationRepository conversationRepository;
-    private final ToolLoopService toolLoopService;
-    private final McpService mcpService;
-    private final VocabularyPromptService vocabularyPromptService;
-    private final UserPreferenceService userPreferenceService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final MeaningCheckService meaningCheckService;
@@ -70,12 +60,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     private final UserVocabularyEventService eventService;
     private final VocabularyCardSnapshotService snapshotService;
     private final VocabularyMemoryService vocabularyMemoryService;
-    private final VocabularyMemoryPromptBuilder memoryPromptBuilder;
-
-    /** 默认使用的AI模型 */
-    private static final String DEFAULT_MODEL = "qwen";
-    /** 默认词汇标准（CEFR）*/
-    private static final String DEFAULT_VOCABULARY_CATEGORY = "cefr";
+    private final VocabularyGraph vocabularyGraph;
+    private final VocabularyBatchGraph vocabularyBatchGraph;
     
     /** Redis 缓存键前缀 - 单个单词卡*/
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
@@ -314,9 +300,13 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     @Transactional
     public VocabularyCardDTO getNextCard(Long conversationId, Integer currentPosition, String category, String difficulty) {
         List<VocabularyCardDTO> cardDTOs = getAllCards(conversationId);
-        
+
         if (cardDTOs.isEmpty()) {
-            log.info("该对话没有词汇卡，自动生成第一张");
+            log.info("该对话没有词汇卡，自动批量生成10张");
+            VocabularyBatchGenerationResult batchResult = generateBatchCards(conversationId, category, difficulty);
+            if (!batchResult.getRevealedCards().isEmpty()) {
+                return batchResult.getRevealedCards().get(0);
+            }
             return generateNextCard(conversationId, category, difficulty);
         }
 
@@ -336,7 +326,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         }
 
         if (nextIndex >= cardDTOs.size()) {
-            log.info("已经是最后一个单词了，自动生成下一张");
+            log.info("已经是最后一个单词了，自动批量生成10张新单词卡");
+            VocabularyBatchGenerationResult batchResult = generateBatchCards(conversationId, category, difficulty);
+            if (!batchResult.getRevealedCards().isEmpty()) {
+                return batchResult.getRevealedCards().get(0);
+            }
             return generateNextCard(conversationId, category, difficulty);
         }
 
@@ -507,7 +501,12 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 .map(pos -> pos + 1)
                 .orElse(0);
 
-        WordCardData generated = generateRandomWord(conversationId, category, difficulty, "next_word");
+        String intent = conversation.getVocabularyIntent();
+        if (intent == null || intent.isEmpty()) {
+            intent = "next_word";
+        }
+
+        WordCardData generated = generateRandomWord(conversationId, category, difficulty, intent);
 
         conversation = getConversation(conversationId);
         ensureConversationStillExists(conversationId);
@@ -682,226 +681,41 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
      * @param conversationId 对话ID
      * @param category 词汇类别（cefr/ielts/toefl），null 时从用户偏好读取
      * @param difficulty 难度级别，null 时从用户偏好读取
-     * @param intent 生成意图（next_word / regenerate）
+     * @param intent 生成意图（next_word / regenerate / new_word / review / hybrid）
      * @return 解析后的单词卡片数据，AI 失败时返回默认单词
      */
     private WordCardData generateRandomWord(Long conversationId, String category, String difficulty, String intent) {
-        try {
-            log.info("=== 开始生成词汇卡（AI Agent 模式）===");
-            log.info("conversationId: {}, category: {}, difficulty: {}, intent: {}", conversationId, category, difficulty, intent);
+        log.info("=== 开始生成词汇卡（LangGraph4j 模式）===");
+        log.info("conversationId: {}, category: {}, difficulty: {}, intent: {}", conversationId, category, difficulty, intent);
 
-            String vocabularyCategory = DEFAULT_VOCABULARY_CATEGORY;
-            String vocabularyDifficulty = "b2";
-            String model = DEFAULT_MODEL;
+        Conversation conversation = getConversation(conversationId);
+        Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
 
-            if (isNotBlank(category)) {
-                vocabularyCategory = category.toLowerCase();
-            }
-            if (isNotBlank(difficulty)) {
-                vocabularyDifficulty = difficulty.toLowerCase();
-            }
+        VocabularyGenerationIntent generationIntent = switch (intent) {
+            case "regenerate" -> VocabularyGenerationIntent.REGENERATE;
+            case "new_word" -> VocabularyGenerationIntent.NEW_WORD;
+            case "review" -> VocabularyGenerationIntent.REVIEW;
+            case "hybrid" -> VocabularyGenerationIntent.HYBRID;
+            default -> VocabularyGenerationIntent.NEXT_WORD;
+        };
 
-            Conversation conversation = getConversation(conversationId);
-            if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-                UserPreferenceDTO preference = userPreferenceService.getOrCreatePreference(conversation.getUser().getId());
-                if (!isNotBlank(category) && isNotBlank(preference.getVocabularyCategory())) {
-                    vocabularyCategory = preference.getVocabularyCategory().toLowerCase();
-                }
-                if (!isNotBlank(difficulty) && isNotBlank(preference.getVocabularyDifficulty())) {
-                    vocabularyDifficulty = preference.getVocabularyDifficulty().toLowerCase();
-                }
-                if (isNotBlank(preference.getVocabularyModel())) {
-                    model = preference.getVocabularyModel().toLowerCase();
-                }
-            }
-            log.info("Using vocabulary preferences: category={}, difficulty={}, model={}",
-                    vocabularyCategory, vocabularyDifficulty, model);
+        Optional<WordCardData> result = vocabularyGraph.execute(
+                conversationId, userId, category, difficulty, generationIntent);
 
-            // 获取System Prompt并追加历史单词记录（避免重复）
-            String systemPrompt = vocabularyPromptService.getDisplayFlashcardPrompt(
-                    vocabularyCategory, vocabularyDifficulty);
-            log.info("System prompt 已生成，长度: {}", systemPrompt != null ? systemPrompt.length() : 0);
-
-            String vocabularyHistory = buildVocabularyHistoryForPrompt(conversationId);
-            if (vocabularyHistory != null && !vocabularyHistory.isEmpty()) {
-                systemPrompt = systemPrompt + vocabularyHistory;
-                log.info("已追加词汇历史到 System Prompt，conversationId: {}", conversationId);
-            }
-
-            // 构建消息列表
-            List<OpenAiChatMessage> messages = new ArrayList<>();
-            messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
-
-            // 获取vocabulary模式可用的工具
-            List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary", "display_flashcard");
-            log.info("获取到 {} 个vocabulary 模式的工具", tools != null ? tools.size() : 0);
-
-            if (tools == null || tools.isEmpty()) {
-                log.warn("没有可用的vocabulary 工具，使用默认单词");
-                return getDefaultWord();
-            }
-
-            // 调用AI Agent执行工具调用
-            log.info("调用 AI Agent 执行工具调用...");
-            ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
-                    conversationId, messages, tools, model);
-            recordVocabularyTokenUsage(conversationId, result);
-
-            log.info("AI Agent 执行结果: hasToolCalls={}, hasTextResponse={}",
-                    result.hasToolCalls(), result.hasTextResponse());
-
-            // 解析工具返回结果
-            if (result.hasToolCalls() && result.getToolResultText() != null) {
-                String toolResultText = result.getToolResultText();
-                log.info("工具返回结果: {}", toolResultText != null && toolResultText.length() > 100 
-                        ? toolResultText.substring(0, 100) + "..." : toolResultText);
-
-                return parseWordCardDataFromToolResult(toolResultText, vocabularyCategory, vocabularyDifficulty);
-            } else if (result.hasTextResponse()) {
-                log.warn("AI 返回了文本响应而非工具调用，文本: {}", result.getTextResponse());
-                return getDefaultWord();
-            } else {
-                log.warn("AI 没有返回有效结果，使用默认单词");
-                return getDefaultWord();
-            }
-
-        } catch (Exception e) {
-            log.error("生成词汇卡时发生错误", e);
-            return getDefaultWord();
-        }
-    }
-
-    private boolean isNotBlank(String value) {
-        return value != null && !value.trim().isEmpty();
-    }
-
-    private void recordVocabularyTokenUsage(Long conversationId, ToolLoopService.ToolLoopResult result) {
-        if (result == null || !result.hasTokenUsage()) {
-            return;
-        }
-        Integer total = result.getTokenUsage().getTotal();
-        if (total == null || total <= 0) {
-            return;
-        }
-        conversationRepository.findById(conversationId).ifPresent(conversation -> {
-            long current = conversation.getTotalTokensEstimate() != null ? conversation.getTotalTokensEstimate() : 0L;
-            conversation.setTotalTokensEstimate(current + total);
-            conversationRepository.save(conversation);
-            log.info("Recorded vocabulary token usage: conversationId={}, added={}, totalEstimate={}",
-                    conversationId, total, conversation.getTotalTokensEstimate());
-        });
-    }
-
-    /**
-     * 解析AI工具返回的JSON结果为WordCardData
-     * @param toolResultText 工具返回的JSON字符串
-     * @param defaultCategory 默认词汇类别
-     * @param defaultDifficulty 默认难度级别
-     * @return 解析后的单词卡片数据
-     */
-    private WordCardData parseWordCardDataFromToolResult(String toolResultText, String defaultCategory, String defaultDifficulty) {
-        try {
-            Map<String, Object> parsed = objectMapper.readValue(
-                    toolResultText, new TypeReference<Map<String, Object>>() {});
-
-            String word = (String) parsed.get("word");
-            if (word == null || word.trim().isEmpty()) {
-                log.warn("工具返回结果中word 为空，使用默认单词");
-                return getDefaultWord();
-            }
-
-            List<String> synonyms = parseList(parsed.get("synonyms"));
-
-            String category = (String) parsed.get("vocabularyCategory");
-            if (category == null || category.isEmpty()) {
-                category = defaultCategory != null ? defaultCategory : DEFAULT_VOCABULARY_CATEGORY;
-            }
-
-            String difficulty = (String) parsed.get("vocabularyDifficulty");
-            if (difficulty == null || difficulty.isEmpty()) {
-                difficulty = defaultDifficulty != null ? defaultDifficulty : "b2";
-            }
-
-            log.info("成功解析词汇卡数据: word={}, phonetic={}, partOfSpeech={}, meaning={}, category={}, difficulty={}",
-                    word, parsed.get("phonetic"), parsed.get("partOfSpeech"), parsed.get("meaning"), category, difficulty);
-
+        return result.orElseGet(() -> {
+            log.warn("LangGraph execution did not produce a result, using fallback");
             return WordCardData.builder()
-                    .word(word)
-                    .phonetic((String) parsed.get("phonetic"))
-                    .partOfSpeech((String) parsed.get("partOfSpeech"))
-                    .meaning((String) parsed.get("meaning"))
-                    .example((String) parsed.get("example"))
-                    .exampleTranslation((String) parsed.get("exampleTranslation"))
-                    .synonyms(synonyms)
-                    .category(category)
-                    .difficulty(difficulty)
+                    .word("hello")
+                    .phonetic("həˈloʊ")
+                    .partOfSpeech("int.")
+                    .meaning("你好")
+                    .example("Hello, how are you?")
+                    .exampleTranslation("你好，你好吗？")
+                    .synonyms(List.of("hi", "hey"))
+                    .category("cefr")
+                    .difficulty("a1")
                     .build();
-
-        } catch (Exception e) {
-            log.error("解析工具返回结果时发生错误: {}", toolResultText, e);
-            return getDefaultWord();
-        }
-    }
-
-    /**
-     * 安全解析列表对象
-     */
-    @SuppressWarnings("unchecked")
-    private List<String> parseList(Object obj) {
-        if (obj == null) {
-            return new ArrayList<>();
-        }
-        if (obj instanceof List<?>) {
-            return (List<String>) obj;
-        }
-        return new ArrayList<>();
-    }
-
-    /**
-     * 构建记忆上下文，注入到 System Prompt 中避免 AI 生成重复单词
-     * 使用 VocabularyMemoryService + VocabularyMemoryPromptBuilder 整合 L1 短时记忆和 conversation 全量记忆
-     * @param conversationId 对话 ID
-     * @return 格式化的记忆上下文字符串
-     */
-    private String buildVocabularyHistoryForPrompt(Long conversationId) {
-        try {
-            Conversation conversation = getConversation(conversationId);
-            Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
-
-            VocabularyMemoryContext memoryContext = vocabularyMemoryService.retrieveMemory(
-                    userId,
-                    conversationId,
-                    null,
-                    null);
-
-            String memoryPrompt = memoryPromptBuilder.buildPromptContext(memoryContext);
-
-            if (memoryPrompt != null && !memoryPrompt.isEmpty()) {
-                log.info("已为 conversationId {} 构建记忆上下文，总记忆项 {} 条",
-                        conversationId, memoryContext.totalMemoryItems());
-                return "\n\n" + memoryPrompt;
-            }
-        } catch (Exception e) {
-            log.warn("使用 VocabularyMemoryService 构建记忆上下文失败，fallback 到空记忆，conversationId: {}", conversationId, e);
-        }
-        return "";
-    }
-
-    /**
-     * 获取默认单词（当AI生成失败时的兜底方案）
-     */
-    private WordCardData getDefaultWord() {
-        return WordCardData.builder()
-                .word("hello")
-                .phonetic("həˈloʊ")
-                .partOfSpeech("int.")
-                .meaning("你好")
-                .example("Hello, how are you?")
-                .exampleTranslation("你好，你好吗？")
-                .synonyms(List.of("hi", "hey"))
-                .category("cefr")
-                .difficulty("a1")
-                .build();
+        });
     }
 
     /**
@@ -949,6 +763,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 .sentenceHasNewWord(card.getSentenceHasNewWord())
                 .sentenceMeaningMatches(card.getSentenceMeaningMatches())
                 .isCompleted(card.getIsCompleted())
+                .isRevealed(card.getIsRevealed())
                 .isRegenerated(card.getIsRegenerated())
                 .regenerationIndex(card.getRegenerationIndex())
                 .regeneratedWords(regeneratedWords)
@@ -984,5 +799,186 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         dto.setHasNext(currentIndex < cardDTOs.size() - 1);
 
         return dto;
+    }
+
+    @Override
+    @Transactional
+    public VocabularyBatchGenerationResult generateBatchCards(Long conversationId, String category, String difficulty) {
+        return generateBatchCards(conversationId, category, difficulty, 10);
+    }
+
+    @Override
+    @Transactional
+    public VocabularyBatchGenerationResult generateBatchCards(Long conversationId, String category, String difficulty, int batchSize) {
+        log.info("=== 开始批量生成词汇卡（Batch 模式）===");
+        log.info("conversationId: {}, category: {}, difficulty: {}, batchSize: {}", conversationId, category, difficulty, batchSize);
+
+        Conversation conversation = getConversation(conversationId);
+        Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
+
+        var result = vocabularyBatchGraph.execute(
+                conversationId, userId, category, difficulty,
+                com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent.NEW_WORD,
+                batchSize);
+
+        evictConversationCache(conversationId);
+
+        return result.orElseGet(() -> {
+            log.warn("Batch generation failed, returning empty result");
+            return VocabularyBatchGenerationResult.builder()
+                    .revealedCards(List.of())
+                    .hiddenCards(List.of())
+                    .totalRevealed(0)
+                    .totalHidden(0)
+                    .totalCount(0)
+                    .build();
+        });
+    }
+
+    @Override
+    @Transactional
+    public VocabularyCardDTO revealNextCard(Long conversationId) {
+        log.info("揭露下一张词汇卡: conversationId={}", conversationId);
+
+        List<VocabularyCard> hiddenCards = vocabularyCardRepository.findNextHiddenCard(
+                conversationId, PageRequest.of(0, 1));
+
+        if (hiddenCards.isEmpty()) {
+            throw com.lingobot.infrastructure.common.exception.ChatException.badRequest("没有未揭露的词汇卡了");
+        }
+
+        VocabularyCard cardToReveal = hiddenCards.get(0);
+        return revealCard(cardToReveal.getId());
+    }
+
+    @Override
+    @Transactional
+    public VocabularyCardDTO revealCard(Long cardId) {
+        log.info("揭露词汇卡: cardId={}", cardId);
+
+        VocabularyCard card = vocabularyCardRepository.findById(cardId)
+                .orElseThrow(() -> com.lingobot.infrastructure.common.exception.ChatException.badRequest("词汇卡不存在: " + cardId));
+
+        if (Boolean.TRUE.equals(card.getIsRevealed())) {
+            log.warn("词汇卡已经是揭露状态: cardId={}", cardId);
+            return toDTOWithNavigation(card);
+        }
+
+        vocabularyCardRepository.markAsRevealed(cardId);
+        card.setIsRevealed(true);
+
+        evictCardAndConversationCache(cardId, card.getConversation().getId());
+        log.info("词汇卡已揭露: cardId={}, word={}", cardId, card.getWord());
+
+        return toDTOWithNavigation(card);
+    }
+
+    @Override
+    @Transactional
+    public VocabularyCardDTO regenerateCardAtPosition(Long conversationId, Integer position, String category, String difficulty) {
+        log.info("在指定位置重新生成词汇卡: conversationId={}, position={}", conversationId, position);
+
+        Conversation conversation = getConversation(conversationId);
+
+        Optional<VocabularyCard> existingCardOpt = vocabularyCardRepository.findActiveCardByConversationIdAndPosition(
+                conversationId, position);
+
+        if (existingCardOpt.isEmpty()) {
+            log.warn("该位置没有有效词汇卡，使用默认重新生成逻辑: position={}", position);
+            return regenerateCard(conversationId, category, difficulty);
+        }
+
+        VocabularyCard existingCard = existingCardOpt.get();
+
+        log.info("标记词汇卡为已重新生成: id={}, word={}, position={}, regenerationIndex={}",
+                existingCard.getId(), existingCard.getWord(), position, existingCard.getRegenerationIndex());
+
+        existingCard.setIsRegenerated(true);
+        vocabularyCardRepository.save(existingCard);
+
+        Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
+        vocabularyMemoryService.recordInteraction(userId, existingCard,
+                com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType.REGENERATED);
+
+        WordCardData generated = generateRandomWord(conversationId, category, difficulty, "regenerate");
+
+        conversation = getConversation(conversationId);
+        ensureConversationStillExists(conversationId);
+        conversation = getConversation(conversationId);
+
+        com.lingobot.learning.vocabulary.entity.VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(generated.getWord());
+        log.info("Using VocabularyWord: id={}, normalizedWord={}", vocabularyWord.getId(), vocabularyWord.getNormalizedWord());
+
+        VocabularyCard newCard = VocabularyCard.builder()
+                .conversation(conversation)
+                .vocabularyWordId(vocabularyWord.getId())
+                .word(generated.getWord())
+                .phonetic(generated.getPhonetic())
+                .partOfSpeech(generated.getPartOfSpeech())
+                .meaning(generated.getMeaning())
+                .example(generated.getExample())
+                .exampleTranslation(generated.getExampleTranslation())
+                .chineseSentenceForTranslation(generated.getExampleTranslation())
+                .category(generated.getCategory())
+                .difficulty(generated.getDifficulty())
+                .position(position)
+                .isCompleted(false)
+                .isRegenerated(false)
+                .isRevealed(true)
+                .regenerationIndex(existingCard.getRegenerationIndex() + 1)
+                .build();
+
+        if (generated.getSynonyms() != null && !generated.getSynonyms().isEmpty()) {
+            newCard.setSynonyms(generated.getSynonyms());
+        }
+
+        VocabularyCard saved = vocabularyCardRepository.save(newCard);
+        if (userId != null) {
+            userVocabularyService.upsertRecordOnly(userId, saved);
+            vocabularyMemoryService.recordInteraction(userId, saved,
+                    com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType.SEEN);
+            log.info("Created UserVocabulary record for userId={}, vocabularyWordId={}",
+                    userId, vocabularyWord.getId());
+        }
+        log.info("在位置 {} 重新生成词汇卡成功: id={}, word={}, regenerationIndex={}",
+                position, saved.getId(), saved.getWord(), saved.getRegenerationIndex());
+        evictCardCache(existingCard.getId());
+        evictConversationCache(conversationId);
+        log.info("Regenerated card at position and evicted cache: conversationId={}, oldCardId={}, newCardId={}",
+                conversationId, existingCard.getId(), saved.getId());
+        return toDTOWithNavigation(saved);
+    }
+
+    @Override
+    public VocabularyBatchGenerationResult getBatchStatus(Long conversationId) {
+        List<VocabularyCard> allCards = vocabularyCardRepository.findActiveCardsByConversationId(conversationId);
+
+        List<VocabularyCardDTO> revealedCards = allCards.stream()
+                .filter(card -> Boolean.TRUE.equals(card.getIsRevealed()))
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+
+        List<VocabularyCardDTO> hiddenCards = allCards.stream()
+                .filter(card -> !Boolean.TRUE.equals(card.getIsRevealed()))
+                .map(card -> {
+                    VocabularyCardDTO dto = toDTO(card);
+                    dto.setWord("???");
+                    dto.setMeaning("???");
+                    dto.setPhonetic("???");
+                    dto.setExample("???");
+                    dto.setExampleTranslation("???");
+                    dto.setPartOfSpeech("???");
+                    dto.setSynonyms(List.of());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+
+        return VocabularyBatchGenerationResult.builder()
+                .revealedCards(revealedCards)
+                .hiddenCards(hiddenCards)
+                .totalRevealed(revealedCards.size())
+                .totalHidden(hiddenCards.size())
+                .totalCount(allCards.size())
+                .build();
     }
 }

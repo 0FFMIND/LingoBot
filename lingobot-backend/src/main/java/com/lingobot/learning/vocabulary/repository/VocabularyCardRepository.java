@@ -162,4 +162,30 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
             @Param("userId") Long userId,
             @Param("vocabularyWordId") Long vocabularyWordId,
             Pageable pageable);
+
+    /** 获取对话中所有已揭露的有效词汇卡 */
+    @Query("SELECT v FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.isRevealed = true ORDER BY v.position ASC")
+    List<VocabularyCard> findRevealedCardsByConversationId(@Param("conversationId") Long conversationId);
+
+    /** 获取对话中所有未揭露的有效词汇卡 */
+    @Query("SELECT v FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.isRevealed = false ORDER BY v.position ASC")
+    List<VocabularyCard> findHiddenCardsByConversationId(@Param("conversationId") Long conversationId);
+
+    /** 统计对话中已揭露的有效词汇卡数量 */
+    @Query("SELECT COUNT(v) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.isRevealed = true")
+    long countRevealedCardsByConversationId(@Param("conversationId") Long conversationId);
+
+    /** 统计对话中未揭露的有效词汇卡数量 */
+    @Query("SELECT COUNT(v) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.isRevealed = false")
+    long countHiddenCardsByConversationId(@Param("conversationId") Long conversationId);
+
+    /** 更新卡片为已揭露状态 */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Query("UPDATE VocabularyCard v SET v.isRevealed = true, v.updatedAt = CURRENT_TIMESTAMP WHERE v.id = :cardId")
+    int markAsRevealed(@Param("cardId") Long cardId);
+
+    /** 获取对话中下一个未揭露的有效词汇卡（按位置排序） */
+    @Query("SELECT v FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.isRevealed = false ORDER BY v.position ASC")
+    List<VocabularyCard> findNextHiddenCard(@Param("conversationId") Long conversationId, Pageable pageable);
 }

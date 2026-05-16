@@ -15,6 +15,17 @@ interface AgentStatus {
   }>
 }
 
+interface CompactResultState {
+  success: boolean
+  message: string
+  savedTokens?: number
+  beforeTokens?: number
+  afterTokens?: number
+  compactedCardsCount?: number
+  recentCardsCount?: number
+  totalCompactedCards?: number
+}
+
 interface ChatStore {
   messages: MessageDTO[]
   loading: boolean
@@ -24,6 +35,7 @@ interface ChatStore {
   isCompacting: boolean
   compactingConversationPublicId: string | null
   lastCompactTime: Record<string, number>
+  compactResult: Record<string, CompactResultState | null>
 
   loadMessages: (conversationPublicId: string) => Promise<void>
   sendMessage: (request: ChatRequest) => Promise<void>
@@ -36,6 +48,7 @@ interface ChatStore {
   editAudioMessage: (request: ChatRequest, userMessageId: number) => Promise<void>
   setMode: (mode: 'chat' | 'agent') => void
   manualCompact: (conversationPublicId: string) => Promise<void>
+  clearCompactResult: (conversationPublicId: string) => void
   reset: () => void
 }
 
@@ -81,6 +94,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isCompacting: false,
   compactingConversationPublicId: null,
   lastCompactTime: {},
+  compactResult: {},
 
   loadMessages: async (conversationPublicId: string) => {
     try {
@@ -384,11 +398,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const lastTime = lastCompactTime[conversationPublicId] || 0
     if (now - lastTime < COMPACT_COOLDOWN_MS) {
       const remainingSeconds = Math.ceil((COMPACT_COOLDOWN_MS - (now - lastTime)) / 1000)
-      alert(`操作过于频繁，请 ${remainingSeconds} 秒后再试`)
+      set(s => ({
+        compactResult: {
+          ...s.compactResult,
+          [conversationPublicId]: {
+            success: false,
+            message: `操作过于频繁，请 ${remainingSeconds} 秒后再试`,
+          },
+        },
+      }))
       return
     }
 
-    set({ isCompacting: true, compactingConversationPublicId: conversationPublicId })
+    set({
+      isCompacting: true,
+      compactingConversationPublicId: conversationPublicId,
+      compactResult: {
+        ...get().compactResult,
+        [conversationPublicId]: null,
+      },
+    })
 
     try {
       console.log('手动执行Compact，conversationPublicId:', conversationPublicId)
@@ -398,19 +427,56 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       if (result.executed) {
         console.log('Compact执行成功，节省了', result.savedTokens, 'tokens')
-        alert(`压缩成功！节省了 ${result.savedTokens || 0} tokens`)
+        set(s => ({
+          compactResult: {
+            ...s.compactResult,
+            [conversationPublicId]: {
+              success: true,
+              message: `压缩成功！节省了 ${result.savedTokens || 0} tokens`,
+              savedTokens: result.savedTokens || 0,
+              beforeTokens: result.beforeTokens,
+              afterTokens: result.afterTokens,
+              compactedCardsCount: result.compactedCardsCount ?? result.compactedCardCount,
+              recentCardsCount: result.recentCardsCount,
+              totalCompactedCards: result.totalCompactedCards,
+            },
+          },
+        }))
       } else {
         console.log('Compact未执行，原因:', result.reason)
-        if (result.reason) {
-          alert(`压缩未执行: ${result.reason}`)
-        }
+        set(s => ({
+          compactResult: {
+            ...s.compactResult,
+            [conversationPublicId]: {
+              success: false,
+              message: result.reason ? `压缩未执行: ${result.reason}` : '压缩未执行',
+            },
+          },
+        }))
       }
     } catch (error) {
       console.error('手动Compact失败:', error)
-      alert('压缩失败: ' + (error instanceof Error ? error.message : '未知错误'))
+      set(s => ({
+        compactResult: {
+          ...s.compactResult,
+          [conversationPublicId]: {
+            success: false,
+            message: '压缩失败: ' + (error instanceof Error ? error.message : '未知错误'),
+          },
+        },
+      }))
     } finally {
       set({ isCompacting: false, compactingConversationPublicId: null })
     }
+  },
+
+  clearCompactResult: (conversationPublicId: string) => {
+    set(s => ({
+      compactResult: {
+        ...s.compactResult,
+        [conversationPublicId]: null,
+      },
+    }))
   },
 
   reset: () => set({
@@ -420,5 +486,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     agentStatus: { thinking: '', toolCalls: [] },
     isCompacting: false,
     compactingConversationPublicId: null,
+    compactResult: {},
   }),
 }))

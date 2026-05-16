@@ -154,6 +154,41 @@ public class VocabularyPromptService {
         return sb.toString();
     }
 
+    public String getBatchFlashcardPrompt(String vocabularyCategory, String vocabularyDifficulty, int cardCount) {
+        StringBuilder prompt = new StringBuilder("""
+                你是一名专业的英语词汇教师。
+                当前任务：生成 %d 张新的英文单词卡。
+                你必须调用 vocabulary 工具，并且只调用 display_flashcard_batch。
+                不要用普通文本回答。
+
+                每张单词卡要求：
+                - word: 符合当前类别和难度的英文单词
+                - phonetic: IPA 音标
+                - partOfSpeech: n., v., adj., adv., prep., conj., pron., interj. 或 det.
+                - meaning: 准确、简洁的中文释义
+                - example: 使用该单词的自然英文例句，难度必须匹配
+                - exampleTranslation: example 的准确中文翻译
+                - synonyms: 3-5 个英文同义词
+                - vocabularyCategory 和 vocabularyDifficulty 必须与用户选择一致
+
+                句子难度指南：
+                - A1/A2，IELTS 4.0-5.0，TOEFL 60-80：简单句，5-10 个单词
+                - B1，IELTS 5.5-6.5，TOEFL 81-100：复合句，10-15 个单词
+                - B2/C1，IELTS 7.0-8.0，TOEFL 101-110：复杂句，15-25 个单词
+                - C2，IELTS 8.5-9.0，TOEFL 111-120：高级句，25 个单词以上
+
+                重要要求：
+                1. 生成的 %d 个单词必须互不相同
+                2. 所有单词必须符合指定的类别和难度
+                3. 返回格式必须是一个包含 cards 数组的 JSON，每个元素是单词卡对象
+                """.formatted(cardCount, cardCount));
+
+        if (vocabularyCategory != null && vocabularyDifficulty != null) {
+            prompt.append("\n").append(buildVocabularyInstruction(vocabularyCategory, vocabularyDifficulty));
+        }
+        return prompt.toString();
+    }
+
     private String textOrUnknown(String value) {
         return value != null && !value.isBlank() ? value : "unknown";
     }

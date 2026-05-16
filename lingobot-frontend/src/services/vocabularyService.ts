@@ -39,6 +39,14 @@ type SentenceAnalysisStatus = {
   sentenceAnalysis: string;
 };
 
+type VocabularyBatchGenerationResult = {
+  revealedCards: VocabularyCardDTO[];
+  hiddenCards: VocabularyCardDTO[];
+  totalRevealed: number;
+  totalHidden: number;
+  totalCount: number;
+};
+
 const refreshCurrentUserBalance = async (): Promise<void> => {
   try {
     const user = await httpClient.get<UserDTO>('/auth/me');
@@ -98,10 +106,16 @@ export const vocabularyService = {
     category?: VocabularyCategory,
     difficulty?: VocabularyDifficulty
   ): Promise<VocabularyCardDTO> => {
-    const card = await httpClient.post<VocabularyCardDTO>(
-      `/vocabulary/conversations/${conversationPublicId}/generate`,
-      { category, difficulty }
+    const batch = await httpClient.post<VocabularyBatchGenerationResult>(
+      `/vocabulary/conversations/${conversationPublicId}/generate-batch`,
+      { category, difficulty, batchSize: 10 }
     );
+
+    const card = batch.revealedCards?.[0] ?? batch.hiddenCards?.[0];
+    if (!card) {
+      throw new Error('Batch vocabulary generation returned no cards');
+    }
+
     await refreshCurrentUserBalance();
     return card;
   },

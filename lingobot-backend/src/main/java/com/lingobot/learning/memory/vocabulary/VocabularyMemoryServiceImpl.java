@@ -466,7 +466,7 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
     private VocabularyMemoryRecord toMemoryRecord(VocabularyCard card, VocabularyMemoryEventType eventType,
                                                   String userAnswer, String aiFeedback,
                                                   VocabularyMemoryInteractionType interactionType) {
-        return VocabularyMemoryRecord.builder()
+        VocabularyMemoryRecord record = VocabularyMemoryRecord.builder()
                 .word(card.getWord())
                 .meaning(card.getMeaning())
                 .partOfSpeech(card.getPartOfSpeech())
@@ -481,6 +481,22 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
                 .aiFeedback(aiFeedback)
                 .interactionType(interactionType != null ? interactionType : VocabularyMemoryInteractionType.NONE)
                 .build();
+
+        if (interactionType == VocabularyMemoryInteractionType.MEANING_CHECK) {
+            record.setMeaningCheckUserAnswer(userAnswer);
+            record.setMeaningCheckAiFeedback(aiFeedback);
+            record.setMeaningCheckIsCorrect(eventType == VocabularyMemoryEventType.CORRECT
+                    ? Boolean.TRUE
+                    : eventType == VocabularyMemoryEventType.WRONG ? Boolean.FALSE : null);
+        } else if (interactionType == VocabularyMemoryInteractionType.SENTENCE_ANALYSIS) {
+            record.setSentenceAnalysisUserAnswer(userAnswer);
+            record.setSentenceAnalysisAiFeedback(aiFeedback);
+            record.setSentenceAnalysisIsCorrect(eventType == VocabularyMemoryEventType.CORRECT
+                    ? Boolean.TRUE
+                    : eventType == VocabularyMemoryEventType.WRONG ? Boolean.FALSE : null);
+        }
+
+        return record;
     }
 
     private List<VocabularyMemoryRecord> getL1Records(String key, long ttlDays) {
@@ -505,6 +521,10 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
         try {
             List<VocabularyMemoryRecord> records = getL1Records(key, ttlDays);
             String normalizedWord = normalize(record.getWord());
+            records.stream()
+                    .filter(existing -> normalize(existing.getWord()).equals(normalizedWord))
+                    .findFirst()
+                    .ifPresent(existing -> mergeInteractionDetails(record, existing));
             records.removeIf(existing -> normalize(existing.getWord()).equals(normalizedWord));
             records.add(0, record);
             records = pruneExpiredL1Records(records, ttlDays);
@@ -515,6 +535,27 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
                     key, record.getEventType(), record.getWord());
         } catch (Exception e) {
             log.warn("Failed to update L1 vocabulary memory: key={}, word={}", key, record.getWord(), e);
+        }
+    }
+
+    private void mergeInteractionDetails(VocabularyMemoryRecord target, VocabularyMemoryRecord existing) {
+        if (target.getMeaningCheckUserAnswer() == null) {
+            target.setMeaningCheckUserAnswer(existing.getMeaningCheckUserAnswer());
+        }
+        if (target.getMeaningCheckAiFeedback() == null) {
+            target.setMeaningCheckAiFeedback(existing.getMeaningCheckAiFeedback());
+        }
+        if (target.getMeaningCheckIsCorrect() == null) {
+            target.setMeaningCheckIsCorrect(existing.getMeaningCheckIsCorrect());
+        }
+        if (target.getSentenceAnalysisUserAnswer() == null) {
+            target.setSentenceAnalysisUserAnswer(existing.getSentenceAnalysisUserAnswer());
+        }
+        if (target.getSentenceAnalysisAiFeedback() == null) {
+            target.setSentenceAnalysisAiFeedback(existing.getSentenceAnalysisAiFeedback());
+        }
+        if (target.getSentenceAnalysisIsCorrect() == null) {
+            target.setSentenceAnalysisIsCorrect(existing.getSentenceAnalysisIsCorrect());
         }
     }
 

@@ -8,6 +8,9 @@ export interface CompactResult {
   afterTokens?: number;
   savedTokens?: number;
   compactedCardCount?: number;
+  compactedCardsCount?: number;
+  recentCardsCount?: number;
+  totalCompactedCards?: number;
   compactBatch?: number;
 }
 
@@ -42,6 +45,10 @@ export const conversationService = {
 
   updateLearningMode: async (publicId: string, learningMode: string): Promise<ConversationDTO> => {
     return httpClient.put<ConversationDTO>(`/conversations/${publicId}/learning-mode`, { learningMode });
+  },
+
+  updateVocabularyIntent: async (publicId: string, vocabularyIntent: string): Promise<ConversationDTO> => {
+    return httpClient.put<ConversationDTO>(`/conversations/${publicId}/vocabulary-intent`, { vocabularyIntent });
   },
 
   delete: async (publicId: string): Promise<void> => {

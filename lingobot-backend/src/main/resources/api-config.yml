@@ -27,6 +27,18 @@ api:
         cost: 0.1
         description: AI分析用户翻译的英文句子
 
+      generate-batch-cards:
+        path: /api/vocabulary/conversations/{conversationId}/generate-batch
+        method: POST
+        cost: 0.1
+        description: 批量生成10张词汇卡
+
+      reveal-card:
+        path: /api/vocabulary/conversations/{conversationId}/reveal-next
+        method: POST
+        cost: 0.1
+        description: 揭露下一张词汇卡
+
     user-vocabulary:
       ai-modify:
         path: /api/user-vocabulary/ai-modify

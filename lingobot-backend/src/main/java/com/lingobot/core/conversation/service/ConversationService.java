@@ -25,6 +25,8 @@ public interface ConversationService {
     
     ConversationDTO updateConversationLearningMode(String publicId, String learningMode);
     
+    ConversationDTO updateVocabularyIntent(String publicId, String vocabularyIntent);
+    
     void deleteConversation(String publicId);
     
     Conversation getConversationEntityById(Long id);

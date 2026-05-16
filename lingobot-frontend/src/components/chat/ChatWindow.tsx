@@ -44,7 +44,12 @@ const ChatWindow: React.FC = () => {
     getCurrentLearningMode,
     isWaitingForMode,
     handleLearningModeSelect,
+    handleVocabularyIntentSelect,
     createConversationWithMode,
+    showVocabularySubMode,
+    selectedVocabularyIntent,
+    setShowVocabularySubMode,
+    getCurrentVocabularyIntent,
   } = useConversationStore()
   const {
     messages,
@@ -72,6 +77,8 @@ const ChatWindow: React.FC = () => {
     analyzeUserSentence,
   } = useVocabularyStore()
   const preferences = usePreferences(isAuthenticated)
+
+  const DEFAULT_VOCABULARY_BATCH_SIZE = 10
 
   const learningMode = getCurrentLearningMode()
   const showModeSelector = isWaitingForMode()
@@ -272,7 +279,7 @@ const ChatWindow: React.FC = () => {
             hasPrev={currentVocabularyCard.hasPrev || false}
             hasNext={currentVocabularyCard.hasNext || false}
             isCompleted={currentVocabularyCard.isCompleted || false}
-            totalCount={currentVocabularyCard.totalCount ?? 1}
+            totalCount={currentVocabularyCard.totalCount ?? DEFAULT_VOCABULARY_BATCH_SIZE}
             currentIndex={currentVocabularyCard.currentIndex ?? 0}
             userMeaningGuess={currentVocabularyCard.userMeaningGuess}
             userEnglishSentence={currentVocabularyCard.userEnglishSentence}
@@ -326,8 +333,22 @@ const ChatWindow: React.FC = () => {
     )
   }
 
+  const getVocabularyPriorityText = () => {
+    const intent = getCurrentVocabularyIntent()
+    switch (intent) {
+      case 'review':
+        return '◎ 复习优先'
+      case 'new_word':
+        return '◎ 新单词优先'
+      case 'hybrid':
+        return '◎ 混合优先'
+      default:
+        return '◎ 复习优先'
+    }
+  }
+
   const renderVocabularyProgressBar = () => {
-    const total = currentVocabularyCard?.totalCount ?? 0
+    const total = currentVocabularyCard?.totalCount ?? DEFAULT_VOCABULARY_BATCH_SIZE
     const index = currentVocabularyCard?.currentIndex ?? 0
     const current = total > 0 ? index + 1 : 0
     const progress = total > 0 ? Math.min(100, Math.max(0, (current / total) * 100)) : 0
@@ -342,7 +363,7 @@ const ChatWindow: React.FC = () => {
             <div className="vocabulary-progress-fill" style={{ width: `${progress}%` }} />
           </div>
         </div>
-        <span className="vocabulary-review-priority">◎ 复习优先</span>
+        <span className="vocabulary-review-priority">{getVocabularyPriorityText()}</span>
       </div>
     )
   }
@@ -839,9 +860,14 @@ const ChatWindow: React.FC = () => {
         </div>
         <ModeSelectorGrid
           learningMode={learningMode}
+          onLearningModeSelect={handleLearningModeSelect}
+          onVocabularyIntentSelect={handleVocabularyIntentSelect}
           onCreateConversationWithMode={createConversationWithMode}
           disabled={disabled}
           isEmptyState={true}
+          showVocabularySubMode={showVocabularySubMode}
+          selectedVocabularyIntent={selectedVocabularyIntent}
+          onBackToModeSelector={() => setShowVocabularySubMode(false)}
         />
       </div>
     )
@@ -861,8 +887,12 @@ const ChatWindow: React.FC = () => {
         <ModeSelectorGrid
           learningMode={learningMode}
           onLearningModeSelect={handleLearningModeSelect}
+          onVocabularyIntentSelect={handleVocabularyIntentSelect}
           disabled={disabled}
           isEmptyState={false}
+          showVocabularySubMode={showVocabularySubMode}
+          selectedVocabularyIntent={selectedVocabularyIntent}
+          onBackToModeSelector={() => setShowVocabularySubMode(false)}
         />
       </div>
     )

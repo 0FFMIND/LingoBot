@@ -16,6 +16,7 @@ public class ConversationDTO {
     private String publicId;
     private String title;
     private String learningMode;
+    private String vocabularyIntent;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private int messageCount;

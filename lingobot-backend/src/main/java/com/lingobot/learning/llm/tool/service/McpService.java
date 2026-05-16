@@ -134,9 +134,11 @@ public class McpService {
 
         List<String> allowedKeys = switch (action) {
             case "check_meaning_accuracy" -> List.of(
-                    "action", "word", "user_meaning", "is_correct", "check_feedback", "chineseSentenceForTranslation");
+                    "action", "word", "user_meaning", "is_correct", "check_feedback");
             case "analyze_sentence" -> List.of(
                     "action", "word", "meaning_matches", "has_new_word", "feedback");
+            case "display_flashcard_batch" -> List.of(
+                    "action", "cards");
             default -> List.of(
                     "action", "word", "phonetic", "partOfSpeech", "meaning", "example", "exampleTranslation",
                     "synonyms", "vocabularyCategory", "vocabularyDifficulty");
@@ -160,8 +162,9 @@ public class McpService {
         }
 
         String description = switch (action) {
-            case "check_meaning_accuracy" -> "检查用户中文释义是否准确，并生成下一步翻译用的中文例句。";
+            case "check_meaning_accuracy" -> "检查用户中文释义是否准确。";
             case "analyze_sentence" -> "分析用户英文句子是否匹配中文例句，并是否正确使用当前新单词。";
+            case "display_flashcard_batch" -> "批量生成并展示多张新的英文单词卡。";
             default -> "生成并展示一张新的英文单词卡。";
         };
 

@@ -151,6 +151,11 @@ public class VocabularyCard {
     @Builder.Default
     private Integer regenerationIndex = 0;
 
+    /** 是否已揭露（用于批量生成后渐进式揭露，true表示用户已解锁可查看）*/
+    @Column(name = "is_revealed", nullable = false)
+    @Builder.Default
+    private Boolean isRevealed = false;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -173,6 +178,9 @@ public class VocabularyCard {
         }
         if (position == null) {
             position = 0;
+        }
+        if (isRevealed == null) {
+            isRevealed = false;
         }
     }
 

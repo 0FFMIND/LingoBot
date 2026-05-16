@@ -1,5 +1,7 @@
 export type LearningMode = 'chat' | 'vocabulary';
 
+export type VocabularyIntent = 'new_word' | 'review' | 'hybrid';
+
 export type VocabularyStatus = 'NEW' | 'LEARNING' | 'REVIEWING' | 'MASTERED';
 export type VocabularyEventType = 'NEW_LEARNING' | 'REVIEW' | 'HYBRID';
 export type VocabularyTab = 'all' | 'to_review' | 'learning' | 'mastered' | 'difficult';
@@ -78,6 +80,7 @@ export interface VocabularyCardDTO {
   totalCount?: number;
   currentIndex?: number;
   isRegenerated?: boolean;
+  isRevealed?: boolean;
   regenerationIndex?: number;
   regeneratedWords?: string[];
 }

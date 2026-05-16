@@ -7721,24 +7721,24 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px;
+  padding: 64px 40px;
   background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
 }
 
 .mode-selector-header {
   text-align: center;
-  margin-bottom: 48px;
+  margin-bottom: 64px;
 }
 
 .mode-selector-title {
-  font-size: 28px;
+  font-size: 40px;
   font-weight: 700;
   color: #1e293b;
-  margin-bottom: 12px;
+  margin-bottom: 18px;
 }
 
 .mode-selector-subtitle {
-  font-size: 16px;
+  font-size: 22px;
   color: #64748b;
   font-weight: 500;
 }
@@ -7746,8 +7746,8 @@
 .mode-selector-grid {
   display: flex;
   justify-content: center;
-  gap: 20px;
-  max-width: 600px;
+  gap: 40px;
+  max-width: 760px;
   width: 100%;
 }
 
@@ -7756,8 +7756,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 25px 8px;
+  gap: 16px;
+  padding: 50px 16px;
   background-color: #ffffff;
   border: 2px solid transparent;
   border-radius: 16px;
@@ -7765,31 +7765,52 @@
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   position: relative;
-  min-width: 140px;
+  min-width: 280px;
   flex: 1;
-  max-width: 160px;
+  max-width: 320px;
 }
 
 .mode-selector-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border-color: #e2e8f0;
+}
+
+.mode-selector-card-chat:hover {
+  border-color: #6366f1;
+  background-color: #eef2ff;
+}
+
+.mode-selector-card-vocabulary:hover {
+  border-color: #10b981;
+  background-color: #ecfdf5;
 }
 
 .mode-selector-card.selected {
+  border-color: #e2e8f0;
+  background-color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.mode-selector-card-chat.selected:hover {
   border-color: #6366f1;
   background-color: #eef2ff;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
 }
 
+.mode-selector-card-vocabulary.selected:hover {
+  border-color: #10b981;
+  background-color: #ecfdf5;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+}
+
 .mode-selector-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 48px;
   background-color: #f1f5f9;
   color: #475569;
   transition: all 0.3s ease;
@@ -7801,32 +7822,311 @@
 }
 
 .mode-selector-label {
-  font-size: 15px;
+  font-size: 24px;
   font-weight: 700;
   color: #334155;
 }
 
 .mode-selector-label-en {
-  font-size: 12px;
+  font-size: 18px;
   color: #94a3b8;
   font-weight: 500;
 }
 
 .mode-selector-check {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 24px;
-  height: 24px;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background-color: #6366f1;
   color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 20px;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+}
+
+/* 词汇子模式选择视图 */
+.vocabulary-submode-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 40px;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  overflow-y: auto;
+}
+
+.vocabulary-submode-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.vocabulary-submode-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.vocabulary-submode-title span {
+  font-size: 36px;
+}
+
+.vocabulary-submode-subtitle {
+  font-size: 17px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.vocabulary-submode-recommend {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #f59e0b;
+  border-radius: 16px;
+  padding: 20px 28px;
+  margin-bottom: 40px;
+  max-width: 900px;
+  width: 100%;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+}
+
+.vocabulary-submode-recommend-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.vocabulary-submode-recommend-text {
+  font-size: 15px;
+  color: #92400e;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.vocabulary-submode-recommend-text strong {
+  color: #78350f;
+  font-weight: 600;
+}
+
+.vocabulary-submode-grid {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  max-width: 1100px;
+  width: 100%;
+  margin-bottom: 40px;
+}
+
+.vocabulary-submode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 24px 24px 20px 24px;
+  background-color: #ffffff;
+  border: 3px solid transparent;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  position: relative;
+  flex: 1;
+  max-width: 340px;
+  min-width: 280px;
+}
+
+.vocabulary-submode-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+}
+
+.vocabulary-submode-card.selected {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+  background-color: #ffffff;
+}
+
+.vocabulary-submode-card:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.vocabulary-submode-badge {
+  position: absolute;
+  top: -12px;
+  right: 20px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 20px;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+.vocabulary-submode-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  margin-bottom: 4px;
+  transition: all 0.3s ease;
+}
+
+.vocabulary-submode-label {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.vocabulary-submode-label-en {
+  font-size: 14px;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-top: -8px;
+}
+
+.vocabulary-submode-desc {
+  font-size: 14px;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.6;
+  margin: 0;
+  min-height: 44px;
+}
+
+.vocabulary-submode-features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.vocabulary-submode-feature {
+  font-size: 13px;
+  color: #475569;
+  padding: 6px 12px;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.vocabulary-submode-radio {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  margin-top: 4px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.vocabulary-submode-card.selected .vocabulary-submode-radio {
+  border-color: #10b981;
+  background-color: transparent;
+}
+
+.vocabulary-submode-card.selected .vocabulary-submode-radio::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  background-color: #10b981;
+  border-radius: 50%;
+}
+
+.vocabulary-submode-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.vocabulary-submode-start-btn {
+  padding: 16px 56px;
+  font-size: 18px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.vocabulary-submode-start-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(16, 185, 129, 0.5);
+}
+
+.vocabulary-submode-start-btn:disabled {
+  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.vocabulary-submode-back-link {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: all 0.2s ease;
+  padding: 4px 8px;
+}
+
+.vocabulary-submode-back-link:hover {
+  color: #475569;
+}
+
+.vocabulary-submode-back-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 968px) {
+  .vocabulary-submode-grid {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .vocabulary-submode-card {
+    max-width: 100%;
+    width: 100%;
+  }
+  
+  .vocabulary-submode-title {
+    font-size: 26px;
+  }
+  
+  .vocabulary-submode-subtitle {
+    font-size: 15px;
+  }
 }
 
 /* 头部模式徽章 */
@@ -7846,50 +8146,60 @@
 /* 响应式模式选择器 */
 @media (max-width: 768px) {
   .mode-selector-section {
-    padding: 24px;
+    padding: 32px 24px;
   }
   
   .mode-selector-title {
-    font-size: 22px;
+    font-size: 30px;
   }
   
   .mode-selector-subtitle {
-    font-size: 14px;
+    font-size: 17px;
   }
   
   .mode-selector-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    gap: 20px;
   }
   
   .mode-selector-card {
-    padding: 20px 16px;
+    min-width: 0;
+    max-width: 260px;
+    padding: 34px 16px;
   }
   
   .mode-selector-icon {
-    width: 48px;
-    height: 48px;
-    font-size: 24px;
+    width: 72px;
+    height: 72px;
+    font-size: 36px;
+  }
+
+  .mode-selector-label {
+    font-size: 20px;
+  }
+
+  .mode-selector-label-en {
+    font-size: 15px;
   }
 }
 
 @media (max-width: 480px) {
   .mode-selector-grid {
-    grid-template-columns: 1fr;
-    max-width: 280px;
+    flex-direction: column;
+    max-width: 320px;
   }
   
   .mode-selector-card {
     flex-direction: row;
-    padding: 16px 20px;
+    max-width: 100%;
+    padding: 22px 24px;
     justify-content: flex-start;
     gap: 16px;
   }
   
   .mode-selector-icon {
-    width: 44px;
-    height: 44px;
-    font-size: 20px;
+    width: 60px;
+    height: 60px;
+    font-size: 30px;
   }
 }
 

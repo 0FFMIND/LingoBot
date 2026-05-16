@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -14,7 +15,9 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VocabularyMemoryRecord {
+public class VocabularyMemoryRecord implements Serializable {
+
+    private static final long serialVersionUID = 1L;
     private String word;
     private String meaning;
     private String partOfSpeech;

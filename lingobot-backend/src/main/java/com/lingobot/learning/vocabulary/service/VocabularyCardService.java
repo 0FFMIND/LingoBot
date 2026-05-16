@@ -1,6 +1,7 @@
 package com.lingobot.learning.vocabulary.service;
 
 import com.lingobot.learning.vocabulary.dto.CreateVocabularyCardRequest;
+import com.lingobot.learning.vocabulary.dto.VocabularyBatchGenerationResult;
 import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
 
 import java.util.List;
@@ -136,4 +137,54 @@ public interface VocabularyCardService {
      * 避免事务提交前缓存被污染导致前端长期看到过时状态。
      */
     VocabularyCardDTO getCardByIdFromDb(Long cardId);
+
+    /**
+     * 批量生成词汇卡（默认10张）
+     * @param conversationId 对话ID
+     * @param category 词汇类别
+     * @param difficulty 难度级别
+     * @return 批量生成结果（包含已揭露和未揭露的卡片）
+     */
+    VocabularyBatchGenerationResult generateBatchCards(Long conversationId, String category, String difficulty);
+
+    /**
+     * 批量生成指定数量的词汇卡
+     * @param conversationId 对话ID
+     * @param category 词汇类别
+     * @param difficulty 难度级别
+     * @param batchSize 批量大小
+     * @return 批量生成结果
+     */
+    VocabularyBatchGenerationResult generateBatchCards(Long conversationId, String category, String difficulty, int batchSize);
+
+    /**
+     * 揭露下一张未揭露的词汇卡（扣费0.1）
+     * @param conversationId 对话ID
+     * @return 新揭露的词汇卡
+     */
+    VocabularyCardDTO revealNextCard(Long conversationId);
+
+    /**
+     * 揭露指定的词汇卡（扣费0.1）
+     * @param cardId 词汇卡ID
+     * @return 揭露后的词汇卡
+     */
+    VocabularyCardDTO revealCard(Long cardId);
+
+    /**
+     * 在指定位置重新生成词汇卡
+     * @param conversationId 对话ID
+     * @param position 要重新生成的位置
+     * @param category 词汇类别
+     * @param difficulty 难度级别
+     * @return 重新生成后的词汇卡
+     */
+    VocabularyCardDTO regenerateCardAtPosition(Long conversationId, Integer position, String category, String difficulty);
+
+    /**
+     * 获取对话的词汇卡学习状态（已揭露/未揭露数量等）
+     * @param conversationId 对话ID
+     * @return 批量生成结果
+     */
+    VocabularyBatchGenerationResult getBatchStatus(Long conversationId);
 }

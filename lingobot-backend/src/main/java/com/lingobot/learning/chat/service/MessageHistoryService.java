@@ -29,7 +29,7 @@ public class MessageHistoryService {
     private final ConversationRepository conversationRepository;
     
     private static final int MAX_HISTORY_MESSAGES = 20;
-    private static final int RECENT_CARDS_TO_KEEP_IN_DETAIL = 5;
+    private static final int RECENT_CARDS_TO_KEEP_IN_DETAIL = 3;
     
     public List<OpenAiChatMessage> buildConversationHistory(Long conversationId) {
         return buildConversationHistoryWithMode(conversationId, "chat");

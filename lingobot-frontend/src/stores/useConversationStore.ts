@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { ConversationDTO, LearningMode } from '../types'
+import { ConversationDTO, LearningMode, VocabularyIntent } from '../types'
 import { conversationApi } from '../api'
 
 const PAGE_SIZE = 20
@@ -16,18 +16,23 @@ interface ConversationStore {
   conversationLearningModes: Record<string, LearningMode>
   globalLearningMode: LearningMode
   mainView: 'chat' | 'settings' | 'vocabulary-manager'
+  showVocabularySubMode: boolean
+  selectedVocabularyIntent: VocabularyIntent | null
 
   loadConversations: () => Promise<void>
   loadMoreConversations: () => Promise<void>
   selectConversation: (conversation: ConversationDTO) => void
   createConversation: (title: string) => Promise<void>
-  createConversationWithMode: (selectedMode: LearningMode) => Promise<ConversationDTO | null>
+  createConversationWithMode: (selectedMode: LearningMode, vocabularyIntent?: VocabularyIntent) => Promise<ConversationDTO | null>
   deleteConversation: (publicId: string) => Promise<void>
   handleLearningModeSelect: (selectedMode: LearningMode) => Promise<void>
+  handleVocabularyIntentSelect: (intent: VocabularyIntent) => Promise<void>
   getCurrentLearningMode: () => LearningMode
+  getCurrentVocabularyIntent: () => VocabularyIntent | null
   isWaitingForMode: () => boolean
   startNewChatWithModeSelection: () => void
   setMainView: (v: 'chat' | 'settings' | 'vocabulary-manager') => void
+  setShowVocabularySubMode: (show: boolean) => void
   reset: () => void
 }
 
@@ -43,6 +48,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   conversationLearningModes: {},
   globalLearningMode: 'chat',
   mainView: 'chat',
+  showVocabularySubMode: false,
+  selectedVocabularyIntent: null,
 
   loadConversations: async () => {
     try {
@@ -152,10 +159,14 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
   },
 
-  createConversationWithMode: async (selectedMode: LearningMode) => {
+  createConversationWithMode: async (selectedMode: LearningMode, vocabularyIntent?: VocabularyIntent) => {
     try {
       const modeConfig = (await import('../types')).LEARNING_MODES[selectedMode]
-      const newConversation = await conversationApi.create({ title: modeConfig.label })
+      const request: any = { title: modeConfig.label }
+      if (selectedMode === 'vocabulary' && vocabularyIntent) {
+        request.vocabularyIntent = vocabularyIntent
+      }
+      const newConversation = await conversationApi.create(request)
 
       set(s => ({
         conversations: [newConversation, ...s.conversations],
@@ -164,16 +175,21 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         conversationLearningModes: { ...s.conversationLearningModes, [newConversation.publicId]: selectedMode },
         globalLearningMode: selectedMode,
         waitingForModeSelection: false,
+        showVocabularySubMode: false,
+        selectedVocabularyIntent: vocabularyIntent || null,
       }))
 
       set(s => ({
         conversations: s.conversations.map(c =>
-          c.publicId === newConversation.publicId ? { ...c, learningMode: selectedMode } : c
+          c.publicId === newConversation.publicId ? { ...c, learningMode: selectedMode, vocabularyIntent } : c
         ),
       }))
 
       try {
         await conversationApi.updateLearningMode(newConversation.publicId, selectedMode)
+        if (selectedMode === 'vocabulary' && vocabularyIntent) {
+          await conversationApi.updateVocabularyIntent(newConversation.publicId, vocabularyIntent)
+        }
       } catch (e) {
         console.error('保存学习模式到后端失败:', e)
       }
@@ -226,6 +242,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   handleLearningModeSelect: async (selectedMode: LearningMode) => {
     const { newConversationPublicId, showModeSelectorForNewChat, currentConversation } = get()
+    
+    if (selectedMode === 'vocabulary') {
+      set({ showVocabularySubMode: true })
+      return
+    }
+    
     if (newConversationPublicId !== null && showModeSelectorForNewChat) {
       const publicId = newConversationPublicId
 
@@ -254,6 +276,41 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
   },
 
+  handleVocabularyIntentSelect: async (intent: VocabularyIntent) => {
+    const { newConversationPublicId, showModeSelectorForNewChat, currentConversation } = get()
+    
+    if (newConversationPublicId !== null && showModeSelectorForNewChat) {
+      const publicId = newConversationPublicId
+      const selectedMode: LearningMode = 'vocabulary'
+
+      set(s => ({
+        conversationLearningModes: { ...s.conversationLearningModes, [publicId]: selectedMode },
+        globalLearningMode: selectedMode,
+        showModeSelectorForNewChat: false,
+        newConversationPublicId: null,
+        showVocabularySubMode: false,
+        selectedVocabularyIntent: intent,
+      }))
+
+      set(s => ({
+        conversations: s.conversations.map(c =>
+          c.publicId === publicId ? { ...c, learningMode: selectedMode, vocabularyIntent: intent } : c
+        ),
+      }))
+
+      if (currentConversation && currentConversation.publicId === publicId) {
+        set({ currentConversation: { ...currentConversation, learningMode: selectedMode, vocabularyIntent: intent } })
+      }
+
+      try {
+        await conversationApi.updateLearningMode(publicId, selectedMode)
+        await conversationApi.updateVocabularyIntent(publicId, intent)
+      } catch (e) {
+        console.error('保存学习模式到后端失败:', e)
+      }
+    }
+  },
+
   getCurrentLearningMode: () => {
     const { currentConversation, conversationLearningModes, globalLearningMode } = get()
     if (currentConversation && conversationLearningModes[currentConversation.publicId]) {
@@ -263,6 +320,14 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       return currentConversation.learningMode as LearningMode
     }
     return globalLearningMode
+  },
+
+  getCurrentVocabularyIntent: () => {
+    const { currentConversation, selectedVocabularyIntent } = get()
+    if (currentConversation?.vocabularyIntent) {
+      return currentConversation.vocabularyIntent as VocabularyIntent
+    }
+    return selectedVocabularyIntent
   },
 
   isWaitingForMode: () => {
@@ -281,6 +346,8 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   setMainView: (v) => set({ mainView: v }),
 
+  setShowVocabularySubMode: (show: boolean) => set({ showVocabularySubMode: show }),
+
   reset: () => set({
     conversations: [],
     currentConversation: null,
@@ -293,5 +360,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     conversationLearningModes: {},
     globalLearningMode: 'chat',
     mainView: 'chat',
+    showVocabularySubMode: false,
+    selectedVocabularyIntent: null,
   }),
 }))

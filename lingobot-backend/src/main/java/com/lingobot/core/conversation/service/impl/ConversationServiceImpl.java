@@ -54,6 +54,10 @@ public class ConversationServiceImpl implements ConversationService {
             builder.learningMode(request.getLearningMode());
         }
         
+        if (request.getVocabularyIntent() != null && !request.getVocabularyIntent().trim().isEmpty()) {
+            builder.vocabularyIntent(request.getVocabularyIntent());
+        }
+        
         if (currentUserId != null) {
             User user = userRepository.findById(currentUserId).orElse(null);
             if (user != null) {
@@ -152,6 +156,15 @@ public class ConversationServiceImpl implements ConversationService {
     public ConversationDTO updateConversationLearningMode(String publicId, String learningMode) {
         Conversation conversation = getConversationEntityByPublicId(publicId);
         conversation.setLearningMode(learningMode);
+        Conversation saved = conversationRepository.save(conversation);
+        return toDTO(saved);
+    }
+    
+    @Override
+    @Transactional
+    public ConversationDTO updateVocabularyIntent(String publicId, String vocabularyIntent) {
+        Conversation conversation = getConversationEntityByPublicId(publicId);
+        conversation.setVocabularyIntent(vocabularyIntent);
         Conversation saved = conversationRepository.save(conversation);
         return toDTO(saved);
     }
@@ -406,6 +419,7 @@ public class ConversationServiceImpl implements ConversationService {
                 .publicId(conversation.getPublicId())
                 .title(conversation.getTitle())
                 .learningMode(conversation.getLearningMode())
+                .vocabularyIntent(conversation.getVocabularyIntent())
                 .createdAt(conversation.getCreatedAt())
                 .updatedAt(conversation.getUpdatedAt())
                 .messageCount(messageCount)

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LearningMode, LEARNING_MODES } from '../../types'
+import { LearningMode, LEARNING_MODES, VocabularyIntent } from '../../types'
 
 export const learningFeatures = [
   {
@@ -17,6 +17,41 @@ export const learningFeatures = [
     icon: '📚',
     color: '#10b981',
     bgColor: '#ecfdf5',
+  },
+]
+
+export const vocabularySubModes = [
+  {
+    intent: 'new_word' as VocabularyIntent,
+    label: '学习新单词',
+    labelEn: 'Learn New Words',
+    icon: '🌱',
+    color: '#10b981',
+    bgColor: '#dcfce7',
+    description: '学习全新的词汇，扩展您的词汇量',
+    features: ['发现新词汇', '记忆强化'],
+  },
+  {
+    intent: 'review' as VocabularyIntent,
+    label: '复习单词',
+    labelEn: 'Review Words',
+    icon: '🔄',
+    color: '#3b82f6',
+    bgColor: '#dbeafe',
+    description: '复习已学词汇，巩固记忆效果',
+    features: ['记忆巩固训练', '薄弱词汇强化'],
+    recommended: false,
+  },
+  {
+    intent: 'hybrid' as VocabularyIntent,
+    label: '混合模式',
+    labelEn: 'Hybrid Mode',
+    icon: '🔮',
+    color: '#8b5cf6',
+    bgColor: '#ede9fe',
+    description: '新词学习 + 复习巩固，全面提升',
+    features: ['智能平衡', '最高效率'],
+    recommended: true,
   },
 ]
 
@@ -84,9 +119,100 @@ export function LearningModeSelector({
 interface ModeSelectorGridProps {
   learningMode: LearningMode
   onLearningModeSelect?: (mode: LearningMode) => void
-  onCreateConversationWithMode?: (mode: LearningMode) => void
+  onCreateConversationWithMode?: (mode: LearningMode, vocabularyIntent?: VocabularyIntent) => void
   disabled?: boolean
   isEmptyState?: boolean
+  showVocabularySubMode?: boolean
+  selectedVocabularyIntent?: VocabularyIntent | null
+  onVocabularyIntentSelect?: (intent: VocabularyIntent) => void
+  onBackToModeSelector?: () => void
+}
+
+export function VocabularySubModeSelector({
+  selectedVocabularyIntent,
+  onVocabularyIntentSelect,
+  onStartLearning,
+  onBack,
+  disabled,
+}: {
+  selectedVocabularyIntent: VocabularyIntent | null
+  onVocabularyIntentSelect: (intent: VocabularyIntent) => void
+  onStartLearning: (intent: VocabularyIntent) => void
+  onBack: () => void
+  disabled?: boolean
+}) {
+  return (
+    <div className="vocabulary-submode-section">
+      <div className="vocabulary-submode-header">
+        <h2 className="vocabulary-submode-title">
+          <span>📚</span>
+          选择学习模式 - 词汇拓展
+        </h2>
+        <p className="vocabulary-submode-subtitle">选择适合您的学习方式，开始词汇学习之旅</p>
+      </div>
+
+      <div className="vocabulary-submode-recommend">
+        <span className="vocabulary-submode-recommend-icon">💡</span>
+        <p className="vocabulary-submode-recommend-text">
+          <strong>推荐：混合模式</strong> - 根据您的学习数据，我们推荐混合模式，能够帮助您在学习新词的同时巩固已有词汇，达到最佳学习效果。
+        </p>
+      </div>
+
+      <div className="vocabulary-submode-grid">
+        {vocabularySubModes.map((subMode) => (
+          <button
+            key={subMode.intent}
+            className={`vocabulary-submode-card ${selectedVocabularyIntent === subMode.intent ? 'selected' : ''}`}
+            style={
+              selectedVocabularyIntent === subMode.intent
+                ? { borderColor: subMode.color }
+                : {}
+            }
+            onClick={() => !disabled && onVocabularyIntentSelect(subMode.intent)}
+            disabled={disabled}
+          >
+            {subMode.recommended && (
+              <span className="vocabulary-submode-badge">推荐</span>
+            )}
+            <span
+              className="vocabulary-submode-icon"
+              style={{ backgroundColor: subMode.bgColor, color: subMode.color }}
+            >
+              {subMode.icon}
+            </span>
+            <span className="vocabulary-submode-label">{subMode.label}</span>
+            <span className="vocabulary-submode-label-en">{subMode.labelEn}</span>
+            <p className="vocabulary-submode-desc">{subMode.description}</p>
+            <div className="vocabulary-submode-features">
+              {subMode.features.map((feature, idx) => (
+                <div key={idx} className="vocabulary-submode-feature">
+                  {feature}
+                </div>
+              ))}
+            </div>
+            <div className="vocabulary-submode-radio" />
+          </button>
+        ))}
+      </div>
+
+      <div className="vocabulary-submode-actions">
+        <button
+          className="vocabulary-submode-start-btn"
+          onClick={() => selectedVocabularyIntent && onStartLearning(selectedVocabularyIntent)}
+          disabled={disabled || !selectedVocabularyIntent}
+        >
+          开始词汇学习
+        </button>
+        <button
+          className="vocabulary-submode-back-link"
+          onClick={onBack}
+          disabled={disabled}
+        >
+          返回选择其他模式
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export function ModeSelectorGrid({
@@ -95,7 +221,42 @@ export function ModeSelectorGrid({
   onCreateConversationWithMode,
   disabled,
   isEmptyState = false,
+  showVocabularySubMode = false,
+  selectedVocabularyIntent = null,
+  onVocabularyIntentSelect,
+  onBackToModeSelector,
 }: ModeSelectorGridProps) {
+  const [localSelectedIntent, setLocalSelectedIntent] = useState<VocabularyIntent | null>(selectedVocabularyIntent)
+
+  const handleStartLearning = (intent: VocabularyIntent) => {
+    if (isEmptyState && onCreateConversationWithMode) {
+      onCreateConversationWithMode('vocabulary', intent)
+    } else if (onVocabularyIntentSelect) {
+      onVocabularyIntentSelect(intent)
+    } else if (onCreateConversationWithMode) {
+      onCreateConversationWithMode('vocabulary', intent)
+    }
+  }
+
+  const handleBack = () => {
+    setLocalSelectedIntent(null)
+    if (onBackToModeSelector) {
+      onBackToModeSelector()
+    }
+  }
+
+  if (showVocabularySubMode) {
+    return (
+      <VocabularySubModeSelector
+        selectedVocabularyIntent={localSelectedIntent}
+        onVocabularyIntentSelect={setLocalSelectedIntent}
+        onStartLearning={handleStartLearning}
+        onBack={handleBack}
+        disabled={disabled}
+      />
+    )
+  }
+
   return (
     <div className="mode-selector-section">
       <div className="mode-selector-header">
@@ -106,14 +267,13 @@ export function ModeSelectorGrid({
         {learningFeatures.map((feature) => (
           <button
             key={feature.mode}
-            className={`mode-selector-card ${learningMode === feature.mode ? 'selected' : ''}`}
-            style={
-              learningMode === feature.mode
-                ? { borderColor: feature.color, backgroundColor: feature.bgColor }
-                : {}
-            }
+            className={`mode-selector-card mode-selector-card-${feature.mode} ${learningMode === feature.mode ? 'selected' : ''}`}
             onClick={() => {
-              if (isEmptyState && onCreateConversationWithMode && !disabled) {
+              if (feature.mode === 'vocabulary') {
+                if (onLearningModeSelect && !disabled) {
+                  onLearningModeSelect(feature.mode)
+                }
+              } else if (isEmptyState && onCreateConversationWithMode && !disabled) {
                 onCreateConversationWithMode(feature.mode)
               } else if (onLearningModeSelect && !disabled) {
                 onLearningModeSelect(feature.mode)
