@@ -65,8 +65,6 @@ public class SecurityConfig {
                 auth.requestMatchers("/h2-console/**").permitAll();
                 // 错误页面
                 auth.requestMatchers("/error").permitAll();
-                // 音频资源
-                auth.requestMatchers("/audio/**").permitAll();
                 // 静态资源
                 auth.requestMatchers("/static/**").permitAll();
                 // TTS 语音合成接口

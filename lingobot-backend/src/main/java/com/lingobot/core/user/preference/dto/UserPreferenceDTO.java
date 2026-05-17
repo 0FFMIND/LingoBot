@@ -28,9 +28,13 @@ public class UserPreferenceDTO {
     private String vocabularyCategory;
     // 词汇难度级别
     private String vocabularyDifficulty;
-    // 词汇学习使用的 AI 模型
+    // 词汇学习使用的 AI 模型 provider
+    private String vocabularyProvider;
+    // 词汇学习使用的 AI 模型名
     private String vocabularyModel;
-    // 聊天使用的 AI 模型
+    // 聊天使用的 AI 模型 provider
+    private String chatProvider;
+    // 聊天使用的 AI 模型名
     private String chatModel;
     
     // 创建时间

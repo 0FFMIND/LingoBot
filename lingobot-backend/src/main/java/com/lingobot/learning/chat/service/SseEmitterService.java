@@ -7,11 +7,11 @@ import com.lingobot.core.conversation.dto.MessageDTO;
 import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.service.ConversationService;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
-import com.lingobot.learning.llm.dto.openai.OpenAiTool;
-import com.lingobot.learning.llm.service.ModelRouterService;
-import com.lingobot.learning.llm.tool.dto.McpToolResult;
-import com.lingobot.learning.llm.tool.service.McpService;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
+import com.lingobot.infrastructure.llm.service.ModelRouterService;
+import com.lingobot.infrastructure.mcp.dto.McpToolResult;
+import com.lingobot.infrastructure.mcp.service.McpService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -174,7 +174,7 @@ public class SseEmitterService {
                 })
                 .doOnComplete(() -> {
                     try {
-                        log.info("流式响应完成，总长度: {}", fullResponse.get().length());
+                        log.info("流式响应完成，总长度 {}", fullResponse.get().length());
                         
                         MessageDTO finalMessage = conversationService.addAssistantMessage(
                                 conversationRef.get(), fullResponse.get());
@@ -267,7 +267,7 @@ public class SseEmitterService {
                 })
                 .doOnComplete(() -> {
                     try {
-                        log.info("音频流式响应完成，总长度: {}", fullResponse.get().length());
+                        log.info("音频流式响应完成，总长度 {}", fullResponse.get().length());
                         
                         MessageDTO finalMessage = conversationService.addAssistantMessage(
                                 conversationRef.get(), fullResponse.get());
@@ -360,7 +360,7 @@ public class SseEmitterService {
                 })
                 .doOnComplete(() -> {
                     try {
-                        log.info("图片流式响应完成，总长度: {}", fullResponse.get().length());
+                        log.info("图片流式响应完成，总长度 {}", fullResponse.get().length());
                         
                         MessageDTO finalMessage = conversationService.addAssistantMessage(
                                 conversationRef.get(), fullResponse.get());
@@ -503,7 +503,7 @@ public class SseEmitterService {
                         emitter.send(SseEmitter.event().data(doneJson));
                         emitter.complete();
                         
-                        log.info("Agent 模式处理完成，响应长度: {}", textContent.length());
+                        log.info("Agent 模式处理完成，响应长度 {}", textContent.length());
                     } catch (Exception e) {
                         log.error("发送文本响应失败", e);
                         try {

@@ -29,20 +29,4 @@ public class TokenUsageDTO implements Serializable {
     private Integer completionTokens;
     // 总 token 数
     private Integer totalTokens;
-
-    // 判断是否所有 token 字段都为空
-    public boolean isEmpty() {
-        return promptTokens == null && completionTokens == null && totalTokens == null;
-    }
-
-    // 获取总 token 数，优先使用 totalTokens，否则计算两者之和
-    public Integer getTotal() {
-        if (totalTokens != null) {
-            return totalTokens;
-        }
-        int sum = 0;
-        if (promptTokens != null) sum += promptTokens;
-        if (completionTokens != null) sum += completionTokens;
-        return sum > 0 ? sum : null;
-    }
 }

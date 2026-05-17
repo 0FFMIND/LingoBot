@@ -5,6 +5,7 @@ import com.lingobot.learning.conversation.entity.ConversationLearningData;
 import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
+import com.lingobot.infrastructure.common.config.LlmProperties;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.learning.chat.service.ContextManagerService;
@@ -41,6 +42,7 @@ public class ContextController {
     private final ApiConfigProperties apiConfigProperties;
     private final ConversationService conversationService;
     private final LlmService llmService;
+    private final LlmProperties llmProperties;
 
     @GetMapping("/status/{publicId}")
     public ResponseEntity<ApiResponse<Object>> getContextStatus(@PathVariable String publicId) {
@@ -162,7 +164,7 @@ public class ContextController {
         messages.add(OpenAiChatMessage.createTextMessage("user", buildCompactUserPrompt(vocabularyHistory, existingSummary)));
 
         log.info("Calling LLM to compact {} vocabulary cards", cardsToCompact.size());
-        String compactedSummary = llmService.chat(messages);
+        String compactedSummary = llmService.chat(llmProperties.getModel(), messages);
         log.info("LLM compact completed, summary length: {}", compactedSummary.length());
 
         return compactedSummary;

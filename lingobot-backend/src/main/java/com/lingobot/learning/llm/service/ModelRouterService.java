@@ -55,21 +55,21 @@ public class ModelRouterService {
     
     public String chat(String model, List<OpenAiChatMessage> messages) {
         log.info("路由普通聊天请求到模型: {}", model);
-        return llmService.chat(messages);
+        return llmService.chat(model, messages);
     }
     
     public OpenAiChatResponse chatWithTools(String model, List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
         log.info("路由带工具的聊天请求到模型: {}", model);
-        return llmService.chatWithTools(messages, tools);
+        return llmService.chatWithTools(model, messages, tools);
     }
     
     public Flux<String> chatStream(String model, List<OpenAiChatMessage> messages) {
         log.info("路由流式请求到模型: {}", model);
-        return llmService.chatStream(messages);
+        return llmService.chatStream(model, messages);
     }
     
     public Flux<String> chatStreamWithTools(String model, List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
         log.info("路由带工具的流式请求到模型: {}", model);
-        return llmService.chatStreamWithTools(messages, tools);
+        return llmService.chatStreamWithTools(model, messages, tools);
     }
 }

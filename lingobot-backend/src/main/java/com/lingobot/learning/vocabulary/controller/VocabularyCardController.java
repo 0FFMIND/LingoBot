@@ -4,7 +4,7 @@ import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.response.ApiResponse;
-import com.lingobot.learning.vocabulary.dto.CreateVocabularyCardRequest;
+
 import com.lingobot.learning.vocabulary.dto.MeaningCheckStatusDTO;
 import com.lingobot.learning.vocabulary.dto.RegenerateCardAtPositionRequest;
 import com.lingobot.learning.vocabulary.dto.SentenceAnalysisStatusDTO;
@@ -44,22 +44,6 @@ public class VocabularyCardController {
 
     private Long resolvePublicId(String publicId) {
         return conversationService.resolvePublicIdToId(publicId);
-    }
-
-    /**
-     * 创建新的词汇卡
-     * @param conversationPublicId 对话的publicId
-     * @param request 词汇卡创建请求
-     * @return 创建成功的词汇卡
-     */
-    @PostMapping("/cards")
-    public ResponseEntity<ApiResponse<VocabularyCardDTO>> createCard(
-            @RequestParam String conversationPublicId,
-            @RequestBody CreateVocabularyCardRequest request) {
-        Long conversationId = resolvePublicId(conversationPublicId);
-        VocabularyCardDTO created = vocabularyCardService.createCard(conversationId, request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("词汇卡创建成功", created));
     }
 
     /**
@@ -132,66 +116,6 @@ public class VocabularyCardController {
         Long conversationId = resolvePublicId(conversationPublicId);
         VocabularyCardDTO card = vocabularyCardService.getPrevCard(conversationId, currentPosition);
         return ResponseEntity.ok(ApiResponse.success(card));
-    }
-
-    /**
-     * 生成下一个词汇卡（通过AI生成新单词）
-     * @param conversationPublicId 对话的publicId
-     * @param request 包含词汇类别和难度级别
-     * @return 生成的词汇卡
-     */
-    @PostMapping("/conversations/{conversationPublicId}/generate")
-    public ResponseEntity<ApiResponse<VocabularyCardDTO>> generateNextCard(
-            @PathVariable String conversationPublicId,
-            @RequestBody(required = false) Map<String, String> request) {
-        Long conversationId = resolvePublicId(conversationPublicId);
-        BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("vocabulary", "generate-card"));
-        Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "generate-card", "生成词汇卡", conversationId);
-        log.info("冻结点数: {}，用于生成词汇卡", cost);
-        
-        try {
-            String category = request != null ? request.get("category") : null;
-            String difficulty = request != null ? request.get("difficulty") : null;
-            VocabularyCardDTO card = vocabularyCardService.generateNextCard(conversationId, category, difficulty);
-            balanceService.confirmTransaction(transactionId);
-            log.info("确认扣费: {}，生成词汇卡成功", cost);
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.success("新词汇卡生成成功", card));
-        } catch (Exception e) {
-            log.error("生成词汇卡失败，返还余额: {}", cost, e);
-            balanceService.cancelTransaction(transactionId);
-            throw e;
-        }
-    }
-
-    /**
-     * 重新生成当前词汇卡（删除当前未完成的，生成新的）
-     * @param conversationPublicId 对话的publicId
-     * @param request 包含词汇类别和难度级别
-     * @return 重新生成的词汇卡
-     */
-    @PostMapping("/conversations/{conversationPublicId}/regenerate")
-    public ResponseEntity<ApiResponse<VocabularyCardDTO>> regenerateCard(
-            @PathVariable String conversationPublicId,
-            @RequestBody(required = false) Map<String, String> request) {
-        Long conversationId = resolvePublicId(conversationPublicId);
-        BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("vocabulary", "regenerate-card"));
-        Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "regenerate-card", "重新生成词汇卡", conversationId);
-        log.info("冻结点数: {}，用于重新生成词汇卡", cost);
-        
-        try {
-            String category = request != null ? request.get("category") : null;
-            String difficulty = request != null ? request.get("difficulty") : null;
-            VocabularyCardDTO card = vocabularyCardService.regenerateCard(conversationId, category, difficulty);
-            balanceService.confirmTransaction(transactionId);
-            log.info("确认扣费: {}，重新生成词汇卡成功", cost);
-            return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.success("词汇卡重新生成成功", card));
-        } catch (Exception e) {
-            log.error("重新生成词汇卡失败，返还余额: {}", cost, e);
-            balanceService.cancelTransaction(transactionId);
-            throw e;
-        }
     }
 
     /**
@@ -385,57 +309,6 @@ public class VocabularyCardController {
                     .body(ApiResponse.success("批量生成词汇卡成功", result));
         } catch (Exception e) {
             log.error("批量生成词汇卡失败，返还余额: {}", cost, e);
-            balanceService.cancelTransaction(transactionId);
-            throw e;
-        }
-    }
-
-    /**
-     * 揭露下一张未揭露的词汇卡（扣费0.1）
-     * @param conversationPublicId 对话的publicId
-     * @return 新揭露的词汇卡
-     */
-    @PostMapping("/conversations/{conversationPublicId}/reveal-next")
-    public ResponseEntity<ApiResponse<VocabularyCardDTO>> revealNextCard(
-            @PathVariable String conversationPublicId) {
-        Long conversationId = resolvePublicId(conversationPublicId);
-        BigDecimal cost = BigDecimal.valueOf(0.1);
-        Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "reveal-card", "揭露词汇卡", conversationId);
-        log.info("冻结点数: {}，用于揭露词汇卡", cost);
-
-        try {
-            VocabularyCardDTO card = vocabularyCardService.revealNextCard(conversationId);
-            balanceService.confirmTransaction(transactionId);
-            log.info("确认扣费: {}，揭露词汇卡成功: word={}", cost, card.getWord());
-            return ResponseEntity.ok(ApiResponse.success("词汇卡揭露成功", card));
-        } catch (Exception e) {
-            log.error("揭露词汇卡失败，返还余额: {}", cost, e);
-            balanceService.cancelTransaction(transactionId);
-            throw e;
-        }
-    }
-
-    /**
-     * 揭露指定的词汇卡（扣费0.1）
-     * @param cardId 词汇卡ID
-     * @return 揭露后的词汇卡
-     */
-    @PostMapping("/cards/{cardId}/reveal")
-    public ResponseEntity<ApiResponse<VocabularyCardDTO>> revealCard(@PathVariable Long cardId) {
-        VocabularyCardDTO card = vocabularyCardService.getCardById(cardId);
-        Long conversationId = card != null ? card.getConversationId() : null;
-
-        BigDecimal cost = BigDecimal.valueOf(0.1);
-        Long transactionId = balanceService.freezeBalance(cost, "vocabulary", "reveal-card", "揭露词汇卡", conversationId);
-        log.info("冻结点数: {}，用于揭露词汇卡: cardId={}", cost, cardId);
-
-        try {
-            VocabularyCardDTO revealedCard = vocabularyCardService.revealCard(cardId);
-            balanceService.confirmTransaction(transactionId);
-            log.info("确认扣费: {}，揭露词汇卡成功: word={}", cost, revealedCard.getWord());
-            return ResponseEntity.ok(ApiResponse.success("词汇卡揭露成功", revealedCard));
-        } catch (Exception e) {
-            log.error("揭露词汇卡失败，返还余额: {}", cost, e);
             balanceService.cancelTransaction(transactionId);
             throw e;
         }

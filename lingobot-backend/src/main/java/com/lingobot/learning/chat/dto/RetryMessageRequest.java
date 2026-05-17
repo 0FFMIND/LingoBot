@@ -21,7 +21,7 @@ public class RetryMessageRequest {
     private String vocabularyDifficulty;
     
     public String getModelOrDefault() {
-        return model != null ? model : "qwen";
+        return model != null ? model : "qwen/qwen3.5-flash-20260224";
     }
     
     public String getModeOrDefault() {

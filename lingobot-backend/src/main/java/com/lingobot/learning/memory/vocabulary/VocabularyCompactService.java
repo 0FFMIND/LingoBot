@@ -2,6 +2,7 @@ package com.lingobot.learning.memory.vocabulary;
 
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
+import com.lingobot.infrastructure.common.config.LlmProperties;
 import com.lingobot.learning.conversation.entity.ConversationLearningData;
 import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
@@ -30,6 +31,7 @@ public class VocabularyCompactService {
     private final BalanceService balanceService;
     private final ApiConfigProperties apiConfigProperties;
     private final LlmService llmService;
+    private final LlmProperties llmProperties;
 
     private static final int RECENT_CARDS_TO_KEEP = 3;
 
@@ -145,7 +147,7 @@ public class VocabularyCompactService {
         messages.add(OpenAiChatMessage.createTextMessage("user", buildCompactUserPrompt(vocabularyHistory, existingSummary)));
 
         log.info("Calling LLM to compact {} vocabulary cards", cardsToCompact.size());
-        String compactedSummary = llmService.chat(messages);
+        String compactedSummary = llmService.chat(llmProperties.getModel(), messages);
         log.info("LLM compact completed, summary length: {}", compactedSummary.length());
 
         return compactedSummary;

@@ -1,88 +1,93 @@
 server:
-  port: 8080
+  port: 8080  # 服务监听端口
 
 spring:
   application:
-    name: lingobot-backend
+    name: lingobot-backend  # 应用名称，用于服务注册与发现
   config:
-    import: classpath:api-config.yml
-  
+    import: classpath:api-config.yml  # 导入外部 API 配置文件（包含第三方 API 密钥等）
+
   mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
+    host: ${MAIL_HOST:smtp.gmail.com}  # SMTP 服务器地址，默认使用 Gmail
+    port: ${MAIL_PORT:587}  # SMTP 端口，Gmail 使用 587（TLS）
+    username: ${MAIL_USERNAME:}  # 邮箱用户名，从环境变量读取
+    password: ${MAIL_PASSWORD:}  # 邮箱密码或应用专用密码，从环境变量读取
     properties:
       mail:
         smtp:
-          auth: true
+          auth: true  # 启用 SMTP 认证
           starttls:
-            enable: true
-  
+            enable: true  # 启用 STARTTLS 加密
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/lingobotdb  # 数据库地址，lingobotdb 为库名
-    driver-class-name: org.postgresql.Driver
-    username: ${DB_USERNAME}   # 读取 .env 中的 DB_USERNAME
-    password: ${DB_PASSWORD}   # 读取 .env 中的 DB_PASSWORD
-  
+    url: jdbc:postgresql://localhost:5432/lingobotdb  # 数据库连接地址，lingobotdb 为库名
+    driver-class-name: org.postgresql.Driver  # PostgreSQL JDBC 驱动
+    username: ${DB_USERNAME}  # 数据库用户名，读取 .env 中的 DB_USERNAME
+    password: ${DB_PASSWORD}  # 数据库密码，读取 .env 中的 DB_PASSWORD
+
   jpa:
     hibernate:
       ddl-auto: update  # 启动时自动对比 Entity 和数据库表结构，有差异则更新（不删数据）
-    show-sql: true      # 在控制台打印执行的 SQL 语句，便于调试
+    show-sql: true  # 在控制台打印执行的 SQL 语句，便于调试
     properties:
       hibernate:
-        format_sql: true                                      # SQL 格式化输出，更易读
-        dialect: org.hibernate.dialect.PostgreSQLDialect      # 指定 PostgreSQL 方言
-  
+        format_sql: true  # SQL 格式化输出，更易读
+        dialect: org.hibernate.dialect.PostgreSQLDialect  # 指定 PostgreSQL 方言
+
   data:
     redis:
-      host: localhost
-      port: 6379
-      password: ${REDIS_PASSWORD}
-      timeout: 10000ms
+      host: localhost  # Redis 服务器地址
+      port: 6379  # Redis 端口
+      password: ${REDIS_PASSWORD}  # Redis 密码，从环境变量读取
+      timeout: 10000ms  # 连接超时时间，10秒
       lettuce:
         pool:
-          max-active: 8
-          max-wait: -1ms
-          max-idle: 8
-          min-idle: 0
+          max-active: 8  # 连接池最大活跃连接数
+          max-wait: -1ms  # 连接池最大等待时间，-1 表示无限等待
+          max-idle: 8  # 连接池最大空闲连接数
+          min-idle: 0  # 连接池最小空闲连接数
 
 security:
   rate-limit:
-    max-login-attempts: 5
-    max-register-attempts: 3
-    lock-duration: 15m
-    window-duration: 5m
-    max-ip-requests-per-minute: 30
-    max-user-requests-per-minute: 10
-    account-lock-duration: 1h
-    max-failed-attempts-before-lock: 10
-    delay-on-failure-ms: 1000
+    max-login-attempts: 5  # 最大登录失败尝试次数，超过后锁定
+    max-register-attempts: 3  # 最大注册尝试次数
+    lock-duration: 15m  # 登录失败后的锁定时长，15分钟
+    window-duration: 5m  # 限流统计窗口时长，5分钟
+    max-ip-requests-per-minute: 30  # 单个 IP 每分钟最大请求数
+    max-user-requests-per-minute: 10  # 单个用户每分钟最大请求数
+    account-lock-duration: 1h  # 账户锁定时长，1小时
+    max-failed-attempts-before-lock: 10  # 账户锁定前的最大失败次数
+    delay-on-failure-ms: 1000  # 登录失败后的延迟响应时间，毫秒
 
 logging:
   level:
-    com.lingobot: DEBUG
-    org.hibernate.SQL: DEBUG
+    com.lingobot: DEBUG  # 项目内部日志级别，DEBUG 用于开发调试
+    org.hibernate.SQL: DEBUG  # Hibernate SQL 日志级别，便于查看执行的 SQL
 
 jwt:
-  secret: ${JWT_SECRET}
-  expiration: ${JWT_EXPIRATION:86400000}
+  secret: ${JWT_SECRET}  # JWT 签名密钥，从环境变量读取，生产环境必须设置强密钥
+  expiration: ${JWT_EXPIRATION:86400000}  # JWT 过期时间，默认 24 小时（86400000 毫秒）
 
 llm:
-  base-url: ${LLM_BASE_URL:https://openrouter.ai/api}
-  api-key: ${LLM_API_KEY:${OPENROUTER_API_KEY:}}
-  model: ${LLM_MODEL:qwen/qwen3.5-flash-02-23}
-  audio-model: ${LLM_AUDIO_MODEL:xiaomi/mimo-v2-omni}
-  temperature: ${LLM_TEMPERATURE:0.7}
-  max-tokens: ${LLM_MAX_TOKENS:8192}
-  timeout: ${LLM_TIMEOUT:120000}
-  audio-enabled: ${LLM_AUDIO_ENABLED:true}
+  base-url: ${LLM_BASE_URL:https://openrouter.ai/api}  # LLM API 基础地址，默认使用 OpenRouter
+  api-key: ${LLM_API_KEY:${OPENROUTER_API_KEY:}}  # API 密钥，优先读取 LLM_API_KEY，其次读取 OPENROUTER_API_KEY
+  model: ${LLM_MODEL:qwen/qwen3.5-flash-02-23}  # 默认使用的文本模型
+  audio-model: ${LLM_AUDIO_MODEL:xiaomi/mimo-v2-omni}  # 音频处理使用的多模态模型
+  temperature: ${LLM_TEMPERATURE:0.7}  # 温度参数，控制输出随机性，0.7 平衡创造性和稳定性
+  max-tokens: ${LLM_MAX_TOKENS:8192}  # 最大生成 token 数
+  timeout: ${LLM_TIMEOUT:120000}  # 请求超时时间，默认 2 分钟（120000 毫秒）
+  audio-enabled: ${LLM_AUDIO_ENABLED:true}  # 是否启用音频功能
 
 app:
-  env: ${APP_ENV:production}
+  env: ${APP_ENV:production}  # 当前运行环境，默认 production；设置为 dev/development 可启用开发环境特性
 
 compact:
-  enabled: ${COMPACT_ENABLED:true}
-  max-characters-threshold: ${COMPACT_MAX_CHARACTERS:5000}
-  min-messages-to-compact: ${COMPACT_MIN_MESSAGES:6}
-  recent-messages-to-keep: ${COMPACT_KEEP_RECENT:4}
+  enabled: ${COMPACT_ENABLED:true}  # 是否启用会话压缩功能
+  max-characters-threshold: ${COMPACT_MAX_CHARACTERS:5000}  # 触发压缩的字符数阈值
+  min-messages-to-compact: ${COMPACT_MIN_MESSAGES:6}  # 触发压缩的最少消息数
+  recent-messages-to-keep: ${COMPACT_KEEP_RECENT:4}  # 压缩时保留的最近消息数
+
+
+conversation:
+  default-conversation-list-size: ${CONVERSATION_LIST_SIZE:20}  # 会话列表默认返回的最近会话数量
+  default-message-history-size: ${MESSAGE_HISTORY_SIZE:10}  # 消息历史默认返回的最近消息数量

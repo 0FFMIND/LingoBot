@@ -25,8 +25,10 @@ export interface UserPreference {
   userId: number;
   vocabularyCategory: VocabularyCategory;
   vocabularyDifficulty: VocabularyDifficulty;
-  vocabularyModel: ModelType;
-  chatModel: ModelType;
+  vocabularyProvider: string;
+  vocabularyModel: string;
+  chatProvider: string;
+  chatModel: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -34,8 +36,10 @@ export interface UserPreference {
 export interface UpdateUserPreferenceRequest {
   vocabularyCategory?: VocabularyCategory;
   vocabularyDifficulty?: VocabularyDifficulty;
-  vocabularyModel?: ModelType;
-  chatModel?: ModelType;
+  vocabularyProvider?: string;
+  vocabularyModel?: string;
+  chatProvider?: string;
+  chatModel?: string;
 }
 
 export interface ModelConfig {
@@ -44,6 +48,8 @@ export interface ModelConfig {
   icon: string;
   description: string;
   provider: string;
+  providerId: string;
+  modelId: string;
   supportsAudio: boolean;
   supportsImage: boolean;
 }
@@ -78,6 +84,8 @@ export const MODELS: ModelConfig[] = [
     icon: '🌊',
     description: '阿里通义千问，支持多模态输入',
     provider: 'Alibaba Cloud',
+    providerId: 'qwen',
+    modelId: 'qwen3.5-flash-20260224',
     supportsAudio: true,
     supportsImage: true,
   },
@@ -87,6 +95,8 @@ export const MODELS: ModelConfig[] = [
     icon: '🔮',
     description: '小米AI模型，支持多模态',
     provider: 'Xiaomi',
+    providerId: 'xiaomi',
+    modelId: 'mimo-v2-omni',
     supportsAudio: true,
     supportsImage: true,
   },
@@ -95,6 +105,8 @@ export const MODELS: ModelConfig[] = [
 export const DEFAULT_PREFERENCES: Omit<UserPreference, 'id' | 'userId' | 'createdAt' | 'updatedAt'> = {
   vocabularyCategory: 'cefr',
   vocabularyDifficulty: 'b2',
-  vocabularyModel: 'qwen',
-  chatModel: 'qwen',
+  vocabularyProvider: 'qwen',
+  vocabularyModel: 'qwen3.5-flash-20260224',
+  chatProvider: 'qwen',
+  chatModel: 'qwen3.5-flash-20260224',
 };

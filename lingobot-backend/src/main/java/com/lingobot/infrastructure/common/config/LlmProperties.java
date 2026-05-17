@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 public class LlmProperties {
     
     // 通义千问文本模型，响应速度快，适合日常对话和词汇生成
-    public static final String MODEL_QWEN_FLASH = "qwen/qwen3.5-flash-02-23";
+    public static final String MODEL_QWEN_FLASH = "qwen/qwen3.5-flash-20260224";
     // 小米 MiMo 多模态模型，支持音频、图像、视频
     public static final String MODEL_XIAOMI_MIMO_OMNI = "xiaomi/mimo-v2-omni";
     
@@ -54,25 +54,29 @@ public class LlmProperties {
         return model;
     }
     
-    // 将短模型名转换为完整模型名，支持别名映射
-    public String getFullModelName(String shortModelName) {
-        if (shortModelName == null || shortModelName.isEmpty()) {
-            return getModelForAudio();
+    // 获取完整模型名，格式: provider/model（如 qwen/qwen3.5-flash-20260224）
+    // 直接使用传入的 model，不做短名映射
+    public String getFullModelName(String model) {
+        if (model == null || model.isEmpty()) {
+            return getModel();
         }
-        
-        String lowerName = shortModelName.toLowerCase();
-        
-        // 通义千问相关别名使用文本模型，不作为音频模型
-        if (lowerName.equals("qwen") || lowerName.contains("qwen3.5") || lowerName.contains("qwen")) {
-            return MODEL_QWEN_FLASH;
+        return model;
+    }
+    
+    // 从完整模型名中提取 provider
+    public String extractProvider(String fullModelName) {
+        if (fullModelName == null || !fullModelName.contains("/")) {
+            return null;
         }
-        
-        // 小米 MiMo 相关别名
-        if (lowerName.equals("xiaomi") || lowerName.contains("mimo")) {
-            return MODEL_XIAOMI_MIMO_OMNI;
+        return fullModelName.split("/")[0];
+    }
+    
+    // 从完整模型名中提取 model
+    public String extractModel(String fullModelName) {
+        if (fullModelName == null || !fullModelName.contains("/")) {
+            return fullModelName;
         }
-        
-        return shortModelName;
+        return fullModelName.split("/", 2)[1];
     }
     
     // 根据模型名获取对应的音频模型配置
@@ -133,10 +137,12 @@ public class LlmProperties {
                 return XIAOMI_MIMO_OMNI;
             }
             String lowerName = modelName.toLowerCase();
-            if (lowerName.contains("mimo") || lowerName.contains("xiaomi")) {
+            // 支持 provider/model 格式，检查 provider 部分
+            String provider = lowerName.contains("/") ? lowerName.split("/")[0] : lowerName;
+            if (provider.contains("mimo") || provider.contains("xiaomi")) {
                 return XIAOMI_MIMO_OMNI;
             }
-            if (lowerName.contains("qwen")) {
+            if (provider.contains("qwen")) {
                 return QWEN_FLASH;
             }
             return XIAOMI_MIMO_OMNI;

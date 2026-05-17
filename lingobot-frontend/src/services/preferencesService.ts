@@ -5,6 +5,7 @@ import {
   ModelType,
   VocabularyCategory,
   VocabularyDifficulty,
+  MODELS,
 } from '../types';
 
 export const preferencesService = {
@@ -44,17 +45,27 @@ export const preferencesService = {
     return result.data;
   },
 
-  updateVocabularyModel: async (model: ModelType): Promise<UserPreference> => {
+  updateVocabularyModel: async (modelType: ModelType): Promise<UserPreference> => {
+    const selected = MODELS.find(m => m.model === modelType);
+    if (!selected) {
+      throw new Error(`Model ${modelType} not found`);
+    }
     const response = await httpClient.putRaw('/preferences/vocabulary/model', {
-      vocabularyModel: model,
+      vocabularyProvider: selected.providerId,
+      vocabularyModel: selected.modelId,
     });
     const result = await response.json();
     return result.data;
   },
 
-  updateChatModel: async (model: ModelType): Promise<UserPreference> => {
+  updateChatModel: async (modelType: ModelType): Promise<UserPreference> => {
+    const selected = MODELS.find(m => m.model === modelType);
+    if (!selected) {
+      throw new Error(`Model ${modelType} not found`);
+    }
     const response = await httpClient.putRaw('/preferences/chat/model', {
-      chatModel: model,
+      chatProvider: selected.providerId,
+      chatModel: selected.modelId,
     });
     const result = await response.json();
     return result.data;

@@ -2,10 +2,10 @@ package com.lingobot.learning.llm.service;
 
 import com.lingobot.media.audio.service.AudioConversionService;
 import com.lingobot.infrastructure.common.config.LlmProperties;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatRequest;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatResponse;
-import com.lingobot.learning.llm.dto.openai.OpenAiTool;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatRequest;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatResponse;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.infrastructure.util.JsonLogUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,8 +39,8 @@ public class LlmService {
      * 单次非流式文本请求入口。
      * 普通文本调用也复用 chatWithTools(messages, null)，这样模型配置、请求构造和响应解析只维护一套逻辑。
      */
-    public String chat(List<OpenAiChatMessage> messages) {
-        OpenAiChatResponse response = chatWithTools(messages, null);
+    public String chat(String model, List<OpenAiChatMessage> messages) {
+        OpenAiChatResponse response = chatWithTools(model, messages, null);
         if (response.getChoices() == null || response.getChoices().isEmpty()) {
             throw ChatException.badRequest("AI 返回空响应");
         }
@@ -55,15 +55,16 @@ public class LlmService {
      * 单次非流式文本请求入口。
      * tools 为空时就是普通聊天；tools 非空时启用 tool_choice=auto，并在响应返回后解析原生或兼容格式的工具调用。
      */
-    public OpenAiChatResponse chatWithTools(List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
+    public OpenAiChatResponse chatWithTools(String model, List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
         boolean hasTools = tools != null && !tools.isEmpty();
+        String fullModelName = llmProperties.getFullModelName(model);
         log.info("调用 Chat Completions API，模型: {}, 消息数: {}, tools: {}",
-                llmProperties.getModel(), messages.size(), hasTools ? tools.size() : 0);
+                fullModelName, messages.size(), hasTools ? tools.size() : 0);
 
         List<OpenAiChatMessage> sendMessages = translateForModel(messages, tools);
 
         OpenAiChatRequest request = OpenAiChatRequest.builder()
-                .model(llmProperties.getModel())
+                .model(fullModelName)
                 .messages(sendMessages)
                 .temperature(llmProperties.getTemperature())
                 .maxTokens(llmProperties.getMaxTokens())
@@ -79,19 +80,21 @@ public class LlmService {
         return hasTools ? parseToolCallFromResponse(response) : response;
     }
 
-    public Flux<String> chatStream(List<OpenAiChatMessage> messages) {
-        return chatStreamInternal(translateForModel(messages, null));
+    public Flux<String> chatStream(String model, List<OpenAiChatMessage> messages) {
+        String fullModelName = llmProperties.getFullModelName(model);
+        return chatStreamInternalWithModel(translateForModel(messages, null), fullModelName);
     }
 
-    public Flux<String> chatStreamWithTools(List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
-        return chatStreamInternal(translateForModel(messages, null));
+    public Flux<String> chatStreamWithTools(String model, List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
+        String fullModelName = llmProperties.getFullModelName(model);
+        return chatStreamInternalWithModel(translateForModel(messages, null), fullModelName);
     }
 
-    public void chatStreamAsync(List<OpenAiChatMessage> messages,
+    public void chatStreamAsync(String model, List<OpenAiChatMessage> messages,
                                 Consumer<String> onChunk,
                                 Runnable onComplete,
                                 Consumer<Throwable> onError) {
-        chatStream(messages).doOnNext(onChunk).doOnComplete(onComplete).doOnError(onError).subscribe();
+        chatStream(model, messages).doOnNext(onChunk).doOnComplete(onComplete).doOnError(onError).subscribe();
     }
     
     public boolean hasAudioMessage(List<OpenAiChatMessage> messages) {
@@ -114,7 +117,7 @@ public class LlmService {
         
         if (!llmProperties.isAudioEnabled()) {
             log.warn("音频功能未启用，使用文本模式");
-            return chatStream(messages);
+            return chatStream(model, messages);
         }
         
         AudioConversionService.ConversionResult conversionResult = 

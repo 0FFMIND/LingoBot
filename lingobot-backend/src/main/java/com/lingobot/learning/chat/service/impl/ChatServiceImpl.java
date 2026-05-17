@@ -15,9 +15,9 @@ import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.core.conversation.service.ConversationService;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
-import com.lingobot.learning.llm.dto.openai.OpenAiTool;
-import com.lingobot.learning.llm.tool.service.McpService;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
+import com.lingobot.infrastructure.mcp.service.McpService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -338,7 +338,7 @@ public class ChatServiceImpl implements ChatService {
         Optional<Message> assistantMessageOpt = messageRepository.findById(assistantMessageId);
         
         if (assistantMessageOpt.isEmpty()) {
-            throw ChatException.badRequest("要重试的消息不存在 " + assistantMessageId);
+            throw ChatException.badRequest("要重试的消息不存在: " + assistantMessageId);
         }
 
         Message assistantMessage = assistantMessageOpt.get();
@@ -409,7 +409,7 @@ public class ChatServiceImpl implements ChatService {
         Optional<Message> assistantMessageOpt = messageRepository.findById(assistantMessageId);
         
         if (assistantMessageOpt.isEmpty()) {
-            throw ChatException.badRequest("要重试的消息不存在 " + assistantMessageId);
+            throw ChatException.badRequest("要重试的消息不存在: " + assistantMessageId);
         }
 
         Message assistantMessage = assistantMessageOpt.get();
@@ -466,7 +466,7 @@ public class ChatServiceImpl implements ChatService {
         Optional<Message> userMessageOpt = messageRepository.findById(request.getUserMessageId());
         
         if (userMessageOpt.isEmpty()) {
-            throw ChatException.badRequest("要编辑的消息不存在 " + request.getUserMessageId());
+            throw ChatException.badRequest("要编辑的消息不存在: " + request.getUserMessageId());
         }
         
         Message userMessage = userMessageOpt.get();
@@ -524,7 +524,7 @@ public class ChatServiceImpl implements ChatService {
         Optional<Message> userMessageOpt = messageRepository.findById(request.getUserMessageId());
         
         if (userMessageOpt.isEmpty()) {
-            throw ChatException.badRequest("要编辑的消息不存在 " + request.getUserMessageId());
+            throw ChatException.badRequest("要编辑的消息不存在: " + request.getUserMessageId());
         }
         
         Message userMessage = userMessageOpt.get();

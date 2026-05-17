@@ -51,9 +51,9 @@ public enum ErrorCode {
     INSUFFICIENT_BALANCE(1201, "余额不足"),
 
     // 媒体相关 (1300-1399)
-    TTS_FAILED(1301, "TTS 发音获取失败"),
+    TTS_PRONUNCIATION_FAILED(1301, "获取单词发音失败"),
     AUDIO_CONVERSION_FAILED(1302, "音频转换失败"),
-    AUDIO_NOT_FOUND(1303, "音频资源不存在");
+    AUDIO_FILE_NOT_FOUND(1303, "音频文件不存在");
     
     private final int code;
     private final String message;

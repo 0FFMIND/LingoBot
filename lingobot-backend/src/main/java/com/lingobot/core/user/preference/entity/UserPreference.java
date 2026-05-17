@@ -45,15 +45,35 @@ public class UserPreference {
     @Builder.Default
     private String vocabularyDifficulty = "b2";
 
-    // 词汇学习使用的 AI 模型
+    // 词汇学习使用的 AI 模型 provider
+    @Column(name = "vocabulary_provider", length = 20)
+    @Builder.Default
+    private String vocabularyProvider = "qwen";
+
+    // 词汇学习使用的 AI 模型名
     @Column(name = "vocabulary_model", length = 50)
     @Builder.Default
-    private String vocabularyModel = "qwen";
+    private String vocabularyModel = "qwen3.5-flash-20260224";
 
-    // 聊天使用的 AI 模型
+    // 聊天使用的 AI 模型 provider
+    @Column(name = "chat_provider", length = 20)
+    @Builder.Default
+    private String chatProvider = "qwen";
+
+    // 聊天使用的 AI 模型名
     @Column(name = "chat_model", length = 50)
     @Builder.Default
-    private String chatModel = "qwen";
+    private String chatModel = "qwen3.5-flash-20260224";
+
+    // 获取词汇学习完整模型名（provider/model）
+    public String getVocabularyFullModel() {
+        return vocabularyProvider + "/" + vocabularyModel;
+    }
+
+    // 获取聊天完整模型名（provider/model）
+    public String getChatFullModel() {
+        return chatProvider + "/" + chatModel;
+    }
 
     // 创建时间，首次保存时自动设置
     @Column(nullable = false, updatable = false)
@@ -74,11 +94,17 @@ public class UserPreference {
         if (vocabularyDifficulty == null) {
             vocabularyDifficulty = "b2";
         }
+        if (vocabularyProvider == null) {
+            vocabularyProvider = "qwen";
+        }
         if (vocabularyModel == null) {
-            vocabularyModel = "qwen";
+            vocabularyModel = "qwen3.5-flash-20260224";
+        }
+        if (chatProvider == null) {
+            chatProvider = "qwen";
         }
         if (chatModel == null) {
-            chatModel = "qwen";
+            chatModel = "qwen3.5-flash-20260224";
         }
     }
 

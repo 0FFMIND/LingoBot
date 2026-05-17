@@ -14,6 +14,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 文本转语音服务。
+ *
+ * @Service 标记为 Spring 服务组件，
+ * 调用有道词典 TTS API 获取英语单词的发音音频，
+ * 支持美式发音（US）和英式发音（UK）两种语音类型，
+ * 内置 7 天有效期的内存缓存，避免重复请求外部 API，
+ * 请求失败时自动重试最多 3 次，提高服务稳定性。
+ */
 @Slf4j
 @Service
 public class TextToSpeechService {
@@ -23,6 +32,7 @@ public class TextToSpeechService {
     private final ConcurrentHashMap<String, CacheEntry> audioCache = new ConcurrentHashMap<>();
     private static final long CACHE_DURATION_MS = TimeUnit.DAYS.toMillis(7);
     
+    // 语音类型枚举：US 美式发音，UK 英式发音，对应有道 API 的 type 参数
     public enum VoiceType {
         US(0),
         UK(1);
@@ -38,17 +48,20 @@ public class TextToSpeechService {
         }
     }
     
+    // 缓存条目记录，包含音频数据和缓存时间戳
     private record CacheEntry(byte[] data, long timestamp) {}
 
+    // 服务初始化方法，启动时打印配置信息
     @PostConstruct
     public void init() {
         log.info("TextToSpeechService 初始化完成，使用有道词典 TTS API");
         log.info("缓存有效期: {} 天", CACHE_DURATION_MS / TimeUnit.DAYS.toMillis(1));
     }
 
+    // 获取指定单词的发音音频，优先从缓存读取，缓存未命中则请求有道 TTS API，最多重试 3 次
     public byte[] getWordPronunciation(String word, VoiceType type) {
         if (word == null || word.trim().isEmpty()) {
-            throw ChatException.badRequest("单词为空，无法获取发音");
+            throw MediaException.badRequest("单词为空，无法获取发音");
         }
         
         String cacheKey = word.trim().toLowerCase() + "-" + type.name();
@@ -88,7 +101,7 @@ public class TextToSpeechService {
                         continue;
                     }
                     log.error("获取发音失败，已重试 {} 次，最终 HTTP 状态码: {}", maxRetries, responseCode);
-                    throw ChatException.badRequest("获取发音失败，请稍后重试");
+                    throw MediaException.ttsPronunciationFailed("获取发音失败，请稍后重试");
                 }
                 
                 String contentType = connection.getContentType();
@@ -121,10 +134,11 @@ public class TextToSpeechService {
                         Thread.sleep(retryDelays[attempt - 1]);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        return null;
+                        throw MediaException.ttsPronunciationFailed("获取发音失败：线程被中断");
                     }
                 } else {
                     log.error("获取单词发音失败，已重试 {} 次: {} - {}", maxRetries, word, e.getMessage(), e);
+                    throw MediaException.ttsPronunciationFailed("获取发音失败，请稍后重试");
                 }
             } finally {
                 if (connection != null) {
@@ -133,18 +147,21 @@ public class TextToSpeechService {
             }
         }
         
-        return null;
+        throw MediaException.ttsPronunciationFailed("获取发音失败，请稍后重试");
     }
     
+    // 获取单词发音的重载方法，默认使用美式发音
     public byte[] getWordPronunciation(String word) {
         return getWordPronunciation(word, VoiceType.US);
     }
     
+    // 清空所有发音缓存，用于手动刷新或释放内存
     public void clearCache() {
         audioCache.clear();
         log.info("TTS 缓存已清空");
     }
     
+    // 获取当前缓存中的发音数量，用于监控缓存使用情况
     public int getCacheSize() {
         return audioCache.size();
     }

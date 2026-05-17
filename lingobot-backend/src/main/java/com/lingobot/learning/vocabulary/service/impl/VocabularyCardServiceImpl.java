@@ -3,12 +3,12 @@ package com.lingobot.learning.vocabulary.service.impl;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.repository.ConversationRepository;
-import com.lingobot.learning.conversation.entity.ConversationLearningData;
-import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
-import com.lingobot.learning.langgraph.vocabulary.VocabularyGraph;
+import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversationData;
+import com.lingobot.learning.conversation.vocabulary.repository.VocabularyConversationDataRepository;
+import com.lingobot.learning.vocabulary.graph.VocabularyGraph;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
-import com.lingobot.learning.vocabulary.dto.CreateVocabularyCardRequest;
+
 import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
 import com.lingobot.learning.vocabulary.dto.WordCardData;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
@@ -23,14 +23,14 @@ import com.lingobot.learning.vocabulary.service.VocabularyCardService;
 import com.lingobot.learning.util.UserInputSanitizer;
 import com.lingobot.learning.vocabulary.service.VocabularyCardSnapshotService;
 import com.lingobot.learning.vocabulary.service.VocabularyWordService;
-import com.lingobot.learning.langgraph.vocabulary.VocabularyBatchGraph;
+import com.lingobot.learning.vocabulary.graph.VocabularyBatchGraph;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
 import com.lingobot.learning.vocabulary.dto.VocabularyBatchGenerationResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
+
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,7 +53,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
     private final VocabularyCardRepository vocabularyCardRepository;
     private final ConversationRepository conversationRepository;
-    private final ConversationLearningDataRepository learningDataRepository;
+    private final VocabularyConversationDataRepository vocabDataRepository;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final MeaningCheckService meaningCheckService;
@@ -213,56 +213,6 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
 
     @Override
-    @Transactional
-    public VocabularyCardDTO createCard(Long conversationId, CreateVocabularyCardRequest request) {
-        Conversation conversation = getConversation(conversationId);
-
-        Integer nextPosition = vocabularyCardRepository.findMaxActivePositionByConversationId(conversationId)
-                .map(pos -> pos + 1)
-                .orElse(0);
-
-        ensureConversationStillExists(conversationId);
-        conversation = getConversation(conversationId);
-
-        VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(request.getWord());
-        log.info("Using VocabularyWord: id={}, normalizedWord={}", vocabularyWord.getId(), vocabularyWord.getNormalizedWord());
-
-        VocabularyCard card = VocabularyCard.builder()
-                .conversation(conversation)
-                .vocabularyWordId(vocabularyWord.getId())
-                .word(request.getWord())
-                .phonetic(request.getPhonetic())
-                .partOfSpeech(request.getPartOfSpeech())
-                .meaning(request.getMeaning())
-                .example(request.getExample())
-                .exampleTranslation(request.getExampleTranslation())
-                .chineseSentenceForTranslation(request.getExampleTranslation())
-                .category(request.getCategory())
-                .difficulty(request.getDifficulty())
-                .position(nextPosition)
-                .isCompleted(false)
-                .isRegenerated(false)
-                .regenerationIndex(0)
-                .build();
-
-        if (request.getSynonyms() != null && !request.getSynonyms().isEmpty()) {
-            card.setSynonyms(request.getSynonyms());
-        }
-
-        VocabularyCard saved = vocabularyCardRepository.save(card);
-        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-            Long userId = conversation.getUser().getId();
-            userVocabularyService.upsertRecordOnly(userId, saved);
-            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
-            log.info("Created UserVocabulary record for userId={}, vocabularyWordId={}",
-                    userId, vocabularyWord.getId());
-        }
-        evictConversationCache(conversationId);
-        log.info("Created new card and evicted cache: conversationId={}, cardId={}", conversationId, saved.getId());
-        return toDTO(saved);
-    }
-
-    @Override
     public VocabularyCardDTO getCardById(Long cardId) {
         // 先尝试从缓存获取
         Optional<VocabularyCardDTO> cached = getCardFromCache(cardId);
@@ -311,7 +261,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             if (!batchResult.getRevealedCards().isEmpty()) {
                 return batchResult.getRevealedCards().get(0);
             }
-            return generateNextCard(conversationId, category, difficulty);
+            throw ChatException.badRequest("批量生成词汇卡失败");
         }
 
         int currentIndex = -1;
@@ -335,7 +285,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             if (!batchResult.getRevealedCards().isEmpty()) {
                 return batchResult.getRevealedCards().get(0);
             }
-            return generateNextCard(conversationId, category, difficulty);
+            throw ChatException.badRequest("批量生成词汇卡失败");
         }
 
         VocabularyCardDTO nextCard = cardDTOs.get(nextIndex);
@@ -497,145 +447,6 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         // 更新后清除缓存
         evictCardAndConversationCache(cardId, card.getConversation().getId());
         log.info("Marked card as completed and evicted cache: cardId={}", cardId);
-        return toDTOWithNavigation(saved);
-    }
-
-    @Override
-    @Transactional
-    public VocabularyCardDTO generateNextCard(Long conversationId, String category, String difficulty) {
-        Conversation conversation = getConversation(conversationId);
-
-        Integer nextPosition = vocabularyCardRepository.findMaxActivePositionByConversationId(conversationId)
-                .map(pos -> pos + 1)
-                .orElse(0);
-
-        String intent = learningDataRepository.findByConversationId(conversationId)
-                .map(ConversationLearningData::getVocabularyIntent)
-                .orElse(null);
-        if (intent == null || intent.isEmpty()) {
-            intent = "new_word";
-        }
-
-        WordCardData generated = generateRandomWord(conversationId, category, difficulty, intent);
-
-        conversation = getConversation(conversationId);
-        ensureConversationStillExists(conversationId);
-        conversation = getConversation(conversationId);
-
-        VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(generated.getWord());
-        log.info("Using VocabularyWord: id={}, normalizedWord={}", vocabularyWord.getId(), vocabularyWord.getNormalizedWord());
-
-        VocabularyCard card = VocabularyCard.builder()
-                .conversation(conversation)
-                .vocabularyWordId(vocabularyWord.getId())
-                .word(generated.getWord())
-                .phonetic(generated.getPhonetic())
-                .partOfSpeech(generated.getPartOfSpeech())
-                .meaning(generated.getMeaning())
-                .example(generated.getExample())
-                .exampleTranslation(generated.getExampleTranslation())
-                .chineseSentenceForTranslation(generated.getExampleTranslation())
-                .category(generated.getCategory())
-                .difficulty(generated.getDifficulty())
-                .position(nextPosition)
-                .isCompleted(false)
-                .isRegenerated(false)
-                .regenerationIndex(0)
-                .build();
-
-        if (generated.getSynonyms() != null && !generated.getSynonyms().isEmpty()) {
-            card.setSynonyms(generated.getSynonyms());
-        }
-
-        VocabularyCard saved = vocabularyCardRepository.save(card);
-        if (conversation.getUser() != null && conversation.getUser().getId() != null) {
-            Long userId = conversation.getUser().getId();
-            userVocabularyService.upsertRecordOnly(userId, saved);
-            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
-            log.info("Created UserVocabulary record for userId={}, vocabularyWordId={}",
-                    userId, vocabularyWord.getId());
-        }
-        evictConversationCache(conversationId);
-        log.info("Generated next card and evicted cache: conversationId={}, cardId={}", conversationId, saved.getId());
-        return toDTOWithNavigation(saved);
-    }
-
-    @Override
-    @Transactional
-    public VocabularyCardDTO regenerateCard(Long conversationId, String category, String difficulty) {
-        Conversation conversation = getConversation(conversationId);
-
-        List<VocabularyCard> activeCards = vocabularyCardRepository.findActiveCardsByConversationId(conversationId);
-        
-        if (activeCards.isEmpty()) {
-            log.info("该对话没有词汇卡，直接生成第一张");
-            return generateNextCard(conversationId, category, difficulty);
-        }
-
-        VocabularyCard lastCard = activeCards.get(activeCards.size() - 1);
-        
-        Integer maxPosition = vocabularyCardRepository.findMaxActivePositionByConversationId(conversationId)
-                .orElse(0);
-        
-        if (!lastCard.getPosition().equals(maxPosition)) {
-            log.warn("最后一张卡片的位置不一致: cardPosition={}, maxPosition={}", 
-                    lastCard.getPosition(), maxPosition);
-        }
-
-        Integer replacePosition = lastCard.getPosition();
-        Integer currentRegenerationIndex = lastCard.getRegenerationIndex();
-        
-        log.info("标记词汇卡为已重新生成: id={}, word={}, position={}, regenerationIndex={}",
-                lastCard.getId(), lastCard.getWord(), replacePosition, currentRegenerationIndex);
-        lastCard.setIsRegenerated(true);
-        vocabularyCardRepository.save(lastCard);
-        Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
-        vocabularyMemoryService.recordInteraction(userId, lastCard, VocabularyMemoryEventType.REGENERATED);
-
-        WordCardData generated = generateRandomWord(conversationId, category, difficulty, "regenerate");
-
-        conversation = getConversation(conversationId);
-        ensureConversationStillExists(conversationId);
-        conversation = getConversation(conversationId);
-
-        VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(generated.getWord());
-        log.info("Using VocabularyWord: id={}, normalizedWord={}", vocabularyWord.getId(), vocabularyWord.getNormalizedWord());
-
-        VocabularyCard newCard = VocabularyCard.builder()
-                .conversation(conversation)
-                .vocabularyWordId(vocabularyWord.getId())
-                .word(generated.getWord())
-                .phonetic(generated.getPhonetic())
-                .partOfSpeech(generated.getPartOfSpeech())
-                .meaning(generated.getMeaning())
-                .example(generated.getExample())
-                .exampleTranslation(generated.getExampleTranslation())
-                .chineseSentenceForTranslation(generated.getExampleTranslation())
-                .category(generated.getCategory())
-                .difficulty(generated.getDifficulty())
-                .position(replacePosition)
-                .isCompleted(false)
-                .isRegenerated(false)
-                .regenerationIndex(currentRegenerationIndex + 1)
-                .build();
-
-        if (generated.getSynonyms() != null && !generated.getSynonyms().isEmpty()) {
-            newCard.setSynonyms(generated.getSynonyms());
-        }
-
-        VocabularyCard saved = vocabularyCardRepository.save(newCard);
-        if (userId != null) {
-            userVocabularyService.upsertRecordOnly(userId, saved);
-            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
-            log.info("Created UserVocabulary record for userId={}, vocabularyWordId={}",
-                    userId, vocabularyWord.getId());
-        }
-        log.info("重新生成词汇卡成功: id={}, word={}, position={}, regenerationIndex={}",
-                saved.getId(), saved.getWord(), replacePosition, saved.getRegenerationIndex());
-        evictCardCache(lastCard.getId());
-        evictConversationCache(conversationId);
-        log.info("Regenerated card and evicted cache: conversationId={}, oldCardId={}, newCardId={}", 
-                conversationId, lastCard.getId(), saved.getId());
         return toDTOWithNavigation(saved);
     }
 
@@ -826,8 +637,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         Conversation conversation = getConversation(conversationId);
         Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
 
-        String vocabularyIntentStr = learningDataRepository.findByConversationId(conversationId)
-                .map(ConversationLearningData::getVocabularyIntent)
+        String vocabularyIntentStr = vocabDataRepository.findByConversationId(conversationId)
+                .map(VocabularyConversationData::getVocabularyIntent)
                 .orElse(null);
         com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent intent =
                 com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent.NEW_WORD;
@@ -861,44 +672,6 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
     @Override
     @Transactional
-    public VocabularyCardDTO revealNextCard(Long conversationId) {
-        log.info("揭露下一张词汇卡: conversationId={}", conversationId);
-
-        List<VocabularyCard> hiddenCards = vocabularyCardRepository.findNextHiddenCard(
-                conversationId, PageRequest.of(0, 1));
-
-        if (hiddenCards.isEmpty()) {
-            throw com.lingobot.infrastructure.common.exception.ChatException.badRequest("没有未揭露的词汇卡了");
-        }
-
-        VocabularyCard cardToReveal = hiddenCards.get(0);
-        return revealCard(cardToReveal.getId());
-    }
-
-    @Override
-    @Transactional
-    public VocabularyCardDTO revealCard(Long cardId) {
-        log.info("揭露词汇卡: cardId={}", cardId);
-
-        VocabularyCard card = vocabularyCardRepository.findById(cardId)
-                .orElseThrow(() -> com.lingobot.infrastructure.common.exception.ChatException.badRequest("词汇卡不存在: " + cardId));
-
-        if (Boolean.TRUE.equals(card.getIsRevealed())) {
-            log.warn("词汇卡已经是揭露状态: cardId={}", cardId);
-            return toDTOWithNavigation(card);
-        }
-
-        vocabularyCardRepository.markAsRevealed(cardId);
-        card.setIsRevealed(true);
-
-        evictCardAndConversationCache(cardId, card.getConversation().getId());
-        log.info("词汇卡已揭露: cardId={}, word={}", cardId, card.getWord());
-
-        return toDTOWithNavigation(card);
-    }
-
-    @Override
-    @Transactional
     public VocabularyCardDTO regenerateCardAtPosition(Long conversationId, Integer position, String category, String difficulty) {
         log.info("在指定位置重新生成词汇卡: conversationId={}, position={}", conversationId, position);
 
@@ -908,8 +681,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 conversationId, position);
 
         if (existingCardOpt.isEmpty()) {
-            log.warn("该位置没有有效词汇卡，使用默认重新生成逻辑: position={}", position);
-            return regenerateCard(conversationId, category, difficulty);
+            log.warn("该位置没有有效词汇卡: position={}", position);
+            throw ChatException.badRequest("该位置没有有效词汇卡");
         }
 
         VocabularyCard existingCard = existingCardOpt.get();

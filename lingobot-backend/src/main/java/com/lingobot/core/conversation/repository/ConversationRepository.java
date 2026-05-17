@@ -18,45 +18,24 @@ import java.util.Optional;
 @Repository
 public interface ConversationRepository extends JpaRepository<Conversation, Long> {
 
-    // 查询指定用户的所有会话，按更新时间倒序
-    List<Conversation> findByUserIdOrderByUpdatedAtDesc(Long userId);
-
-    // 查询所有会话，按更新时间倒序
-    List<Conversation> findAllByOrderByUpdatedAtDesc();
-
-    // 查询指定用户最近的 10 条会话
-    List<Conversation> findTop10ByUserIdOrderByUpdatedAtDesc(Long userId);
-
-    // 查询最近的 10 条会话
-    List<Conversation> findTop10ByOrderByUpdatedAtDesc();
-
     // 分页查询指定用户的会话
     Page<Conversation> findByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
 
     // 分页查询所有会话
     Page<Conversation> findAllByOrderByUpdatedAtDesc(Pageable pageable);
 
-    // 查询指定用户最近的 20 条会话
-    List<Conversation> findTop20ByUserIdOrderByUpdatedAtDesc(Long userId);
+    // 查询指定用户最近的 N 条会话（通过 Pageable 限制数量）
+    List<Conversation> findByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
 
-    // 查询最近的 20 条会话
-    List<Conversation> findTop20ByOrderByUpdatedAtDesc();
+    // 查询最近的 N 条会话（通过 Pageable 限制数量）
+    List<Conversation> findAllByOrderByUpdatedAtDesc(Pageable pageable);
 
     // 根据 ID 和用户 ID 查询会话（用于权限校验）
     Optional<Conversation> findByIdAndUserId(Long id, Long userId);
-
-    // 检查指定 ID 和用户 ID 的会话是否存在
-    boolean existsByIdAndUserId(Long id, Long userId);
 
     // 根据 publicId 查询会话
     Optional<Conversation> findByPublicId(String publicId);
 
     // 根据 publicId 和用户 ID 查询会话（用于权限校验）
     Optional<Conversation> findByPublicIdAndUserId(String publicId, Long userId);
-
-    // 检查指定 publicId 的会话是否存在
-    boolean existsByPublicId(String publicId);
-
-    // 检查指定 publicId 和用户 ID 的会话是否存在
-    boolean existsByPublicIdAndUserId(String publicId, Long userId);
 }

@@ -1,13 +1,13 @@
 package com.lingobot.learning.chat.service;
 
 import com.lingobot.infrastructure.common.exception.ChatException;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatResponse;
-import com.lingobot.learning.llm.dto.openai.OpenAiTool;
-import com.lingobot.learning.llm.service.ModelRouterService;
-import com.lingobot.learning.llm.tool.dto.McpToolCall;
-import com.lingobot.learning.llm.tool.dto.McpToolResult;
-import com.lingobot.learning.llm.tool.service.McpService;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatResponse;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
+import com.lingobot.infrastructure.llm.service.ModelRouterService;
+import com.lingobot.infrastructure.mcp.dto.McpToolCall;
+import com.lingobot.infrastructure.mcp.dto.McpToolResult;
+import com.lingobot.infrastructure.mcp.service.McpService;
 import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;

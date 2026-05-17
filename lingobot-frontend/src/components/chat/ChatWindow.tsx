@@ -83,10 +83,14 @@ const ChatWindow: React.FC = () => {
   const learningMode = getCurrentLearningMode()
   const showModeSelector = isWaitingForMode()
   const disabled = !isAuthenticated
-  const model = preferences.chatModel
+  const chatProvider = preferences.chatProvider
+  const chatModelId = preferences.chatModel
+  const fullChatModel = `${chatProvider}/${chatModelId}`
   const vocabularyCategory = preferences.vocabularyCategory
   const vocabularyDifficulty = preferences.vocabularyDifficulty
-  const vocabularyModel = preferences.vocabularyModel
+  const vocabularyProvider = preferences.vocabularyProvider
+  const vocabularyModelId = preferences.vocabularyModel
+  const fullVocabularyModel = `${vocabularyProvider}/${vocabularyModelId}`
 
   // Local UI state
   const [inputValue, setInputValue] = useState('')
@@ -162,14 +166,14 @@ const ChatWindow: React.FC = () => {
       <div className="vocabulary-selector-label">模型：</div>
       <select
         className="vocabulary-selector-dropdown"
-        value={vocabularyModel}
+        value={vocabularyProvider}
         onChange={(e) => {
           preferences.setVocabularyModel(e.target.value as ModelType)
         }}
         disabled={disabled || loading}
       >
         {MODELS.map((m) => (
-          <option key={m.model} value={m.model}>
+          <option key={m.model} value={m.providerId}>
             {m.label}
           </option>
         ))}
@@ -192,7 +196,7 @@ const ChatWindow: React.FC = () => {
       conversationPublicId: currentConversation.publicId,
       content: messageContent,
       mode,
-      model: vocabularyModel,
+      model: fullVocabularyModel,
       learningMode,
       intent: intent as any,
       currentWord,
@@ -684,10 +688,12 @@ const ChatWindow: React.FC = () => {
 
   const handleRetryWithModel = (assistantMessageId: number, modelType: ModelType) => {
     if (!disabled && currentConversation) {
+      const selected = MODELS.find(m => m.model === modelType)
+      const fullModel = selected ? `${selected.providerId}/${selected.modelId}` : fullChatModel
       retryMessageWithModel({
         conversationPublicId: currentConversation.publicId,
         assistantMessageId,
-        model: modelType,
+        model: fullModel,
         mode,
         learningMode,
         vocabularyCategory,
@@ -702,7 +708,7 @@ const ChatWindow: React.FC = () => {
       retryMessage({
         conversationPublicId: currentConversation.publicId,
         assistantMessageId,
-        model,
+        model: fullChatModel,
         mode,
         learningMode,
         vocabularyCategory,

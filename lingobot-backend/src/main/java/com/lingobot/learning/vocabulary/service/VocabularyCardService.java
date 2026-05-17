@@ -1,6 +1,6 @@
 package com.lingobot.learning.vocabulary.service;
 
-import com.lingobot.learning.vocabulary.dto.CreateVocabularyCardRequest;
+
 import com.lingobot.learning.vocabulary.dto.VocabularyBatchGenerationResult;
 import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
 
@@ -11,14 +11,6 @@ import java.util.List;
  * 提供词汇卡的创建、查询、更新、删除、导航、AI生成等核心功能
  */
 public interface VocabularyCardService {
-
-    /**
-     * 创建新的词汇卡
-     * @param conversationId 对话ID
-     * @param request 词汇卡创建请求
-     * @return 创建的词汇卡DTO
-     */
-    VocabularyCardDTO createCard(Long conversationId, CreateVocabularyCardRequest request);
 
     /**
      * 根据ID获取词汇卡
@@ -100,24 +92,7 @@ public interface VocabularyCardService {
      */
     VocabularyCardDTO markAsCompleted(Long cardId);
 
-    /**
-     * 通过AI生成下一个新词汇卡
-     * @param conversationId 对话ID
-     * @param category 词汇类别（如 cefr, ielts, toefl）
-     * @param difficulty 难度级别（如 b2, 5.5-6.5, 81-100 等）
-     * @return 生成的词汇卡DTO
-     */
-    VocabularyCardDTO generateNextCard(Long conversationId, String category, String difficulty);
 
-    /**
-     * 重新生成当前词汇卡
-     * 删除当前未完成的词汇卡，生成新的替换
-     * @param conversationId 对话ID
-     * @param category 词汇类别
-     * @param difficulty 难度级别
-     * @return 重新生成的词汇卡DTO
-     */
-    VocabularyCardDTO regenerateCard(Long conversationId, String category, String difficulty);
 
     /**
      * 删除对话的所有词汇卡
@@ -157,19 +132,7 @@ public interface VocabularyCardService {
      */
     VocabularyBatchGenerationResult generateBatchCards(Long conversationId, String category, String difficulty, int batchSize);
 
-    /**
-     * 揭露下一张未揭露的词汇卡（扣费0.1）
-     * @param conversationId 对话ID
-     * @return 新揭露的词汇卡
-     */
-    VocabularyCardDTO revealNextCard(Long conversationId);
 
-    /**
-     * 揭露指定的词汇卡（扣费0.1）
-     * @param cardId 词汇卡ID
-     * @return 揭露后的词汇卡
-     */
-    VocabularyCardDTO revealCard(Long cardId);
 
     /**
      * 在指定位置重新生成词汇卡

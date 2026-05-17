@@ -2,13 +2,6 @@ package com.lingobot.infrastructure.common.exception;
 
 import com.lingobot.infrastructure.common.response.ErrorCode;
 
-/**
- * 媒体相关业务异常，用于 TTS、音频处理、图片处理等场景。
- *
- *   throw MediaException.ttsFailed("获取发音失败");
- *   throw MediaException.audioConversionFailed("音频转换失败");
- *   throw MediaException.of(ErrorCode.SOME_CODE, "自定义消息");
- */
 public class MediaException extends BaseException {
 
     private MediaException(ErrorCode errorCode) {
@@ -35,12 +28,12 @@ public class MediaException extends BaseException {
         return new MediaException(ErrorCode.BAD_REQUEST, customMessage);
     }
 
-    public static MediaException ttsFailed() {
-        return new MediaException(ErrorCode.TTS_FAILED);
+    public static MediaException ttsPronunciationFailed() {
+        return new MediaException(ErrorCode.TTS_PRONUNCIATION_FAILED);
     }
 
-    public static MediaException ttsFailed(String customMessage) {
-        return new MediaException(ErrorCode.TTS_FAILED, customMessage);
+    public static MediaException ttsPronunciationFailed(String customMessage) {
+        return new MediaException(ErrorCode.TTS_PRONUNCIATION_FAILED, customMessage);
     }
 
     public static MediaException audioConversionFailed() {
@@ -51,19 +44,11 @@ public class MediaException extends BaseException {
         return new MediaException(ErrorCode.AUDIO_CONVERSION_FAILED, customMessage);
     }
 
-    public static MediaException audioNotFound() {
-        return new MediaException(ErrorCode.AUDIO_NOT_FOUND);
+    public static MediaException audioFileNotFound() {
+        return new MediaException(ErrorCode.AUDIO_FILE_NOT_FOUND);
     }
 
-    public static MediaException audioNotFound(String customMessage) {
-        return new MediaException(ErrorCode.AUDIO_NOT_FOUND, customMessage);
-    }
-
-    public static MediaException audioDataInvalid() {
-        return new MediaException(ErrorCode.AUDIO_DATA_INVALID);
-    }
-
-    public static MediaException audioDataInvalid(String customMessage) {
-        return new MediaException(ErrorCode.AUDIO_DATA_INVALID, customMessage);
+    public static MediaException audioFileNotFound(String customMessage) {
+        return new MediaException(ErrorCode.AUDIO_FILE_NOT_FOUND, customMessage);
     }
 }

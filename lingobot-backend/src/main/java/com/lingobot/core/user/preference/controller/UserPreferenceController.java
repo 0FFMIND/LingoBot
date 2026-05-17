@@ -95,7 +95,7 @@ public class UserPreferenceController {
         return ResponseEntity.ok(ApiResponse.success("难度级别更新成功", updated));
     }
 
-    // 单独更新词汇学习使用的 AI 模型
+    // 单独更新词汇学习使用的 AI 模型（provider + model）
     @PutMapping("/vocabulary/model")
     public ResponseEntity<ApiResponse<UserPreferenceDTO>> updateVocabularyModel(
             @RequestBody UpdateUserPreferenceRequest request) {
@@ -106,6 +106,7 @@ public class UserPreferenceController {
         }
         
         UpdateUserPreferenceRequest updateRequest = UpdateUserPreferenceRequest.builder()
+                .vocabularyProvider(request.getVocabularyProvider())
                 .vocabularyModel(request.getVocabularyModel())
                 .build();
         
@@ -113,7 +114,7 @@ public class UserPreferenceController {
         return ResponseEntity.ok(ApiResponse.success("词汇学习模型更新成功", updated));
     }
 
-    // 单独更新聊天使用的 AI 模型
+    // 单独更新聊天使用的 AI 模型（provider + model）
     @PutMapping("/chat/model")
     public ResponseEntity<ApiResponse<UserPreferenceDTO>> updateChatModel(
             @RequestBody UpdateUserPreferenceRequest request) {
@@ -124,6 +125,7 @@ public class UserPreferenceController {
         }
         
         UpdateUserPreferenceRequest updateRequest = UpdateUserPreferenceRequest.builder()
+                .chatProvider(request.getChatProvider())
                 .chatModel(request.getChatModel())
                 .build();
         

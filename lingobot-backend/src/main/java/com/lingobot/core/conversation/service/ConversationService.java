@@ -92,12 +92,4 @@ public interface ConversationService {
     // 从指定索引开始删除后续所有消息
     void deleteMessagesFromIndex(Long conversationId, int startIndex);
 
-    // 获取最近一条 AI 助手消息
-    Optional<Message> getLastAssistantMessage(Long conversationId);
-
-    // 获取最近一条用户消息
-    Optional<Message> getLastUserMessage(Long conversationId);
-
-    // 获取最近 N 条消息
-    List<Message> getLastMessages(Long conversationId, int count);
 }

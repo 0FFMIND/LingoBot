@@ -2,8 +2,8 @@ package com.lingobot.learning.memory.vocabulary;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lingobot.learning.conversation.entity.ConversationLearningData;
-import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
+import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversationData;
+import com.lingobot.learning.conversation.vocabulary.service.VocabularyConversationDataService;
 import com.lingobot.learning.vocabulary.entity.UserVocabulary;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.UserVocabularyRepository;
@@ -29,7 +29,7 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
 
     private final UserVocabularyRepository userVocabularyRepository;
     private final VocabularyCardRepository vocabularyCardRepository;
-    private final ConversationLearningDataRepository learningDataRepository;
+    private final VocabularyConversationDataService vocabDataService;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -356,8 +356,8 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
         if (conversationId == null) {
             return null;
         }
-        return learningDataRepository.findByConversationId(conversationId)
-                .map(ConversationLearningData::getVocabularyCompactedSummary)
+        return vocabDataService.getByConversationId(conversationId)
+                .map(VocabularyConversationData::getVocabularyCompactedSummary)
                 .orElse(null);
     }
 
@@ -641,9 +641,9 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
         if (conversationId == null) {
             return null;
         }
-        
-        ConversationLearningData learningData = learningDataRepository.findByConversationId(conversationId)
-                .orElseGet(() -> ConversationLearningData.builder()
+
+        VocabularyConversationData vocabData = vocabDataService.getByConversationId(conversationId)
+                .orElseGet(() -> VocabularyConversationData.builder()
                         .conversationId(conversationId)
                         .build());
 
@@ -657,29 +657,30 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
         VocabularyCard lastCard = allCards.get(allCards.size() - 1);
         LocalDateTime now = LocalDateTime.now();
 
-        int currentCompactedCount = learningData.getVocabularyCompactedCardCount() != null
-                ? learningData.getVocabularyCompactedCardCount() : 0;
+        int currentCompactedCount = vocabData.getVocabularyCompactedCardCount() != null
+                ? vocabData.getVocabularyCompactedCardCount() : 0;
         int newlyCompactedCount = (int) allCards.stream()
-                .filter(card -> learningData.getVocabularyLastCompactedPosition() == null
-                        || card.getPosition() > learningData.getVocabularyLastCompactedPosition())
+                .filter(card -> vocabData.getVocabularyLastCompactedPosition() == null
+                        || card.getPosition() > vocabData.getVocabularyLastCompactedPosition())
                 .count();
 
-        learningData.setVocabularyCompactedSummary(compactedSummary);
-        learningData.setVocabularyLastCompactedCardId(lastCard.getId());
-        learningData.setVocabularyLastCompactedPosition(lastCard.getPosition());
-        learningData.setVocabularyLastCompactedAt(now);
-        learningData.setVocabularyCompactedCardCount(currentCompactedCount + newlyCompactedCount);
-
-        learningDataRepository.save(learningData);
+        int newTotalCount = currentCompactedCount + newlyCompactedCount;
+        vocabDataService.updateCompactedSummary(
+                conversationId,
+                compactedSummary,
+                lastCard.getId(),
+                lastCard.getPosition(),
+                newTotalCount
+        );
 
         log.info("Compacted vocabulary history for conversationId={}, lastCompactedPosition={}, compactedCardCount={}",
-                conversationId, lastCard.getPosition(), currentCompactedCount + newlyCompactedCount);
+                conversationId, lastCard.getPosition(), newTotalCount);
 
         return VocabularyCompactWatermark.builder()
                 .lastCompactedCardId(lastCard.getId())
                 .lastCompactedPosition(lastCard.getPosition())
                 .lastCompactedAt(now)
-                .compactedCardCount(currentCompactedCount + newlyCompactedCount)
+                .compactedCardCount(newTotalCount)
                 .build();
     }
     

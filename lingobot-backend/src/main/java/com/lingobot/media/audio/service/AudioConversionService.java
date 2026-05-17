@@ -1,5 +1,6 @@
 package com.lingobot.media.audio.service;
 
+import com.lingobot.infrastructure.common.exception.MediaException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ws.schild.jave.Encoder;
@@ -19,6 +20,14 @@ import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Set;
 
+/**
+ * 音频格式转换服务。
+ *
+ * @Service 标记为 Spring 服务组件，
+ * 使用 ws.schild.jave 库将不支持的音频格式（如 webm、opus 等）
+ * 转换为标准 wav 格式，确保后续语音识别等处理能够正常工作。
+ * 转换过程中使用临时文件存储中间结果，完成后自动清理。
+ */
 @Slf4j
 @Service
 public class AudioConversionService {
@@ -26,6 +35,7 @@ public class AudioConversionService {
     private static final Set<String> SUPPORTED_FORMATS = Set.of("mp3", "flac", "m4a", "wav", "ogg");
     private static final String TARGET_FORMAT = "wav";
     
+    // 判断给定音频格式是否需要转换，不在支持列表中的格式需要转换
     public boolean needsConversion(String format) {
         if (format == null) {
             return true;
@@ -34,6 +44,7 @@ public class AudioConversionService {
         return !SUPPORTED_FORMATS.contains(normalized);
     }
     
+    // 按需转换音频格式，输入 Base64 编码的音频数据和源格式，返回转换后的结果
     public ConversionResult convertIfNeeded(String base64Audio, String sourceFormat) {
         if (!needsConversion(sourceFormat)) {
             log.info("音频格式 {} 已支持，无需转换", sourceFormat);
@@ -67,14 +78,14 @@ public class AudioConversionService {
             
         } catch (Exception e) {
             log.error("音频转换失败: {}", e.getMessage(), e);
-            log.warn("尝试使用原始格式继续: {}", sourceFormat);
-            return new ConversionResult(base64Audio, normalizeFormat(sourceFormat));
+            throw MediaException.audioConversionFailed("音频转换失败: " + e.getMessage());
         } finally {
             deleteTempFile(tempSource);
             deleteTempFile(tempTarget);
         }
     }
     
+    // 使用 JAVE 编码器将源音频文件转换为目标格式
     private void convertAudio(File source, File target, String targetFormat) throws EncoderException {
         MultimediaObject multimediaObject = new MultimediaObject(source);
         
@@ -89,6 +100,7 @@ public class AudioConversionService {
         encoder.encode(multimediaObject, target, encodingAttributes);
     }
     
+    // 根据目标音频格式获取对应的编码器名称
     private String getCodecForFormat(String format) {
         return switch (format.toLowerCase()) {
             case "mp3" -> "libmp3lame";
@@ -99,6 +111,7 @@ public class AudioConversionService {
         };
     }
     
+    // 根据音频格式字符串提取对应的文件扩展名
     private String getFileExtension(String format) {
         if (format == null) {
             return ".webm";
@@ -113,11 +126,13 @@ public class AudioConversionService {
         return "." + lowerFormat.split(";")[0].trim();
     }
     
+    // 创建带唯一前缀和后缀的临时文件，用于音频转换过程中的中间存储
     private File createTempFile(String prefix, String suffix) throws IOException {
         Path tempDir = Files.createTempDirectory("audio_conv_");
         return File.createTempFile(prefix, suffix, tempDir.toFile());
     }
     
+    // 删除临时文件及其所在的空目录，避免磁盘空间泄漏
     private void deleteTempFile(File file) {
         if (file != null && file.exists()) {
             try {
@@ -132,6 +147,7 @@ public class AudioConversionService {
         }
     }
     
+    // 将各种格式的 MIME 类型或描述字符串规范化为标准的格式标识
     private String normalizeFormat(String format) {
         if (format == null) {
             return "wav";
@@ -164,5 +180,6 @@ public class AudioConversionService {
         return "wav";
     }
     
+    // 音频转换结果记录，包含转换后的 Base64 音频数据和实际格式
     public record ConversionResult(String base64Audio, String format) {}
 }

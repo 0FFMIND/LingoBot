@@ -107,11 +107,17 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
         if (request.getVocabularyDifficulty() != null) {
             preference.setVocabularyDifficulty(request.getVocabularyDifficulty().toLowerCase());
         }
+        if (request.getVocabularyProvider() != null) {
+            preference.setVocabularyProvider(request.getVocabularyProvider().toLowerCase());
+        }
         if (request.getVocabularyModel() != null) {
-            preference.setVocabularyModel(request.getVocabularyModel().toLowerCase());
+            preference.setVocabularyModel(request.getVocabularyModel());
+        }
+        if (request.getChatProvider() != null) {
+            preference.setChatProvider(request.getChatProvider().toLowerCase());
         }
         if (request.getChatModel() != null) {
-            preference.setChatModel(request.getChatModel().toLowerCase());
+            preference.setChatModel(request.getChatModel());
         }
 
         UserPreference saved = userPreferenceRepository.save(preference);
@@ -141,8 +147,10 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
                 .user(user)
                 .vocabularyCategory("cefr")
                 .vocabularyDifficulty("b2")
-                .vocabularyModel("qwen")
-                .chatModel("qwen")
+                .vocabularyProvider("qwen")
+                .vocabularyModel("qwen3.5-flash-20260224")
+                .chatProvider("qwen")
+                .chatModel("qwen3.5-flash-20260224")
                 .build();
         
         return userPreferenceRepository.save(preference);
@@ -155,7 +163,9 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
                 .userId(preference.getUser() != null ? preference.getUser().getId() : null)
                 .vocabularyCategory(preference.getVocabularyCategory())
                 .vocabularyDifficulty(preference.getVocabularyDifficulty())
+                .vocabularyProvider(preference.getVocabularyProvider())
                 .vocabularyModel(preference.getVocabularyModel())
+                .chatProvider(preference.getChatProvider())
                 .chatModel(preference.getChatModel())
                 .createdAt(preference.getCreatedAt())
                 .updatedAt(preference.getUpdatedAt())

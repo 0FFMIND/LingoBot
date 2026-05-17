@@ -1,7 +1,7 @@
 import { authUtils, httpClient } from './httpClient';
 import {
   VocabularyCardDTO,
-  CreateVocabularyCardRequest,
+
   UpdateLearningStateRequest,
   UserDTO,
   VocabularyStatsDTO,
@@ -120,25 +120,7 @@ export const vocabularyService = {
     return card;
   },
 
-  regenerateCard: async (
-    conversationPublicId: string,
-    category?: VocabularyCategory,
-    difficulty?: VocabularyDifficulty
-  ): Promise<VocabularyCardDTO> => {
-    const card = await httpClient.post<VocabularyCardDTO>(
-      `/vocabulary/conversations/${conversationPublicId}/regenerate`,
-      { category, difficulty }
-    );
-    await refreshCurrentUserBalance();
-    return card;
-  },
 
-  createCard: async (conversationPublicId: string, request: CreateVocabularyCardRequest): Promise<VocabularyCardDTO> => {
-    return httpClient.post<VocabularyCardDTO>(
-      `/vocabulary/cards?conversationPublicId=${conversationPublicId}`,
-      request
-    );
-  },
 
   updateUserMeaning: async (cardId: number, userMeaning: string): Promise<VocabularyCardDTO> => {
     const card = await httpClient.put<VocabularyCardDTO>(

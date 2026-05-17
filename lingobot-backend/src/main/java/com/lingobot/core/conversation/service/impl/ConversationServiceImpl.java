@@ -5,6 +5,7 @@ import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
+import com.lingobot.infrastructure.common.config.ConversationProperties;
 import com.lingobot.infrastructure.common.response.PageResponseDTO;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.dto.ConversationDTO;
@@ -47,6 +48,8 @@ public class ConversationServiceImpl implements ConversationService {
     private final AuthService authService;
     // 用户数据访问层
     private final UserRepository userRepository;
+    // 会话配置属性
+    private final ConversationProperties conversationProperties;
 
     // 创建新会话，自动关联当前登录用户
     @Override
@@ -98,18 +101,20 @@ public class ConversationServiceImpl implements ConversationService {
         return toDTO(getConversationEntityByPublicId(publicId));
     }
 
-    // 获取最近 20 条会话列表，登录用户仅可见自己的会话
+    // 获取最近 N 条会话列表，登录用户仅可见自己的会话
     @Override
     public List<ConversationDTO> getAllConversations() {
         Long currentUserId = authService.getCurrentUserId();
+        int listSize = conversationProperties.getDefaultConversationListSize();
+        Pageable pageable = PageRequest.of(0, listSize);
 
         List<Conversation> conversations;
         if (currentUserId != null) {
-            conversations = conversationRepository.findTop20ByUserIdOrderByUpdatedAtDesc(currentUserId);
-            log.info("获取用户对话列表（最近20条），用户ID: {}, 对话数 {}", currentUserId, conversations.size());
+            conversations = conversationRepository.findByUserIdOrderByUpdatedAtDesc(currentUserId, pageable);
+            log.info("获取用户对话列表（最近{}条），用户ID: {}, 对话数 {}", listSize, currentUserId, conversations.size());
         } else {
-            conversations = conversationRepository.findTop20ByOrderByUpdatedAtDesc();
-            log.info("获取所有对话列表（最近20条），对话数: {}", conversations.size());
+            conversations = conversationRepository.findAllByOrderByUpdatedAtDesc(pageable);
+            log.info("获取所有对话列表（最近{}条），对话数: {}", listSize, conversations.size());
         }
 
         return conversations.stream()
@@ -367,27 +372,6 @@ public class ConversationServiceImpl implements ConversationService {
         if (!messageIdsToDelete.isEmpty()) {
             messageRepository.deleteMessagesByIds(messageIdsToDelete);
         }
-    }
-
-    // 获取最近一条 AI 助手消息
-    @Override
-    public Optional<Message> getLastAssistantMessage(Long conversationId) {
-        return messageRepository.findFirstByConversationIdAndRoleOrderByTimestampDesc(conversationId, "assistant");
-    }
-
-    // 获取最近一条用户消息
-    @Override
-    public Optional<Message> getLastUserMessage(Long conversationId) {
-        return messageRepository.findFirstByConversationIdAndRoleOrderByTimestampDesc(conversationId, "user");
-    }
-
-    // 获取最近 N 条消息
-    @Override
-    public List<Message> getLastMessages(Long conversationId, int count) {
-        List<Message> messages = messageRepository.findLastMessagesByConversationId(conversationId);
-        return messages.stream()
-                .limit(count)
-                .collect(Collectors.toList());
     }
 
     // 将 Message 实体转换为 MessageDTO

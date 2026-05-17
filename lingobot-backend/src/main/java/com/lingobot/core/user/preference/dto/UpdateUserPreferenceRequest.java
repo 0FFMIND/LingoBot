@@ -27,11 +27,17 @@ public class UpdateUserPreferenceRequest {
              message = "难度级别无效", flags = Pattern.Flag.CASE_INSENSITIVE)
     private String vocabularyDifficulty;
     
-    // 词汇学习使用的 AI 模型，可选值：qwen（通义千问）、xiaomi（小米）
-    @Pattern(regexp = "^(qwen|xiaomi)$", message = "模型必须是qwen 或xiaomi")
+    // 词汇学习使用的 AI 模型 provider，可选值：qwen（通义千问）、xiaomi（小米）
+    @Pattern(regexp = "^(qwen|xiaomi)$", message = "模型provider必须是qwen 或xiaomi")
+    private String vocabularyProvider;
+    
+    // 词汇学习使用的 AI 模型名
     private String vocabularyModel;
     
-    // 聊天使用的 AI 模型，可选值：qwen（通义千问）、xiaomi（小米）
-    @Pattern(regexp = "^(qwen|xiaomi)$", message = "模型必须是qwen 或xiaomi")
+    // 聊天使用的 AI 模型 provider，可选值：qwen（通义千问）、xiaomi（小米）
+    @Pattern(regexp = "^(qwen|xiaomi)$", message = "模型provider必须是qwen 或xiaomi")
+    private String chatProvider;
+    
+    // 聊天使用的 AI 模型名
     private String chatModel;
 }

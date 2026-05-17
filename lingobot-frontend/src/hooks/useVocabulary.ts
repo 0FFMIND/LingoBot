@@ -21,8 +21,7 @@ export interface UseVocabularyResult {
   loadCurrentCard: () => Promise<void>;
   getPrevCard: () => Promise<void>;
   getNextCard: () => Promise<void>;
-  generateNextCard: () => Promise<void>;
-  regenerateCard: () => Promise<void>;
+
   saveUserMeaning: (cardId: number, meaning: string) => Promise<void>;
   saveUserEnglishSentence: (cardId: number, sentence: string) => Promise<void>;
   analyzeUserSentence: (cardId: number) => Promise<void>;
@@ -114,52 +113,6 @@ export function useVocabulary(
     }
   }, [isAuthenticated, conversationPublicId, currentVocabularyCard, vocabularyCategory, vocabularyDifficulty]);
 
-  const generateNextCard = useCallback(async () => {
-    if (!isAuthenticated || !conversationPublicId) return;
-
-    setVocabularyCardLoading(true);
-    try {
-      const card = await vocabularyService.generateNextCard(
-        conversationPublicId,
-        vocabularyCategory,
-        vocabularyDifficulty
-      );
-      if (card) {
-        setCurrentVocabularyCard(card);
-        setUserMeaningInput('');
-        setUserEnglishSentenceInput('');
-        useTokenUsageStore.getState().recordWordCard(conversationPublicId);
-        console.log('✅ 已记录新词汇卡到本地状态，conversationPublicId:', conversationPublicId);
-      }
-    } catch (error) {
-      console.error('生成新单词失败:', error);
-    } finally {
-      setVocabularyCardLoading(false);
-    }
-  }, [isAuthenticated, conversationPublicId, vocabularyCategory, vocabularyDifficulty]);
-
-  const regenerateCard = useCallback(async () => {
-    if (!isAuthenticated || !conversationPublicId) return;
-
-    setVocabularyCardLoading(true);
-    try {
-      const card = await vocabularyService.regenerateCard(
-        conversationPublicId,
-        vocabularyCategory,
-        vocabularyDifficulty
-      );
-      if (card) {
-        setCurrentVocabularyCard(card);
-        setUserMeaningInput('');
-        setUserEnglishSentenceInput('');
-      }
-    } catch (error) {
-      console.error('重新生成单词失败:', error);
-    } finally {
-      setVocabularyCardLoading(false);
-    }
-  }, [isAuthenticated, conversationPublicId, vocabularyCategory, vocabularyDifficulty]);
-
   const saveUserMeaning = useCallback(async (cardId: number, meaning: string) => {
     try {
       const updated = await vocabularyService.updateUserMeaning(cardId, meaning);
@@ -215,8 +168,6 @@ export function useVocabulary(
     loadCurrentCard,
     getPrevCard,
     getNextCard,
-    generateNextCard,
-    regenerateCard,
     saveUserMeaning,
     saveUserEnglishSentence,
     analyzeUserSentence,

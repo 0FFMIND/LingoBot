@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { preferencesService } from '../services';
 import { 
   UserPreference, 
@@ -7,6 +7,7 @@ import {
   VocabularyCategory,
   VocabularyDifficulty,
   DEFAULT_PREFERENCES,
+  MODELS,
 } from '../types';
 
 export interface UsePreferencesResult {
@@ -20,13 +21,15 @@ export interface UsePreferencesResult {
   
   vocabularyCategory: VocabularyCategory;
   vocabularyDifficulty: VocabularyDifficulty;
-  vocabularyModel: ModelType;
-  chatModel: ModelType;
+  vocabularyProvider: string;
+  vocabularyModel: string;
+  chatProvider: string;
+  chatModel: string;
   
   setVocabularyCategory: (category: VocabularyCategory) => Promise<void>;
   setVocabularyDifficulty: (difficulty: VocabularyDifficulty) => Promise<void>;
-  setVocabularyModel: (model: ModelType) => Promise<void>;
-  setChatModel: (model: ModelType) => Promise<void>;
+  setVocabularyModel: (modelType: ModelType) => Promise<void>;
+  setChatModel: (modelType: ModelType) => Promise<void>;
 }
 
 export function usePreferences(
@@ -39,8 +42,10 @@ export function usePreferences(
 
   const vocabularyCategory = (preferences?.vocabularyCategory || DEFAULT_PREFERENCES.vocabularyCategory) as VocabularyCategory;
   const vocabularyDifficulty = (preferences?.vocabularyDifficulty || DEFAULT_PREFERENCES.vocabularyDifficulty) as VocabularyDifficulty;
-  const vocabularyModel = (preferences?.vocabularyModel || DEFAULT_PREFERENCES.vocabularyModel) as ModelType;
-  const chatModel = (preferences?.chatModel || DEFAULT_PREFERENCES.chatModel) as ModelType;
+  const vocabularyProvider = preferences?.vocabularyProvider || DEFAULT_PREFERENCES.vocabularyProvider;
+  const vocabularyModel = preferences?.vocabularyModel || DEFAULT_PREFERENCES.vocabularyModel;
+  const chatProvider = preferences?.chatProvider || DEFAULT_PREFERENCES.chatProvider;
+  const chatModel = preferences?.chatModel || DEFAULT_PREFERENCES.chatModel;
 
   const refreshPreferences = useCallback(async () => {
     if (!isAuthenticated) {
@@ -111,12 +116,19 @@ export function usePreferences(
     }
   }, [isAuthenticated, preferences]);
 
-  const setVocabularyModel = useCallback(async (model: ModelType) => {
+  const setVocabularyModel = useCallback(async (modelType: ModelType) => {
     if (!isAuthenticated) return;
+    const selected = MODELS.find(m => m.model === modelType);
+    if (!selected) return;
+    
     const prev = preferences;
-    setPreferences(p => p ? { ...p, vocabularyModel: model } : p);
+    setPreferences(p => p ? { 
+      ...p, 
+      vocabularyProvider: selected.providerId, 
+      vocabularyModel: selected.modelId 
+    } : p);
     try {
-      const result = await preferencesService.updateVocabularyModel(model);
+      const result = await preferencesService.updateVocabularyModel(modelType);
       setPreferences(result);
     } catch (e) {
       setPreferences(prev);
@@ -124,12 +136,19 @@ export function usePreferences(
     }
   }, [isAuthenticated, preferences]);
 
-  const setChatModel = useCallback(async (model: ModelType) => {
+  const setChatModel = useCallback(async (modelType: ModelType) => {
     if (!isAuthenticated) return;
+    const selected = MODELS.find(m => m.model === modelType);
+    if (!selected) return;
+    
     const prev = preferences;
-    setPreferences(p => p ? { ...p, chatModel: model } : p);
+    setPreferences(p => p ? { 
+      ...p, 
+      chatProvider: selected.providerId, 
+      chatModel: selected.modelId 
+    } : p);
     try {
-      const result = await preferencesService.updateChatModel(model);
+      const result = await preferencesService.updateChatModel(modelType);
       setPreferences(result);
     } catch (e) {
       setPreferences(prev);
@@ -155,7 +174,9 @@ export function usePreferences(
     updatePreferences,
     vocabularyCategory,
     vocabularyDifficulty,
+    vocabularyProvider,
     vocabularyModel,
+    chatProvider,
     chatModel,
     setVocabularyCategory,
     setVocabularyDifficulty,

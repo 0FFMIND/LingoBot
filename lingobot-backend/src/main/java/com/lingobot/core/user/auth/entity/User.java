@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.lingobot.core.conversation.entity.Conversation;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -86,7 +88,7 @@ public class User {
     
     // 用户拥有的对话列表，级联保存和删除
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<com.lingobot.core.conversation.entity.Conversation> conversations = new ArrayList<>();
+    private List<Conversation> conversations = new ArrayList<>();
     
     // 实体持久化前自动设置创建时间、更新时间和默认角色
     @PrePersist

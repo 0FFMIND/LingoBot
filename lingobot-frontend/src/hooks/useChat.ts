@@ -3,7 +3,6 @@ import { chatService } from '../services';
 import { useTokenUsageStore } from '../stores';
 import { 
   MessageDTO, 
-  ModelType,
   LearningMode,
   VocabularyCategory,
   VocabularyDifficulty,
@@ -33,7 +32,7 @@ export interface UseChatResult {
   sendImageMessage: (content: string, imageData: string, imageFormat: string) => Promise<void>;
   sendMessageWithIntent: (content: string, intent: string, currentWord: string) => Promise<void>;
   retryMessage: (assistantMessageId: number) => Promise<void>;
-  retryMessageWithModel: (assistantMessageId: number, targetModel: ModelType) => Promise<void>;
+  retryMessageWithModel: (assistantMessageId: number, targetModel: string) => Promise<void>;
   editMessage: (userMessageId: number, newContent: string) => Promise<void>;
   editAudioMessage: (
     userMessageId: number, 
@@ -47,7 +46,7 @@ export interface UseChatResult {
 
 export interface SendMessageOptions {
   mode?: 'chat' | 'agent';
-  model?: ModelType;
+  model?: string;
   learningMode?: LearningMode;
   vocabularyCategory?: VocabularyCategory;
   vocabularyDifficulty?: VocabularyDifficulty;
@@ -58,7 +57,7 @@ export function useChat(
   isAuthenticated: boolean,
   options: {
     mode: 'chat' | 'agent';
-    model: ModelType;
+    model: string;
     learningMode: LearningMode;
     vocabularyCategory: VocabularyCategory;
     vocabularyDifficulty: VocabularyDifficulty;
@@ -395,7 +394,7 @@ export function useChat(
     }
   }, [isAuthenticated, conversationPublicId, loading, messages, model, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
 
-  const retryMessageWithModel = useCallback(async (assistantMessageId: number, targetModel: ModelType) => {
+  const retryMessageWithModel = useCallback(async (assistantMessageId: number, targetModel: string) => {
     if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const assistantMessageIndex = messages.findIndex((m) => m.id === assistantMessageId);

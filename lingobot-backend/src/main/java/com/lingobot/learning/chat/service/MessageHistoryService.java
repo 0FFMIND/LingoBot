@@ -3,8 +3,8 @@ package com.lingobot.learning.chat.service;
 import com.lingobot.core.conversation.dto.MessageDTO;
 import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.MessageRepository;
-import com.lingobot.learning.conversation.entity.ConversationLearningData;
-import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
+import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversationData;
+import com.lingobot.learning.conversation.vocabulary.repository.VocabularyConversationDataRepository;
 import com.lingobot.learning.mode.service.SystemPromptService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
@@ -25,7 +25,7 @@ public class MessageHistoryService {
     private final MessageRepository messageRepository;
     private final SystemPromptService systemPromptService;
     private final VocabularyCardRepository vocabularyCardRepository;
-    private final ConversationLearningDataRepository learningDataRepository;
+    private final VocabularyConversationDataRepository vocabDataRepository;
     
     private static final int RECENT_CARDS_TO_KEEP_IN_DETAIL = 3;
     
@@ -121,16 +121,16 @@ public class MessageHistoryService {
     }
     
     private String getCompactedSummary(Long conversationId) {
-        return learningDataRepository.findByConversationId(conversationId)
-                .map(ConversationLearningData::getCompactedSummary)
+        return vocabDataRepository.findByConversationId(conversationId)
+                .map(VocabularyConversationData::getVocabularyCompactedSummary)
                 .orElse(null);
     }
 
     private String buildVocabularyHistoryForPrompt(Long conversationId) {
-        ConversationLearningData learningData = learningDataRepository.findByConversationId(conversationId)
+        VocabularyConversationData vocabData = vocabDataRepository.findByConversationId(conversationId)
                 .orElse(null);
 
-        String compactedSummary = learningData != null ? learningData.getCompactedSummary() : null;
+        String compactedSummary = vocabData != null ? vocabData.getVocabularyCompactedSummary() : null;
         
         List<VocabularyCard> allCards = vocabularyCardRepository.findByConversationIdOrderByPositionAsc(conversationId);
         
@@ -242,9 +242,9 @@ public class MessageHistoryService {
         }
         
         log.info("已为 conversationId {} 构建词汇历史信息：hasCompactedSummary={}, 已完成 {} 个，未完成 {} 个",
-                conversationId, 
+                conversationId,
                 compactedSummary != null && !compactedSummary.isEmpty(),
-                completedCards.size(), 
+                completedCards.size(),
                 incompleteCards.size());
         
         return sb.toString();

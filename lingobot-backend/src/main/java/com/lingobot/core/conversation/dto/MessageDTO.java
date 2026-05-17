@@ -48,14 +48,4 @@ public class MessageDTO {
     private Integer completionTokens;
     // 总 token 数
     private Integer totalTokens;
-
-    // 判断是否为音频消息
-    public boolean isAudioMessage() {
-        return "audio".equals(messageType);
-    }
-
-    // 判断是否为图片消息
-    public boolean isImageMessage() {
-        return "image".equals(messageType);
-    }
 }

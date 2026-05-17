@@ -1,8 +1,7 @@
 package com.lingobot.learning.chat.service.impl;
 
 import com.lingobot.learning.chat.service.MemoryCompactService;
-import com.lingobot.learning.conversation.entity.ConversationLearningData;
-import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
+import com.lingobot.learning.conversation.vocabulary.service.VocabularyConversationDataService;
 import com.lingobot.learning.memory.vocabulary.VocabularyCompactService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,27 +14,20 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class MemoryCompactServiceImpl implements MemoryCompactService {
 
-    private final ConversationLearningDataRepository learningDataRepository;
+    private final VocabularyConversationDataService vocabularyConversationDataService;
     private final VocabularyCompactService vocabularyCompactService;
 
     @Override
     public CompactResult executeCompact(Long conversationId) {
         log.info("开始执行对话压缩，conversationId: {}", conversationId);
 
-        ConversationLearningData learningData = learningDataRepository.findByConversationId(conversationId)
-                .orElse(null);
-        if (learningData == null) {
+        boolean isVocabularyMode = vocabularyConversationDataService.getByConversationId(conversationId).isPresent();
+        if (!isVocabularyMode) {
             return new CompactResult(false, "对话学习数据不存在", 0, 0);
         }
 
-        String learningMode = learningData.getLearningMode();
-        if ("vocabulary".equalsIgnoreCase(learningMode)) {
-            log.info("检测到 vocabulary 模式，调用 vocabulary compact 逻辑");
-            return executeVocabularyCompact(conversationId);
-        }
-
-        log.info("非 vocabulary 模式，暂不支持压缩，learningMode: {}", learningMode);
-        return new CompactResult(false, "当前模式暂不支持自动压缩", 0, 0);
+        log.info("检测到 vocabulary 模式，调用 vocabulary compact 逻辑");
+        return executeVocabularyCompact(conversationId);
     }
 
     private CompactResult executeVocabularyCompact(Long conversationId) {

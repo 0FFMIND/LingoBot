@@ -1,7 +1,7 @@
 package com.lingobot.infrastructure.common.config;
 
-import com.lingobot.learning.llm.tool.service.McpToolRegistry;
-import com.lingobot.learning.llm.tool.tools.VocabularyTool;
+import com.lingobot.infrastructure.mcp.service.McpToolRegistry;
+import com.lingobot.infrastructure.mcp.tools.VocabularyTool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
