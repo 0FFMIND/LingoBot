@@ -3,7 +3,7 @@ import { BalanceTransactionDTO, BalanceTransactionPageResponse, TransactionSumma
 
 export const balanceService = {
   getBalance: async (): Promise<number> => {
-    return httpClient.get<number>('/redemption/balance');
+    return httpClient.get<number>('/balance');
   },
 
   getTransactions: async (

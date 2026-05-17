@@ -4,7 +4,6 @@ import com.lingobot.core.user.balance.dto.BalanceTransactionDTO;
 import com.lingobot.core.user.balance.dto.TransactionSummaryDTO;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.response.ApiResponse;
-import com.lingobot.infrastructure.common.response.ErrorCode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -42,6 +41,7 @@ public class BalanceController {
         return ResponseEntity.ok(ApiResponse.success("获取余额成功", balance));
     }
 
+    // 获取当前登录用户的交易记录（分页，支持按类型和时间范围筛选）
     @GetMapping("/transactions")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getTransactions(
             @RequestParam(defaultValue = "0") int page,
@@ -71,6 +71,7 @@ public class BalanceController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    // 获取当前登录用户的交易汇总统计（支持按时间范围筛选）
     @GetMapping("/transactions/summary")
     public ResponseEntity<ApiResponse<TransactionSummaryDTO>> getTransactionSummary(
             @RequestParam(required = false) LocalDate startDate,
@@ -94,17 +95,16 @@ public class BalanceController {
     public ResponseEntity<ApiResponse<Void>> updateUserBalance(
             @PathVariable Long userId,
             @Valid @RequestBody UpdateBalanceRequest request) {
-        try {
-            balanceService.setUserBalance(userId, request.getNewBalance());
-            return ResponseEntity.ok(ApiResponse.success("余额修改成功", null));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest()
-                    .body(ApiResponse.error(ErrorCode.BAD_REQUEST, e.getMessage()));
-        }
+        balanceService.setUserBalance(userId, request.getNewBalance());
+        return ResponseEntity.ok(ApiResponse.success("余额修改成功", null));
     }
 
+    /**
+     * 管理员更新用户余额请求 DTO。
+     */
     @Data
     public static class UpdateBalanceRequest {
+        // 新的余额值
         @NotNull(message = "余额不能为空")
         private BigDecimal newBalance;
     }

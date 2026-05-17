@@ -3,6 +3,7 @@ package com.lingobot.core.user.redemption.service.impl;
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
 import com.lingobot.core.user.balance.service.BalanceService;
+import com.lingobot.infrastructure.common.exception.BusinessException;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.user.redemption.dto.RedemptionCodeDTO;
 import com.lingobot.core.user.redemption.dto.RedemptionCodeUsageDTO;
@@ -24,20 +25,35 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+/**
+ * 兑换码服务实现类。
+ *
+ * 实现 RedemptionCodeService 接口，提供兑换码的完整管理功能。
+ * 使用 Redis 分布式锁防止并发兑换导致重复到账，
+ * 使用 UUID 生成唯一兑换码（sk- 前缀）。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RedemptionCodeServiceImpl implements RedemptionCodeService {
     
+    // 兑换码仓库
     private final RedemptionCodeRepository redemptionCodeRepository;
+    // 兑换码使用记录仓库
     private final RedemptionCodeUsageRepository redemptionCodeUsageRepository;
+    // 用户仓库
     private final UserRepository userRepository;
+    // Redis 字符串模板，用于分布式锁
     private final StringRedisTemplate stringRedisTemplate;
+    // 余额服务，用于兑换点数到账
     private final BalanceService balanceService;
     
+    // Redis 锁键前缀
     private static final String LOCK_PREFIX = "redemption:lock:";
+    // 锁过期时间（秒）
     private static final long LOCK_EXPIRE_SECONDS = 10;
     
+    // 生成唯一的兑换码（格式：sk- + UUID）
     private String generateUniqueCode() {
         String code;
         int attempts = 0;
@@ -45,12 +61,13 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
             code = "sk-" + UUID.randomUUID().toString().replace("-", "");
             attempts++;
             if (attempts > 100) {
-                throw new RuntimeException("生成唯一兑换码失败，请稍后重试");
+                throw BusinessException.badRequest("生成唯一兑换码失败，请稍后重试");
             }
         } while (redemptionCodeRepository.existsByCode(code));
         return code;
     }
     
+    // 管理员创建兑换码，可设置点数、过期时间和最大使用次数
     @Override
     @Transactional
     public RedemptionCodeDTO createCode(Integer points, Long creatorId, Long expiresInSeconds, Integer maxUsages) {
@@ -87,6 +104,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         return RedemptionCodeDTO.fromEntity(saved);
     }
     
+    // 用户使用兑换码兑换点数，使用 Redis 分布式锁防止并发重复兑换
     @Override
     @Transactional
     public RedemptionCodeDTO redeemCode(String code, Long userId) {
@@ -142,6 +160,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         }
     }
     
+    // 获取所有兑换码列表（包含使用详情和创建者信息）
     @Override
     public List<RedemptionCodeDTO> getAllCodes() {
         List<RedemptionCode> codes = redemptionCodeRepository.findAllWithDetails();
@@ -172,6 +191,7 @@ public class RedemptionCodeServiceImpl implements RedemptionCodeService {
         log.info("兑换码 {} 已被删除", code.getCode());
     }
     
+    // 获取指定兑换码的所有使用记录
     @Override
     public List<RedemptionCodeUsageDTO> getCodeUsages(Long codeId) {
         List<RedemptionCodeUsage> usages = redemptionCodeUsageRepository.findByRedemptionCodeId(codeId);

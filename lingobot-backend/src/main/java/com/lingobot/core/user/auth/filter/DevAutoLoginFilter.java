@@ -20,16 +20,27 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Collections;
 
+/**
+ * 开发环境自动登录过滤器。
+ *
+ * 仅在开发环境（dev profile）下启用，自动将第一个管理员用户登录，
+ * 方便开发调试，无需每次手动登录。
+ * 使用双重检查锁定（DCL）确保只打印一次启动日志。
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class DevAutoLoginFilter extends OncePerRequestFilter {
     
+    // 应用配置属性，用于判断是否为开发环境
     private final AppProperties appProperties;
+    // 用户仓库
     private final UserRepository userRepository;
     
+    // 标记是否已打印自动登录日志（volatile 保证可见性）
     private static volatile boolean devAutoLoginLogged = false;
     
+    // 执行过滤逻辑，开发环境下自动登录管理员用户
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,

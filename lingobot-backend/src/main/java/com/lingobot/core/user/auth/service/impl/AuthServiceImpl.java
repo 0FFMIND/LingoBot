@@ -3,9 +3,7 @@ package com.lingobot.core.user.auth.service.impl;
 import com.lingobot.infrastructure.common.config.RateLimitProperties;
 import com.lingobot.core.user.auth.dto.AuthResponse;
 import com.lingobot.core.user.auth.dto.ChangePasswordRequest;
-import com.lingobot.core.user.auth.dto.LoginRequest;
 import com.lingobot.core.user.auth.dto.LoginWithCodeRequest;
-import com.lingobot.core.user.auth.dto.RegisterRequest;
 import com.lingobot.core.user.auth.dto.RegisterWithCodeRequest;
 import com.lingobot.core.user.auth.dto.SendLoginCodeRequest;
 import com.lingobot.core.user.auth.dto.UserDTO;
@@ -35,177 +33,38 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 
+/**
+ * 认证服务实现类。
+ *
+ * 实现 AuthService 和 UserDetailsService 接口，提供用户注册、登录、账户管理等核心功能。
+ * 支持邮箱验证码注册、邮箱密码验证码登录，包含登录失败次数限制、IP 封锁、验证码验证等安全机制。
+ * 所有涉及用户数据修改的操作均使用 @Transactional 保证事务一致性。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService, UserDetailsService {
     
+    // 用户仓库，用于用户数据的增删改查
     private final UserRepository userRepository;
+    // 密码编码器，用于密码的加密和验证
     private final PasswordEncoder passwordEncoder;
+    // JWT 服务，用于生成和验证认证 Token
     private final JwtService jwtService;
+    // 登录尝试服务，记录登录失败次数并实施封锁
     private final LoginAttemptService loginAttemptService;
+    // 限流配置属性
     private final RateLimitProperties rateLimitProperties;
+    // 邮箱验证码服务，处理验证码的发送和验证
     private final EmailVerificationService emailVerificationService;
+    // 用户余额仓库，用于创建用户时初始化余额
     private final UserBalanceRepository userBalanceRepository;
     
+    // 管理员邮箱，从配置文件读取，默认值为 admin@example.com
     @Value("${ADMIN_EMAIL:admin@example.com}")
     private String adminEmail;
     
-    @Override
-    @Transactional
-    public AuthResponse register(RegisterRequest request, String clientIp) {
-        if (loginAttemptService.isIpBlocked(clientIp)) {
-            LocalDateTime expiry = loginAttemptService.getIpBlockExpiry(clientIp);
-            String expiryStr = expiry != null 
-                ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                : "未知";
-            throw AuthException.tooManyRequests("操作过于频繁，请稍后再试。限制解除时间 " + expiryStr);
-        }
-        
-        if (request.getUsername() == null || request.getUsername().trim().isEmpty()) {
-            throw AuthException.badRequest("用户名不能为空");
-        }
-        
-        if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
-            throw AuthException.badRequest("密码不能为空");
-        }
-        
-        if (request.getUsername().length() < 3 || request.getUsername().length() > 20) {
-            throw AuthException.badRequest("用户名长度必须在3-20个字符之间");
-        }
-
-        if (request.getPassword().length() < 6) {
-            throw AuthException.badRequest("密码长度至少6个字符");
-        }
-        
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw AuthException.usernameExists("用户名已存在");
-        }
-        
-        if (request.getEmail() != null && !request.getEmail().isEmpty()) {
-            if (!isValidEmail(request.getEmail())) {
-                throw AuthException.invalidEmail("无效的邮箱地址");
-            }
-            if (userRepository.existsByEmail(request.getEmail())) {
-                throw AuthException.emailAlreadyRegistered("该邮箱已被注册");
-            }
-        }
-
-        User user = User.builder()
-                .username(request.getUsername())
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .build();
-        
-        User savedUser = userRepository.save(user);
-        
-        UserBalance userBalance = UserBalance.builder()
-                .user(savedUser)
-                .balance(BigDecimal.ZERO)
-                .frozenBalance(BigDecimal.ZERO)
-                .build();
-        userBalanceRepository.save(userBalance);
-        
-        String token = jwtService.generateToken(savedUser.getUsername(), savedUser.getId());
-        
-        log.info("用户注册成功: {}, IP: {}", savedUser.getUsername(), clientIp);
-        
-        return AuthResponse.builder()
-                .token(token)
-                .username(savedUser.getUsername())
-                .email(savedUser.getEmail())
-                .userId(savedUser.getId())
-                .role(savedUser.getRole().name())
-                .avatar(savedUser.getAvatar())
-                .balance(BigDecimal.ZERO)
-                .frozenBalance(BigDecimal.ZERO)
-                .build();
-    }
-
-    @Override
-    public AuthResponse login(LoginRequest request, String clientIp) {
-        String email = request.getEmail();
-        String password = request.getPassword();
-        
-        if (email == null || email.trim().isEmpty()) {
-            loginAttemptService.applyDelayOnFailure();
-            throw AuthException.badRequest("邮箱不能为空");
-        }
-        
-        if (password == null || password.trim().isEmpty()) {
-            loginAttemptService.recordLoginAttempt(clientIp, email, false, "密码不能为空");
-            loginAttemptService.applyDelayOnFailure();
-            throw AuthException.badRequest("密码不能为空");
-        }
-        
-        if (loginAttemptService.isIpBlocked(clientIp)) {
-            LocalDateTime expiry = loginAttemptService.getIpBlockExpiry(clientIp);
-            String expiryStr = expiry != null 
-                ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                : "未知";
-            log.warn("被阻止的登录尝试 - IP: {}, 邮箱: {}, 解除时间: {}", clientIp, email, expiryStr);
-            throw AuthException.tooManyRequests("登录尝试次数过多，请稍后再试。限制解除时间 " + expiryStr);
-        }
-        
-        java.util.Optional<User> userOpt = userRepository.findByEmail(email);
-        
-        if (userOpt.isEmpty()) {
-            loginAttemptService.recordLoginAttempt(clientIp, email, false, "用户不存在");
-            loginAttemptService.applyDelayOnFailure();
-            
-            int remaining = loginAttemptService.getRemainingAttempts(clientIp, email);
-            if (remaining > 0) {
-                throw AuthException.usernameOrPasswordError("邮箱或密码错误。剩余尝试次数 " + remaining);
-            }
-            throw AuthException.usernameOrPasswordError("邮箱或密码错误");
-        }
-        
-        User user = userOpt.get();
-        
-        if (loginAttemptService.isUserBlocked(user.getId())) {
-            LocalDateTime expiry = loginAttemptService.getUserBlockExpiry(user.getId());
-            String expiryStr = expiry != null 
-                ? expiry.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                : "未知";
-            log.warn("被阻止的登录尝试 - 用户: {}, IP: {}, 解除时间: {}", user.getUsername(), clientIp, expiryStr);
-            throw AuthException.accountLocked("账户已被临时锁定，请稍后再试。锁定解除时间 " + expiryStr);
-        }
-        
-        if (!passwordEncoder.matches(password, user.getPassword())) {
-            loginAttemptService.recordLoginAttempt(clientIp, email, false, "密码错误");
-            loginAttemptService.applyDelayOnFailure();
-            
-            int remaining = loginAttemptService.getRemainingAttempts(clientIp, email);
-            if (remaining > 0) {
-                throw AuthException.usernameOrPasswordError("邮箱或密码错误。剩余尝试次数 " + remaining);
-            }
-            throw AuthException.usernameOrPasswordError("邮箱或密码错误");
-        }
-        
-        loginAttemptService.recordLoginAttempt(clientIp, user.getUsername(), true, null);
-        
-        String token = jwtService.generateToken(user.getUsername(), user.getId());
-        
-        UserBalance userBalance = userBalanceRepository.findByUserId(user.getId()).orElse(null);
-        BigDecimal balance = userBalance != null && userBalance.getBalance() != null 
-                ? userBalance.getBalance() : BigDecimal.ZERO;
-        BigDecimal frozenBalance = userBalance != null && userBalance.getFrozenBalance() != null 
-                ? userBalance.getFrozenBalance() : BigDecimal.ZERO;
-        
-        log.info("用户登录成功: {}, IP: {}", user.getUsername(), clientIp);
-        
-        return AuthResponse.builder()
-                .token(token)
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .userId(user.getId())
-                .role(user.getRole().name())
-                .avatar(user.getAvatar())
-                .balance(balance)
-                .frozenBalance(frozenBalance)
-                .build();
-    }
-
+    // 发送登录验证码：验证邮箱密码 → 检查封锁 → 发送验证码到用户邮箱
     @Override
     public void sendLoginVerificationCode(SendLoginCodeRequest request, String clientIp) {
         String email = request.getEmail();
@@ -267,6 +126,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         log.info("登录验证码已发送 - 用户: {}, IP: {}", user.getUsername(), clientIp);
     }
     
+    // 用户登录（邮箱 + 密码 + 验证码方式）：验证参数 → 检查封锁 → 验证密码和验证码 → 生成 Token
     @Override
     public AuthResponse loginWithCode(LoginWithCodeRequest request, String clientIp) {
         String email = request.getEmail();
@@ -349,6 +209,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .build();
     }
 
+    // 获取当前登录用户的完整信息，从 SecurityContext 中获取用户名
     @Override
     public UserDTO getCurrentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -357,6 +218,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         return toDTO(user);
     }
     
+    // 获取当前登录用户的 ID，未登录或获取失败时返回 null
     @Override
     public Long getCurrentUserId() {
         try {
@@ -370,6 +232,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         }
     }
     
+    // 用户退出登录，清除 SecurityContext 中的认证信息
     @Override
     public void logout() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -377,6 +240,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         SecurityContextHolder.clearContext();
     }
     
+    // 修改当前用户的密码：验证原密码 → 验证新密码格式 → 加密保存新密码
     @Override
     @Transactional
     public void changePassword(ChangePasswordRequest request) {
@@ -414,6 +278,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         log.info("用户修改密码成功: {}", username);
     }
     
+    // 注销当前用户账户：删除用户数据（级联删除所有关联数据）→ 清除安全上下文
     @Override
     @Transactional
     public void deactivateAccount() {
@@ -428,6 +293,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         SecurityContextHolder.clearContext();
     }
     
+    // 更新当前用户的头像
     @Override
     @Transactional
     public void updateAvatar(String avatarBase64) {
@@ -441,6 +307,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         log.info("用户更新头像成功: {}", username);
     }
     
+    // 更新当前用户的昵称：验证昵称格式和唯一性 → 更新用户名 → 生成新 Token
     @Override
     @Transactional
     public AuthResponse updateUsername(String newUsername) {
@@ -489,6 +356,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .build();
     }
 
+    // Spring Security UserDetailsService 实现：根据用户名加载用户认证信息
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = userRepository.findByUsername(username)
@@ -501,6 +369,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         );
     }
     
+    // 用户注册（邮箱 + 验证码方式）：验证参数和验证码 → 自动生成用户名 → 创建用户 → 初始化余额
     @Override
     @Transactional
     public AuthResponse registerWithCode(RegisterWithCodeRequest request, String clientIp) {
@@ -574,6 +443,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .build();
     }
 
+    // 将 User 实体转换为 UserDTO（包含用户信息和余额信息）
     private UserDTO toDTO(User user) {
         UserBalance userBalance = userBalanceRepository.findByUserId(user.getId()).orElse(null);
         BigDecimal balance = userBalance != null && userBalance.getBalance() != null 
@@ -593,6 +463,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
                 .build();
     }
     
+    // 验证邮箱格式是否合法
     private boolean isValidEmail(String email) {
         if (email == null) {
             return false;
@@ -601,6 +472,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         return email.matches(emailRegex);
     }
     
+    // 从邮箱地址中提取用户名部分，作为默认昵称
     private String extractUsernameFromEmail(String email) {
         if (email == null || !email.contains("@")) {
             return email;
@@ -615,6 +487,7 @@ public class AuthServiceImpl implements AuthService, UserDetailsService {
         return username;
     }
     
+    // 生成唯一的用户名：如果基础用户名已存在，则在末尾添加数字序号
     private String generateUniqueUsername(String baseUsername) {
         String username = baseUsername;
         int counter = 1;

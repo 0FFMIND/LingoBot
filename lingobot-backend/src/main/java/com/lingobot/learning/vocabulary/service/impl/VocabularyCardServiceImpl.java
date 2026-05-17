@@ -3,6 +3,8 @@ package com.lingobot.learning.vocabulary.service.impl;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.repository.ConversationRepository;
+import com.lingobot.learning.conversation.entity.ConversationLearningData;
+import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
 import com.lingobot.learning.langgraph.vocabulary.VocabularyGraph;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
@@ -18,6 +20,7 @@ import com.lingobot.learning.vocabulary.service.SentenceAnalysisService;
 import com.lingobot.learning.vocabulary.service.UserVocabularyEventService;
 import com.lingobot.learning.vocabulary.service.UserVocabularyService;
 import com.lingobot.learning.vocabulary.service.VocabularyCardService;
+import com.lingobot.learning.util.UserInputSanitizer;
 import com.lingobot.learning.vocabulary.service.VocabularyCardSnapshotService;
 import com.lingobot.learning.vocabulary.service.VocabularyWordService;
 import com.lingobot.learning.langgraph.vocabulary.VocabularyBatchGraph;
@@ -50,6 +53,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
     private final VocabularyCardRepository vocabularyCardRepository;
     private final ConversationRepository conversationRepository;
+    private final ConversationLearningDataRepository learningDataRepository;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final MeaningCheckService meaningCheckService;
@@ -411,19 +415,21 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     @Override
     @Transactional
     public VocabularyCardDTO updateUserMeaning(Long cardId, String userMeaning) {
+        String sanitizedMeaning = UserInputSanitizer.sanitizeUserMeaning(userMeaning);
+
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
                 .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
 
-        card.setUserMeaningGuess(userMeaning);
+        card.setUserMeaningGuess(sanitizedMeaning);
         card.setMeaningCheckCompleted(false);
         card.setMeaningIsCorrect(null);
         card.setMeaningCheckResult(null);
         VocabularyCard saved = vocabularyCardRepository.save(card);
 
         Long conversationId = card.getConversation() != null ? card.getConversation().getId() : null;
-        if (conversationId != null && userMeaning != null && !userMeaning.trim().isEmpty()) {
+        if (conversationId != null) {
             log.info("Triggering async meaning check for cardId={}, conversationId={}", cardId, conversationId);
-            meaningCheckService.checkUserMeaningAsync(conversationId, cardId, userMeaning);
+            meaningCheckService.checkUserMeaningAsync(conversationId, cardId, sanitizedMeaning);
         }
 
         evictCardAndConversationCache(cardId, conversationId);
@@ -434,10 +440,12 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     @Override
     @Transactional
     public VocabularyCardDTO updateUserEnglishSentence(Long cardId, String userEnglishSentence) {
+        String sanitizedSentence = UserInputSanitizer.sanitizeUserSentence(userEnglishSentence);
+
         VocabularyCard card = vocabularyCardRepository.findById(cardId)
                 .orElseThrow(() -> ChatException.badRequest("词汇卡不存在: " + cardId));
 
-        card.setUserEnglishSentence(userEnglishSentence);
+        card.setUserEnglishSentence(sanitizedSentence);
         card.setSentenceAnalysisCompleted(false);
         card.setSentenceHasNewWord(null);
         card.setSentenceMeaningMatches(null);
@@ -501,9 +509,11 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 .map(pos -> pos + 1)
                 .orElse(0);
 
-        String intent = conversation.getVocabularyIntent();
+        String intent = learningDataRepository.findByConversationId(conversationId)
+                .map(ConversationLearningData::getVocabularyIntent)
+                .orElse(null);
         if (intent == null || intent.isEmpty()) {
-            intent = "next_word";
+            intent = "new_word";
         }
 
         WordCardData generated = generateRandomWord(conversationId, category, difficulty, intent);
@@ -816,10 +826,24 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         Conversation conversation = getConversation(conversationId);
         Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
 
+        String vocabularyIntentStr = learningDataRepository.findByConversationId(conversationId)
+                .map(ConversationLearningData::getVocabularyIntent)
+                .orElse(null);
+        com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent intent =
+                com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent.NEW_WORD;
+        
+        if (vocabularyIntentStr != null && !vocabularyIntentStr.isBlank()) {
+            try {
+                intent = com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent.valueOf(
+                        vocabularyIntentStr.toUpperCase());
+                log.info("Using vocabulary intent from conversation: {}", intent);
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid vocabulary intent: {}, using default NEW_WORD", vocabularyIntentStr);
+            }
+        }
+
         var result = vocabularyBatchGraph.execute(
-                conversationId, userId, category, difficulty,
-                com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent.NEW_WORD,
-                batchSize);
+                conversationId, userId, category, difficulty, intent, batchSize);
 
         evictConversationCache(conversationId);
 

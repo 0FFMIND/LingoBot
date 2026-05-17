@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { MessageDTO, ChatRequest, RetryMessageRequest, EditMessageRequest } from '../types'
 import { chatApi, conversationApi } from '../api'
 
-const COMPACT_COOLDOWN_MS = 10000
+const COMPACT_COOLDOWN_MS = 5000
 
 interface AgentStatus {
   thinking: string
@@ -36,6 +36,8 @@ interface ChatStore {
   compactingConversationPublicId: string | null
   lastCompactTime: Record<string, number>
   compactResult: Record<string, CompactResultState | null>
+  compactCooldownRemaining: Record<string, number>
+  compactCooldownTimers: Record<string, number | null>
 
   loadMessages: (conversationPublicId: string) => Promise<void>
   sendMessage: (request: ChatRequest) => Promise<void>
@@ -49,6 +51,7 @@ interface ChatStore {
   setMode: (mode: 'chat' | 'agent') => void
   manualCompact: (conversationPublicId: string) => Promise<void>
   clearCompactResult: (conversationPublicId: string) => void
+  clearCompactCooldown: (conversationPublicId: string) => void
   reset: () => void
 }
 
@@ -95,6 +98,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   compactingConversationPublicId: null,
   lastCompactTime: {},
   compactResult: {},
+  compactCooldownRemaining: {},
+  compactCooldownTimers: {},
 
   loadMessages: async (conversationPublicId: string) => {
     try {
@@ -387,7 +392,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setMode: (mode) => set({ mode }),
 
   manualCompact: async (conversationPublicId: string) => {
-    const { isCompacting, lastCompactTime } = get()
+    const { isCompacting, lastCompactTime, compactCooldownTimers } = get()
 
     if (isCompacting) {
       console.log('正在执行其他Compact操作，请稍候')
@@ -398,7 +403,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const lastTime = lastCompactTime[conversationPublicId] || 0
     if (now - lastTime < COMPACT_COOLDOWN_MS) {
       const remainingSeconds = Math.ceil((COMPACT_COOLDOWN_MS - (now - lastTime)) / 1000)
+      
+      if (compactCooldownTimers[conversationPublicId]) {
+        window.clearInterval(compactCooldownTimers[conversationPublicId]!)
+      }
+      
       set(s => ({
+        compactCooldownRemaining: { ...s.compactCooldownRemaining, [conversationPublicId]: remainingSeconds },
         compactResult: {
           ...s.compactResult,
           [conversationPublicId]: {
@@ -407,6 +418,38 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           },
         },
       }))
+      
+      const timer = window.setInterval(() => {
+        const currentRemaining = get().compactCooldownRemaining[conversationPublicId] || 0
+        if (currentRemaining <= 1) {
+          window.clearInterval(timer)
+          set(s => ({
+            compactCooldownRemaining: { ...s.compactCooldownRemaining, [conversationPublicId]: 0 },
+            compactCooldownTimers: { ...s.compactCooldownTimers, [conversationPublicId]: null },
+            compactResult: {
+              ...s.compactResult,
+              [conversationPublicId]: null,
+            },
+          }))
+        } else {
+          const newRemaining = currentRemaining - 1
+          set(s => ({
+            compactCooldownRemaining: { ...s.compactCooldownRemaining, [conversationPublicId]: newRemaining },
+            compactResult: {
+              ...s.compactResult,
+              [conversationPublicId]: {
+                success: false,
+                message: `操作过于频繁，请 ${newRemaining} 秒后再试`,
+              },
+            },
+          }))
+        }
+      }, 1000)
+      
+      set(s => ({
+        compactCooldownTimers: { ...s.compactCooldownTimers, [conversationPublicId]: timer },
+      }))
+      
       return
     }
 
@@ -479,13 +522,32 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }))
   },
 
-  reset: () => set({
-    messages: [],
-    loading: false,
-    streamingContent: '',
-    agentStatus: { thinking: '', toolCalls: [] },
-    isCompacting: false,
-    compactingConversationPublicId: null,
-    compactResult: {},
-  }),
+  clearCompactCooldown: (conversationPublicId: string) => {
+    const timers = get().compactCooldownTimers
+    if (timers[conversationPublicId]) {
+      window.clearInterval(timers[conversationPublicId]!)
+    }
+    set(s => ({
+      compactCooldownTimers: { ...s.compactCooldownTimers, [conversationPublicId]: null },
+      compactCooldownRemaining: { ...s.compactCooldownRemaining, [conversationPublicId]: 0 },
+    }))
+  },
+
+  reset: () => {
+    const timers = get().compactCooldownTimers
+    Object.values(timers).forEach(timer => {
+      if (timer) window.clearInterval(timer)
+    })
+    set({
+      messages: [],
+      loading: false,
+      streamingContent: '',
+      agentStatus: { thinking: '', toolCalls: [] },
+      isCompacting: false,
+      compactingConversationPublicId: null,
+      compactResult: {},
+      compactCooldownRemaining: {},
+      compactCooldownTimers: {},
+    })
+  },
 }))

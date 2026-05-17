@@ -1,6 +1,6 @@
 package com.lingobot.learning.chat.service;
 
-import com.lingobot.core.conversation.dto.ContextStatusDTO;
+import com.lingobot.learning.conversation.dto.ContextStatusDTO;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 

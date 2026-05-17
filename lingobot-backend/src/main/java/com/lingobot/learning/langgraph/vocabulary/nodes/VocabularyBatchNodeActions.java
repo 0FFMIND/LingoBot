@@ -141,7 +141,8 @@ public class VocabularyBatchNodeActions {
                     .build();
             updates.put("constraints", constraints);
 
-            String systemPrompt = vocabularyPromptService.getBatchFlashcardPrompt(category, difficulty, batchSize);
+            String systemPrompt = vocabularyPromptService.getBatchFlashcardPrompt(
+                    category, difficulty, batchSize, state.getIntent());
 
             if (state.getMemoryContext() != null) {
                 String memoryPrompt = memoryPromptBuilder.buildPromptContext(state.getMemoryContext());

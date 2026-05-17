@@ -1,4 +1,4 @@
-package com.lingobot.core.conversation.dto;
+package com.lingobot.learning.conversation.dto;
 
 import lombok.Builder;
 import lombok.Data;
@@ -11,6 +11,7 @@ public class ContextStatusDTO {
     private Integer maxTokens;
     private Double tokenRatio;
     private Integer wordCardsTotal;
+    private Integer wordCardsCompleted;
     private Integer wordCardsSinceCompact;
     private Integer wordCardThreshold;
     private Boolean shouldCompact;

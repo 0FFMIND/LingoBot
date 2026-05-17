@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -54,7 +55,7 @@ public class VocabularyBatchGraph {
 
         workflow.addConditionalEdges(
                 "VALIDATION",
-                state -> {
+                state -> CompletableFuture.supplyAsync(() -> {
                     if (state.isValid()) {
                         return "PERSISTENCE";
                     } else if (nodeActions.shouldRetry(state)) {
@@ -64,7 +65,7 @@ public class VocabularyBatchGraph {
                         log.warn("Max retries exceeded for batch generation, falling back");
                         return "FALLBACK";
                     }
-                },
+                }),
                 validationEdgeMappings
         );
 

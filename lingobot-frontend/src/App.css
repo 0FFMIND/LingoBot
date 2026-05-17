@@ -7772,17 +7772,18 @@
 
 .mode-selector-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .mode-selector-card-chat:hover {
   border-color: #6366f1;
   background-color: #eef2ff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .mode-selector-card-vocabulary:hover {
   border-color: #10b981;
   background-color: #ecfdf5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 .mode-selector-card.selected {
@@ -7814,11 +7815,20 @@
   background-color: #f1f5f9;
   color: #475569;
   transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .mode-selector-card.selected .mode-selector-icon {
   background-color: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.mode-selector-card-chat:hover .mode-selector-icon {
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25), 0 0 0 2px rgba(255, 255, 255, 0.8);
+}
+
+.mode-selector-card-vocabulary:hover .mode-selector-icon {
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.25), 0 0 0 2px rgba(255, 255, 255, 0.8);
 }
 
 .mode-selector-label {
@@ -7890,7 +7900,7 @@
 
 .vocabulary-submode-recommend {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 20px;
   background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
   border: 1px solid #f59e0b;

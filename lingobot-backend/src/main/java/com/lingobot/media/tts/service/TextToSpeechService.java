@@ -1,5 +1,6 @@
 package com.lingobot.media.tts.service;
 
+import com.lingobot.infrastructure.common.exception.MediaException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -47,8 +48,7 @@ public class TextToSpeechService {
 
     public byte[] getWordPronunciation(String word, VoiceType type) {
         if (word == null || word.trim().isEmpty()) {
-            log.warn("单词为空，无法获取发音");
-            return null;
+            throw ChatException.badRequest("单词为空，无法获取发音");
         }
         
         String cacheKey = word.trim().toLowerCase() + "-" + type.name();
@@ -88,7 +88,7 @@ public class TextToSpeechService {
                         continue;
                     }
                     log.error("获取发音失败，已重试 {} 次，最终 HTTP 状态码: {}", maxRetries, responseCode);
-                    return null;
+                    throw ChatException.badRequest("获取发音失败，请稍后重试");
                 }
                 
                 String contentType = connection.getContentType();

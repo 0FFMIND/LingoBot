@@ -1,11 +1,11 @@
 package com.lingobot.learning.chat.service.impl;
 
-import com.lingobot.core.conversation.dto.ContextStatusDTO;
-import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.entity.Message;
-import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.learning.chat.service.ContextManagerService;
+import com.lingobot.learning.conversation.dto.ContextStatusDTO;
+import com.lingobot.learning.conversation.entity.ConversationLearningData;
+import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,13 +19,11 @@ import java.util.List;
 public class ContextManagerServiceImpl implements ContextManagerService {
 
     private final MessageRepository messageRepository;
-    private final ConversationRepository conversationRepository;
+    private final ConversationLearningDataRepository learningDataRepository;
     private final VocabularyCardRepository vocabularyCardRepository;
 
-    private static final int MAX_TOKENS = 128000;
-    private static final int VOCABULARY_MAX_TOKENS = 100000;
+    private static final int MAX_CHARACTERS_THRESHOLD = 5000;
     private static final int WORD_CARD_THRESHOLD = 10;
-    private static final double COMPACT_RATIO_THRESHOLD = 0.7;
 
     @Override
     public CompactCheckResult checkAndGetReason(Long conversationId) {
@@ -44,43 +42,57 @@ public class ContextManagerServiceImpl implements ContextManagerService {
     public ContextStatusDTO getContextStatus(Long conversationId) {
         log.debug("获取对话上下文状态，conversationId: {}", conversationId);
 
-        Conversation conversation = conversationRepository.findById(conversationId).orElse(null);
-        boolean vocabularyMode = conversation != null && "vocabulary".equalsIgnoreCase(conversation.getLearningMode());
-        int maxTokens = vocabularyMode ? VOCABULARY_MAX_TOKENS : MAX_TOKENS;
-        int currentTokens = calculateTotalTokens(conversationId, conversation);
+        ConversationLearningData learningData = learningDataRepository.findByConversationId(conversationId).orElse(null);
+        boolean vocabularyMode = learningData != null && "vocabulary".equalsIgnoreCase(learningData.getLearningMode());
+
+        List<Message> messages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
+        int currentCharacters = calculateTotalCharacters(messages);
+        int currentTokens = calculateTotalTokens(messages, learningData);
+
         long wordCardsTotal = vocabularyCardRepository.countActiveCardsByConversationId(conversationId);
-        
-        double tokenRatio = (double) currentTokens / maxTokens;
-        
-        boolean shouldCompact = tokenRatio >= COMPACT_RATIO_THRESHOLD || wordCardsTotal >= WORD_CARD_THRESHOLD;
-        
+        long completedCardsCount = vocabularyCardRepository.countCompletedCardsByConversationId(conversationId);
+
+        boolean shouldCompact = currentCharacters >= MAX_CHARACTERS_THRESHOLD;
+
         String compactReason = null;
-        if (tokenRatio >= COMPACT_RATIO_THRESHOLD) {
-            compactReason = String.format("上下文Token用量已达 %.0f%%，建议压缩以释放空间", tokenRatio * 100);
-        } else if (wordCardsTotal >= WORD_CARD_THRESHOLD) {
-            compactReason = String.format("已累计 %d 张单词卡片，建议压缩历史消息", wordCardsTotal);
+        if (shouldCompact) {
+            compactReason = String.format("对话内容已达 %d 字符，超过阈值 %d 字符，建议压缩以释放空间",
+                    currentCharacters, MAX_CHARACTERS_THRESHOLD);
         }
+
+        int compactedCount = learningData != null && learningData.getVocabularyCompactedCardCount() != null
+                ? learningData.getVocabularyCompactedCardCount() : 0;
 
         return ContextStatusDTO.builder()
                 .currentTokens(currentTokens)
-                .maxTokens(maxTokens)
-                .tokenRatio(Math.min(tokenRatio, 1.0))
+                .maxTokens(MAX_CHARACTERS_THRESHOLD * 2)
+                .tokenRatio(Math.min((double) currentCharacters / MAX_CHARACTERS_THRESHOLD, 1.0))
                 .wordCardsTotal((int) wordCardsTotal)
-                .wordCardsSinceCompact((int) wordCardsTotal)
+                .wordCardsCompleted((int) completedCardsCount)
+                .wordCardsSinceCompact((int) completedCardsCount)
                 .wordCardThreshold(WORD_CARD_THRESHOLD)
                 .shouldCompact(shouldCompact)
                 .compactReason(compactReason)
-                .compactedCount(0)
+                .compactedCount(compactedCount)
                 .build();
     }
 
-    private int calculateTotalTokens(Long conversationId, Conversation conversation) {
-        List<Message> messages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
-        
+    private int calculateTotalCharacters(List<Message> messages) {
+        int total = 0;
+        for (Message message : messages) {
+            if (message.getContent() != null) {
+                total += message.getContent().length();
+            }
+        }
+        log.debug("计算对话字符总量: total={}", total);
+        return total;
+    }
+
+    private int calculateTotalTokens(List<Message> messages, ConversationLearningData learningData) {
         int totalTokens = 0;
         int promptTokens = 0;
         int completionTokens = 0;
-        
+
         for (Message message : messages) {
             if (message.getTotalTokens() != null) {
                 totalTokens += message.getTotalTokens();
@@ -97,13 +109,13 @@ public class ContextManagerServiceImpl implements ContextManagerService {
                 totalTokens += messageTokens;
             }
         }
-        if (conversation != null && conversation.getTotalTokensEstimate() != null) {
-            totalTokens += conversation.getTotalTokensEstimate().intValue();
+        if (learningData != null && learningData.getTotalTokensEstimate() != null) {
+            totalTokens += learningData.getTotalTokensEstimate().intValue();
         }
-        
-        log.debug("计算对话 {} 的Token总量: total={}, prompt={}, completion={}", 
-                conversationId, totalTokens, promptTokens, completionTokens);
-        
+
+        log.debug("计算对话Token总量: total={}, prompt={}, completion={}",
+                totalTokens, promptTokens, completionTokens);
+
         return totalTokens;
     }
 }

@@ -1,4 +1,4 @@
-package com.lingobot.infrastructure.common.dto;
+package com.lingobot.infrastructure.common.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

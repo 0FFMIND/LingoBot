@@ -1,8 +1,8 @@
 package com.lingobot.learning.chat.controller;
 
-import com.lingobot.core.conversation.entity.Conversation;
-import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.core.conversation.service.ConversationService;
+import com.lingobot.learning.conversation.entity.ConversationLearningData;
+import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.exception.ChatException;
@@ -35,7 +35,7 @@ import java.util.Map;
 public class ContextController {
 
     private final ContextManagerService contextManagerService;
-    private final ConversationRepository conversationRepository;
+    private final ConversationLearningDataRepository learningDataRepository;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final BalanceService balanceService;
     private final ApiConfigProperties apiConfigProperties;
@@ -51,8 +51,10 @@ public class ContextController {
     @PostMapping("/compact/{publicId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> compact(@PathVariable String publicId) {
         Long conversationId = conversationService.resolvePublicIdToId(publicId);
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> ChatException.badRequest("对话不存在: " + publicId));
+        ConversationLearningData learningData = learningDataRepository.findByConversationId(conversationId)
+                .orElseGet(() -> ConversationLearningData.builder()
+                        .conversationId(conversationId)
+                        .build());
 
         List<VocabularyCard> allCards = vocabularyCardRepository.findActiveCardsByConversationId(conversationId);
         List<VocabularyCard> completedCards = allCards.stream()
@@ -87,23 +89,23 @@ public class ContextController {
         try {
             int completedCardsBeforeTokens = calculateCompletedCardsTokens(completedCards);
 
-            String compactedSummary = callLlmToCompact(cardsToCompact, conversation.getVocabularyCompactedSummary());
+            String compactedSummary = callLlmToCompact(cardsToCompact, learningData.getVocabularyCompactedSummary());
             int summaryTokens = compactedSummary.length() / 4;
             int recentCardsTokens = calculateCompletedCardsTokens(recentCards);
             int afterTokens = summaryTokens + recentCardsTokens;
             int savedTokens = Math.max(0, completedCardsBeforeTokens - afterTokens);
 
-            conversation.setVocabularyCompactedSummary(compactedSummary);
-            conversation.setVocabularyCompactedCardCount(
-                    conversation.getVocabularyCompactedCardCount() == null
+            learningData.setVocabularyCompactedSummary(compactedSummary);
+            learningData.setVocabularyCompactedCardCount(
+                    learningData.getVocabularyCompactedCardCount() == null
                             ? cardsToCompact.size()
-                            : conversation.getVocabularyCompactedCardCount() + cardsToCompact.size()
+                            : learningData.getVocabularyCompactedCardCount() + cardsToCompact.size()
             );
-            conversation.setVocabularyLastCompactedAt(LocalDateTime.now());
+            learningData.setVocabularyLastCompactedAt(LocalDateTime.now());
             VocabularyCard lastCompactedCard = cardsToCompact.get(cardsToCompact.size() - 1);
-            conversation.setVocabularyLastCompactedCardId(lastCompactedCard.getId());
-            conversation.setVocabularyLastCompactedPosition(lastCompactedCard.getPosition());
-            conversationRepository.save(conversation);
+            learningData.setVocabularyLastCompactedCardId(lastCompactedCard.getId());
+            learningData.setVocabularyLastCompactedPosition(lastCompactedCard.getPosition());
+            learningDataRepository.save(learningData);
 
             balanceService.confirmTransaction(transactionId);
             log.info("Compact completed: publicId={}, compactedCards={}, recentCards={}, beforeTokens={}, afterTokens={}, savedTokens={}",
@@ -116,7 +118,7 @@ public class ContextController {
             result.put("savedTokens", savedTokens);
             result.put("compactedCardsCount", cardsToCompact.size());
             result.put("recentCardsCount", recentCards.size());
-            result.put("totalCompactedCards", conversation.getVocabularyCompactedCardCount());
+            result.put("totalCompactedCards", learningData.getVocabularyCompactedCardCount());
             return ResponseEntity.ok(ApiResponse.success("压缩成功", result));
 
         } catch (Exception e) {

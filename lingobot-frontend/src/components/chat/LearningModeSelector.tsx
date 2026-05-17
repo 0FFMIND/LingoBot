@@ -154,7 +154,7 @@ export function VocabularySubModeSelector({
       <div className="vocabulary-submode-recommend">
         <span className="vocabulary-submode-recommend-icon">💡</span>
         <p className="vocabulary-submode-recommend-text">
-          <strong>推荐：混合模式</strong> - 根据您的学习数据，我们推荐混合模式，能够帮助您在学习新词的同时巩固已有词汇，达到最佳学习效果。
+          <strong>推荐</strong> - 根据您的学习数据，我们推荐混合模式，能够帮助您在学习新词的同时巩固已有词汇，达到最佳学习效果。
         </p>
       </div>
 

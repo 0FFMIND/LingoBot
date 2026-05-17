@@ -1,23 +1,19 @@
 package com.lingobot.core.conversation.service.impl;
 
-import com.lingobot.core.conversation.dto.ContextStatusDTO;
 import com.lingobot.core.conversation.dto.MessageDTO;
 import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.auth.entity.User;
 import com.lingobot.core.user.auth.repository.UserRepository;
-import com.lingobot.infrastructure.common.dto.PageResponseDTO;
+import com.lingobot.infrastructure.common.response.PageResponseDTO;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.dto.ConversationDTO;
 import com.lingobot.core.conversation.dto.CreateConversationRequest;
-import com.lingobot.core.conversation.dto.MessageDTO;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.core.conversation.service.ConversationService;
-import com.lingobot.learning.chat.service.ContextManagerService;
-import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -30,34 +26,37 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * 会话服务实现类。
+ *
+ * 提供会话和消息的核心业务逻辑实现，
+ * 包含权限校验、会话管理、消息增删改查等功能。
+ *
+ * 仅包含通用会话逻辑，学习相关功能在 learning 模块中实现。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConversationServiceImpl implements ConversationService {
-    
+
+    // 会话数据访问层
     private final ConversationRepository conversationRepository;
+    // 消息数据访问层
     private final MessageRepository messageRepository;
+    // 认证服务，用于获取当前登录用户
     private final AuthService authService;
+    // 用户数据访问层
     private final UserRepository userRepository;
-    private final VocabularyCardRepository vocabularyCardRepository;
-    private final ContextManagerService contextManagerService;
-    
+
+    // 创建新会话，自动关联当前登录用户
     @Override
     @Transactional
     public ConversationDTO createConversation(CreateConversationRequest request) {
         Long currentUserId = authService.getCurrentUserId();
-        
+
         Conversation.ConversationBuilder builder = Conversation.builder()
                 .title(request.getTitle());
-        
-        if (request.getLearningMode() != null && !request.getLearningMode().trim().isEmpty()) {
-            builder.learningMode(request.getLearningMode());
-        }
-        
-        if (request.getVocabularyIntent() != null && !request.getVocabularyIntent().trim().isEmpty()) {
-            builder.vocabularyIntent(request.getVocabularyIntent());
-        }
-        
+
         if (currentUserId != null) {
             User user = userRepository.findById(currentUserId).orElse(null);
             if (user != null) {
@@ -65,15 +64,16 @@ public class ConversationServiceImpl implements ConversationService {
                 log.info("创建对话关联用户: {}", user.getUsername());
             }
         }
-        
+
         Conversation conversation = builder.build();
         Conversation saved = conversationRepository.save(conversation);
         return toDTO(saved);
     }
-    
+
+    // 根据 publicId 查询会话实体，同时进行权限校验
     private Conversation getConversationEntityByPublicId(String publicId) {
         Long currentUserId = authService.getCurrentUserId();
-        
+
         Conversation conversation;
         if (currentUserId != null) {
             conversation = conversationRepository.findByPublicIdAndUserId(publicId, currentUserId)
@@ -82,24 +82,27 @@ public class ConversationServiceImpl implements ConversationService {
             conversation = conversationRepository.findByPublicId(publicId)
                     .orElseThrow(() -> ChatException.badRequest("对话不存在 " + publicId));
         }
-        
+
         return conversation;
     }
-    
+
+    // 将 publicId 转换为数据库 ID，用于内部接口调用
     @Override
     public Long resolvePublicIdToId(String publicId) {
         return getConversationEntityByPublicId(publicId).getId();
     }
-    
+
+    // 根据 publicId 查询会话详情
     @Override
     public ConversationDTO getConversationByPublicId(String publicId) {
         return toDTO(getConversationEntityByPublicId(publicId));
     }
-    
+
+    // 获取最近 20 条会话列表，登录用户仅可见自己的会话
     @Override
     public List<ConversationDTO> getAllConversations() {
         Long currentUserId = authService.getCurrentUserId();
-        
+
         List<Conversation> conversations;
         if (currentUserId != null) {
             conversations = conversationRepository.findTop20ByUserIdOrderByUpdatedAtDesc(currentUserId);
@@ -108,32 +111,33 @@ public class ConversationServiceImpl implements ConversationService {
             conversations = conversationRepository.findTop20ByOrderByUpdatedAtDesc();
             log.info("获取所有对话列表（最近20条），对话数: {}", conversations.size());
         }
-        
+
         return conversations.stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
     }
-    
+
+    // 分页查询会话列表
     @Override
     public PageResponseDTO<ConversationDTO> getConversationsByPage(int page, int size) {
         Long currentUserId = authService.getCurrentUserId();
         Pageable pageable = PageRequest.of(page, size);
-        
+
         Page<Conversation> conversationPage;
         if (currentUserId != null) {
             conversationPage = conversationRepository.findByUserIdOrderByUpdatedAtDesc(currentUserId, pageable);
-            log.info("分页获取用户对话列表，用户ID: {}, 页码: {}, 每页大小: {}, 总数: {}", 
+            log.info("分页获取用户对话列表，用户ID: {}, 页码: {}, 每页大小: {}, 总数: {}",
                     currentUserId, page, size, conversationPage.getTotalElements());
         } else {
             conversationPage = conversationRepository.findAllByOrderByUpdatedAtDesc(pageable);
-            log.info("分页获取所有对话列表，页码: {}, 每页大小: {}, 总数: {}", 
+            log.info("分页获取所有对话列表，页码: {}, 每页大小: {}, 总数: {}",
                     page, size, conversationPage.getTotalElements());
         }
-        
+
         List<ConversationDTO> conversationDTOs = conversationPage.getContent().stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
-        
+
         return PageResponseDTO.of(
                 conversationDTOs,
                 conversationPage.getNumber(),
@@ -141,7 +145,8 @@ public class ConversationServiceImpl implements ConversationService {
                 conversationPage.getTotalElements()
         );
     }
-    
+
+    // 更新会话标题
     @Override
     @Transactional
     public ConversationDTO updateConversationTitle(String publicId, String title) {
@@ -150,43 +155,27 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation saved = conversationRepository.save(conversation);
         return toDTO(saved);
     }
-    
-    @Override
-    @Transactional
-    public ConversationDTO updateConversationLearningMode(String publicId, String learningMode) {
-        Conversation conversation = getConversationEntityByPublicId(publicId);
-        conversation.setLearningMode(learningMode);
-        Conversation saved = conversationRepository.save(conversation);
-        return toDTO(saved);
-    }
-    
-    @Override
-    @Transactional
-    public ConversationDTO updateVocabularyIntent(String publicId, String vocabularyIntent) {
-        Conversation conversation = getConversationEntityByPublicId(publicId);
-        conversation.setVocabularyIntent(vocabularyIntent);
-        Conversation saved = conversationRepository.save(conversation);
-        return toDTO(saved);
-    }
-    
+
+    // 获取当前选中的会话
     @Override
     public Optional<ConversationDTO> getCurrentConversation() {
         Long currentUserId = authService.getCurrentUserId();
         if (currentUserId == null) {
             return Optional.empty();
         }
-        
+
         User user = userRepository.findById(currentUserId).orElse(null);
         if (user == null || user.getCurrentConversationId() == null) {
             return Optional.empty();
         }
-        
+
         Conversation conversation = conversationRepository.findByIdAndUserId(
                 user.getCurrentConversationId(), currentUserId).orElse(null);
-        
+
         return Optional.ofNullable(conversation).map(this::toDTO);
     }
-    
+
+    // 设置当前选中的会话，publicId 为 null 时清除当前会话
     @Override
     @Transactional
     public void setCurrentConversation(String publicId) {
@@ -194,51 +183,54 @@ public class ConversationServiceImpl implements ConversationService {
         if (currentUserId == null) {
             return;
         }
-        
+
         User user = userRepository.findById(currentUserId).orElse(null);
         if (user == null) {
             return;
         }
-        
+
         if (publicId == null) {
             user.setCurrentConversationId(null);
         } else {
             Conversation conversation = getConversationEntityByPublicId(publicId);
             user.setCurrentConversationId(conversation.getId());
         }
-        
+
         userRepository.save(user);
     }
-    
+
+    // 删除会话及其所有消息
     @Override
     @Transactional
     public void deleteConversation(String publicId) {
         Conversation conversation = getConversationEntityByPublicId(publicId);
         Long id = conversation.getId();
-        vocabularyCardRepository.deleteByConversationId(id);
         conversationRepository.deleteById(id);
     }
-    
+
+    // 根据 ID 获取会话实体，同时进行权限校验
     @Override
     public Conversation getConversationEntityById(Long id) {
         Long currentUserId = authService.getCurrentUserId();
-        
+
         if (currentUserId != null) {
             return conversationRepository.findByIdAndUserId(id, currentUserId)
                     .orElseThrow(() -> ChatException.badRequest("对话不存在或无权访问: " + id));
         }
-        
+
         return conversationRepository.findById(id)
                 .orElseThrow(() -> ChatException.badRequest("对话不存在 " + id));
     }
-    
+
+    // 添加用户文本消息
     @Override
     @Transactional
     public MessageDTO addUserMessage(Long conversationId, String content) {
         Conversation conversation = getConversationEntityById(conversationId);
         return addUserMessage(conversation, content);
     }
-    
+
+    // 添加用户文本消息（带会话实体）
     @Override
     @Transactional
     public MessageDTO addUserMessage(Conversation conversation, String content) {
@@ -250,18 +242,20 @@ public class ConversationServiceImpl implements ConversationService {
         messageRepository.save(message);
         return toMessageDTO(message);
     }
-    
+
+    // 添加用户音频消息
     @Override
     @Transactional
-    public MessageDTO addUserMessageWithAudio(Long conversationId, String content, 
+    public MessageDTO addUserMessageWithAudio(Long conversationId, String content,
                                                String audioData, String audioFormat, Integer audioDuration) {
         Conversation conversation = getConversationEntityById(conversationId);
         return addUserMessageWithAudio(conversation, content, audioData, audioFormat, audioDuration);
     }
-    
+
+    // 添加用户音频消息（带会话实体）
     @Override
     @Transactional
-    public MessageDTO addUserMessageWithAudio(Conversation conversation, String content, 
+    public MessageDTO addUserMessageWithAudio(Conversation conversation, String content,
                                                String audioData, String audioFormat, Integer audioDuration) {
         Message message = Message.builder()
                 .content(content != null ? content : "")
@@ -275,7 +269,8 @@ public class ConversationServiceImpl implements ConversationService {
         messageRepository.save(message);
         return toMessageDTO(message);
     }
-    
+
+    // 添加用户图片消息
     @Override
     @Transactional
     public MessageDTO addUserMessageWithImage(Long conversationId, String content,
@@ -283,7 +278,7 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation conversation = getConversationEntityById(conversationId);
         return addUserMessageWithImage(conversation, content, imageData, imageFormat);
     }
-    
+
     @Override
     @Transactional
     public MessageDTO addUserMessageWithImage(Conversation conversation, String content,
@@ -299,47 +294,52 @@ public class ConversationServiceImpl implements ConversationService {
         messageRepository.save(message);
         return toMessageDTO(message);
     }
-    
+
+    // 添加 AI 助手消息
     @Override
     @Transactional
     public MessageDTO addAssistantMessage(Long conversationId, String content) {
         Conversation conversation = getConversationEntityById(conversationId);
         return addAssistantMessage(conversation, content, null);
     }
-    
+
+    // 添加 AI 助手消息（带会话实体）
     @Override
     @Transactional
     public MessageDTO addAssistantMessage(Conversation conversation, String content) {
         return addAssistantMessage(conversation, content, null);
     }
-    
+
+    // 添加 AI 助手消息（带 token 使用统计）
     @Override
     @Transactional
     public MessageDTO addAssistantMessage(Long conversationId, String content, TokenUsageDTO tokenUsage) {
         Conversation conversation = getConversationEntityById(conversationId);
         return addAssistantMessage(conversation, content, tokenUsage);
     }
-    
+
+    // 添加 AI 助手消息（带会话实体和 token 使用统计）
     @Override
     @Transactional
     public MessageDTO addAssistantMessage(Conversation conversation, String content, TokenUsageDTO tokenUsage) {
         Message.MessageBuilder messageBuilder = Message.builder()
                 .content(content)
                 .role("assistant");
-        
+
         if (tokenUsage != null) {
             messageBuilder
                     .promptTokens(tokenUsage.getPromptTokens())
                     .completionTokens(tokenUsage.getCompletionTokens())
                     .totalTokens(tokenUsage.getTotalTokens());
         }
-        
+
         Message message = messageBuilder.build();
         conversation.addMessage(message);
         messageRepository.save(message);
         return toMessageDTO(message);
     }
-    
+
+    // 删除单条消息
     @Override
     @Transactional
     public void deleteMessage(Long messageId) {
@@ -348,36 +348,40 @@ public class ConversationServiceImpl implements ConversationService {
         }
         messageRepository.deleteMessageById(messageId);
     }
-    
+
+    // 从指定索引开始删除后续所有消息（用于重试时清理历史消息）
     @Override
     @Transactional
     public void deleteMessagesFromIndex(Long conversationId, int startIndex) {
         List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
-        
+
         if (startIndex >= allMessages.size()) {
             return;
         }
-        
+
         List<Long> messageIdsToDelete = allMessages.stream()
                 .skip(startIndex)
                 .map(Message::getId)
                 .toList();
-        
+
         if (!messageIdsToDelete.isEmpty()) {
             messageRepository.deleteMessagesByIds(messageIdsToDelete);
         }
     }
-    
+
+    // 获取最近一条 AI 助手消息
     @Override
     public Optional<Message> getLastAssistantMessage(Long conversationId) {
         return messageRepository.findFirstByConversationIdAndRoleOrderByTimestampDesc(conversationId, "assistant");
     }
-    
+
+    // 获取最近一条用户消息
     @Override
     public Optional<Message> getLastUserMessage(Long conversationId) {
         return messageRepository.findFirstByConversationIdAndRoleOrderByTimestampDesc(conversationId, "user");
     }
-    
+
+    // 获取最近 N 条消息
     @Override
     public List<Message> getLastMessages(Long conversationId, int count) {
         List<Message> messages = messageRepository.findLastMessagesByConversationId(conversationId);
@@ -385,7 +389,8 @@ public class ConversationServiceImpl implements ConversationService {
                 .limit(count)
                 .collect(Collectors.toList());
     }
-    
+
+    // 将 Message 实体转换为 MessageDTO
     private MessageDTO toMessageDTO(Message message) {
         return MessageDTO.builder()
                 .id(message.getId())
@@ -404,26 +409,17 @@ public class ConversationServiceImpl implements ConversationService {
                 .totalTokens(message.getTotalTokens())
                 .build();
     }
-    
+
+    // 将 Conversation 实体转换为 ConversationDTO
     private ConversationDTO toDTO(Conversation conversation) {
         int messageCount = messageRepository.countByConversationId(conversation.getId());
-        
-        ContextStatusDTO contextStatus = null;
-        try {
-            contextStatus = contextManagerService.getContextStatus(conversation.getId());
-        } catch (Exception e) {
-            log.warn("获取上下文状态失败，conversationId: {}", conversation.getId(), e);
-        }
-        
+
         return ConversationDTO.builder()
                 .publicId(conversation.getPublicId())
                 .title(conversation.getTitle())
-                .learningMode(conversation.getLearningMode())
-                .vocabularyIntent(conversation.getVocabularyIntent())
                 .createdAt(conversation.getCreatedAt())
                 .updatedAt(conversation.getUpdatedAt())
                 .messageCount(messageCount)
-                .contextStatus(contextStatus)
                 .build();
     }
 }

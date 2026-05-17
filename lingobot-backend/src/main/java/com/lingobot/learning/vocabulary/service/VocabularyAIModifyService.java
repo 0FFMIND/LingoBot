@@ -3,6 +3,7 @@ package com.lingobot.learning.vocabulary.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lingobot.core.user.auth.service.AuthService;
+import com.lingobot.infrastructure.common.exception.BusinessException;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.llm.service.LlmService;
 import com.lingobot.learning.vocabulary.dto.AIModifyVocabularyRequest;
@@ -123,7 +124,7 @@ private static final String USER_PROMPT_TEMPLATE = """
             log.debug("AI vocabulary modify raw response: {}", aiResponse);
         } catch (Exception e) {
             log.error("AI vocabulary modify call failed", e);
-            throw new RuntimeException("AI modify failed: " + e.getMessage());
+            throw BusinessException.badRequest("AI modify failed: " + e.getMessage());
         }
 
         UpdateUserVocabularyRequest updateRequest = parseAIResponse(aiResponse, request, vocabulary);

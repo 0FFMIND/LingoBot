@@ -1,6 +1,6 @@
 package com.lingobot.learning.vocabulary.service;
 
-import com.lingobot.infrastructure.common.dto.PageResponseDTO;
+import com.lingobot.infrastructure.common.response.PageResponseDTO;
 import com.lingobot.learning.vocabulary.dto.UserVocabularyDTO;
 import com.lingobot.learning.vocabulary.dto.UpdateUserVocabularyRequest;
 import com.lingobot.learning.vocabulary.dto.UpdateLearningStateRequest;

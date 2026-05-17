@@ -17,23 +17,38 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 用户偏好设置服务实现类。
+ *
+ * 实现 UserPreferenceService 接口，提供用户偏好设置的查询和更新功能。
+ * 使用 Redis 缓存用户偏好设置，缓存有效期 24 小时，避免频繁访问数据库。
+ * 所有读写操作使用 synchronized 保证线程安全。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserPreferenceServiceImpl implements UserPreferenceService {
 
+    // Redis 缓存键前缀
     private static final String CACHE_KEY_PREFIX = "user:preference:";
+    // 缓存有效期（小时）
     private static final long CACHE_TTL_HOURS = 24;
 
+    // 用户偏好设置仓库
     private final UserPreferenceRepository userPreferenceRepository;
+    // 用户仓库
     private final UserRepository userRepository;
+    // Redis 模板，用于缓存操作
     private final RedisTemplate<String, Object> redisTemplate;
+    // 对象映射器，用于缓存数据的序列化和反序列化
     private final ObjectMapper objectMapper;
 
+    // 构建用户偏好设置的 Redis 缓存键
     private String getCacheKey(Long userId) {
         return CACHE_KEY_PREFIX + userId;
     }
 
+    // 获取用户偏好设置，不存在则创建默认设置（先查缓存，再查数据库）
     @Override
     @Transactional
     public synchronized UserPreferenceDTO getOrCreatePreference(Long userId) {
@@ -63,11 +78,13 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
         return dto;
     }
 
+    // 获取用户偏好设置（等同于 getOrCreatePreference）
     @Override
     public UserPreferenceDTO getPreference(Long userId) {
         return getOrCreatePreference(userId);
     }
 
+    // 更新用户偏好设置，更新后刷新缓存
     @Override
     @Transactional
     public synchronized UserPreferenceDTO updatePreference(Long userId, UpdateUserPreferenceRequest request) {
@@ -107,6 +124,7 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
         return dto;
     }
 
+    // 清除指定用户的偏好设置缓存
     @Override
     public void evictCache(Long userId) {
         String cacheKey = getCacheKey(userId);
@@ -114,6 +132,7 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
         log.debug("已清除用户偏好设置缓存 userId={}", userId);
     }
 
+    // 创建用户的默认偏好设置
     private UserPreference createDefaultPreference(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("用户不存在 " + userId));
@@ -129,6 +148,7 @@ public class UserPreferenceServiceImpl implements UserPreferenceService {
         return userPreferenceRepository.save(preference);
     }
 
+    // 将 UserPreference 实体转换为 UserPreferenceDTO
     private UserPreferenceDTO toDTO(UserPreference preference) {
         return UserPreferenceDTO.builder()
                 .id(preference.getId())

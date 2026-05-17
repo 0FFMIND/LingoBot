@@ -2,6 +2,7 @@ package com.lingobot.core.user.auth.service.impl;
 
 import com.lingobot.core.user.auth.dto.SendVerificationCodeRequest;
 import com.lingobot.core.user.auth.service.EmailVerificationService;
+import com.lingobot.infrastructure.common.exception.BusinessException;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -20,43 +21,73 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+/**
+ * 邮箱验证码服务实现类。
+ *
+ * 实现 EmailVerificationService 接口，提供邮箱验证码的生成、发送和验证功能。
+ * 使用 Redis 存储验证码和发送频率限制，防止验证码被滥用。
+ * 支持发送频率限制：间隔限制、窗口限制、日限制，多重防护防止恶意请求。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailVerificationServiceImpl implements EmailVerificationService {
     
+    // Redis 字符串模板，用于存储验证码和计数
     private final StringRedisTemplate redisTemplate;
+    // 邮件发送器，用于发送验证码邮件
     private final JavaMailSender mailSender;
     
+    // 管理员邮箱，从配置文件读取
     @Value("${ADMIN_EMAIL:admin@example.com}")
     private String adminEmail;
     
+    // 管理员私人邮箱，管理员登录验证码可发送到此邮箱
     @Value("${ADMIN_PERSONAL_EMAIL:}")
     private String adminPersonalEmail;
     
+    // Redis Key 前缀：注册验证码
     private static final String VERIFICATION_CODE_PREFIX = "email:verify:";
+    // Redis Key 前缀：登录验证码
     private static final String LOGIN_CODE_PREFIX = "login:verify:";
+    // Redis Key 前缀：邮箱日发送次数计数
     private static final String SEND_COUNT_PREFIX = "email:send:count:";
+    // Redis Key 前缀：IP 日发送次数计数
     private static final String IP_SEND_COUNT_PREFIX = "ip:send:count:";
+    // Redis Key 前缀：邮箱窗口发送次数计数
     private static final String WINDOW_SEND_COUNT_PREFIX = "email:window:count:";
+    // Redis Key 前缀：IP 窗口发送次数计数
     private static final String IP_WINDOW_SEND_COUNT_PREFIX = "ip:window:count:";
+    // Redis Key 前缀：邮箱窗口锁定
     private static final String WINDOW_LOCK_PREFIX = "email:window:lock:";
+    // Redis Key 前缀：IP 窗口锁定
     private static final String IP_WINDOW_LOCK_PREFIX = "ip:window:lock:";
+    // Redis Key 前缀：邮箱日锁定
     private static final String LOCK_PREFIX = "email:lock:";
+    // Redis Key 前缀：IP 日锁定
     private static final String IP_LOCK_PREFIX = "ip:lock:";
+    // Redis Key 前缀：上次发送时间
     private static final String LAST_SEND_PREFIX = "email:lastsend:";
     
+    // 验证码有效期（分钟）
     private static final long CODE_EXPIRE_MINUTES = 5;
+    // 发送间隔限制（秒）
     private static final long SEND_INTERVAL_SECONDS = 60;
+    // 窗口内最大发送次数
     private static final int MAX_SEND_PER_WINDOW = 5;
+    // 窗口时长（分钟）
     private static final long WINDOW_DURATION_MINUTES = 10;
+    // 每日最大发送次数
     private static final int MAX_SEND_PER_DAY = 15;
+    // 日锁定时长（小时）
     private static final long LOCK_DURATION_HOURS = 24;
     
+    // 邮箱格式正则表达式
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
             "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$"
     );
     
+    // 发送注册用邮箱验证码：检查锁定 → 检查间隔 → 检查频率限制 → 生成并发送验证码
     @Override
     public void sendVerificationCode(SendVerificationCodeRequest request, String clientIp) {
         String email = request.getEmail();
@@ -81,7 +112,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             log.info("验证码已发送到邮箱: {}, IP: {}", email, clientIp);
         } catch (MessagingException e) {
             log.error("发送邮件失败: {}", e.getMessage());
-            throw new RuntimeException("发送验证码失败，请稍后重试");
+            throw BusinessException.badRequest("发送验证码失败，请稍后重试");
         }
         
         updateLastSendTime(email);
@@ -90,6 +121,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         log.info("验证码有效期: {}分钟", CODE_EXPIRE_MINUTES);
     }
     
+    // 检查邮箱和 IP 的锁定状态（日锁定和窗口锁定）
     private void checkLockStatus(String email, String clientIp) {
         String emailLockKey = LOCK_PREFIX + email;
         Boolean emailLocked = redisTemplate.hasKey(emailLockKey);
@@ -118,6 +150,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         checkWindowLockStatus(email, clientIp);
     }
     
+    // 检查邮箱和 IP 的窗口锁定状态
     private void checkWindowLockStatus(String email, String clientIp) {
         String emailWindowLockKey = WINDOW_LOCK_PREFIX + email;
         Boolean emailWindowLocked = redisTemplate.hasKey(emailWindowLockKey);
@@ -144,6 +177,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
     }
     
+    // 检查发送间隔，防止发送过于频繁
     private void checkSendInterval(String email) {
         String lastSendKey = LAST_SEND_PREFIX + email;
         String lastSendTimeStr = redisTemplate.opsForValue().get(lastSendKey);
@@ -162,6 +196,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
     }
     
+    // 增加发送计数并检查是否超过频率限制（窗口限制和日限制）
     private void incrementSendCountAndCheckLimit(String email, String clientIp) {
         Long emailWindowCount = incrementWindowCount(email, null);
         if (emailWindowCount != null && emailWindowCount > MAX_SEND_PER_WINDOW) {
@@ -204,6 +239,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
     }
     
+    // 增加窗口发送计数，首次计数时设置过期时间
     private Long incrementWindowCount(String email, String clientIp) {
         if (email != null) {
             String windowCountKey = WINDOW_SEND_COUNT_PREFIX + email;
@@ -223,6 +259,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         return null;
     }
     
+    // 增加日发送计数，首次计数时设置过期时间
     private Long incrementDayCount(String email, String clientIp) {
         if (email != null) {
             String dayCountKey = SEND_COUNT_PREFIX + email;
@@ -242,6 +279,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         return null;
     }
     
+    // 锁定邮箱或 IP 一段时间（窗口锁定）
     private void lockWindow(String email, String clientIp) {
         if (email != null) {
             String lockKey = WINDOW_LOCK_PREFIX + email;
@@ -253,6 +291,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
     }
     
+    // 锁定邮箱或 IP 一天（日限制锁定）
     private void lockDay(String email, String clientIp) {
         if (email != null) {
             String lockKey = LOCK_PREFIX + email;
@@ -264,6 +303,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
     }
     
+    // 更新上次发送时间，用于间隔限制检查
     private void updateLastSendTime(String email) {
         String lastSendKey = LAST_SEND_PREFIX + email;
         redisTemplate.opsForValue().set(
@@ -274,6 +314,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         );
     }
     
+    // 验证注册验证码是否正确，验证成功后删除验证码
     @Override
     public boolean verifyCode(String email, String code) {
         if (!isValidEmail(email)) {
@@ -296,6 +337,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         return isValid;
     }
     
+    // 发送登录用邮箱验证码：检查锁定 → 检查间隔 → 检查频率限制 → 生成并发送验证码
     @Override
     public void sendLoginVerificationCode(String email, String clientIp) {
         if (!isValidEmail(email)) {
@@ -319,7 +361,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             log.info("登录验证码已发送到邮箱: {}, IP: {}", targetEmail, clientIp);
         } catch (MessagingException e) {
             log.error("发送登录验证码失败: {}", e.getMessage());
-            throw new RuntimeException("发送验证码失败，请稍后重试");
+            throw BusinessException.badRequest("发送验证码失败，请稍后重试");
         }
         
         updateLastSendTime(email);
@@ -328,6 +370,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         log.info("验证码有效期: {}分钟", CODE_EXPIRE_MINUTES);
     }
     
+    // 确定验证码实际发送的邮箱：管理员登录时可发送到私人邮箱
     private String determineTargetEmail(String loginEmail) {
         if (adminEmail != null && adminEmail.equalsIgnoreCase(loginEmail)) {
             if (adminPersonalEmail != null && !adminPersonalEmail.isEmpty() && isValidEmail(adminPersonalEmail)) {
@@ -338,6 +381,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         return loginEmail;
     }
     
+    // 验证登录验证码是否正确，验证成功后删除验证码
     @Override
     public boolean verifyLoginCode(String email, String code) {
         if (!isValidEmail(email)) {
@@ -360,6 +404,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         return isValid;
     }
     
+    // 发送登录验证码邮件（HTML 格式）
     private void sendLoginEmail(String to, String code) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -397,16 +442,19 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         mailSender.send(message);
     }
     
+    // 验证邮箱格式是否合法
     private boolean isValidEmail(String email) {
         return email != null && EMAIL_PATTERN.matcher(email).matches();
     }
     
+    // 生成 6 位随机数字验证码
     private String generateVerificationCode() {
         Random random = new Random();
         int code = 100000 + random.nextInt(900000);
         return String.valueOf(code);
     }
     
+    // 发送注册验证码邮件（HTML 格式）
     private void sendEmail(String to, String code) throws MessagingException {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -444,6 +492,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         mailSender.send(message);
     }
     
+    // 获取所有被限制发送验证码的邮箱列表（包括日锁定和窗口锁定）
     @Override
     public List<EmailVerificationService.LockedEmailInfo> getAllLockedEmails() {
         List<EmailVerificationService.LockedEmailInfo> lockedEmails = new ArrayList<>();
@@ -477,6 +526,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         return lockedEmails;
     }
     
+    // 获取所有被限制发送验证码的 IP 列表（包括日锁定和窗口锁定）
     @Override
     public List<EmailVerificationService.LockedIpInfo> getAllLockedIps() {
         List<EmailVerificationService.LockedIpInfo> lockedIps = new ArrayList<>();
@@ -510,6 +560,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         return lockedIps;
     }
     
+    // 解锁指定邮箱：清除所有锁定状态和计数
     @Override
     public void unlockEmail(String email) {
         try {
@@ -524,6 +575,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
     }
     
+    // 解锁指定 IP：清除所有锁定状态和计数
     @Override
     public void unlockEmailCodeIp(String ipAddress) {
         try {
@@ -537,6 +589,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
         }
     }
     
+    // 构建被锁定邮箱信息 DTO
     private EmailVerificationService.LockedEmailInfo buildLockedEmailInfo(String email, Long ttl, String lockType) {
         LocalDateTime now = LocalDateTime.now();
         long totalSeconds = lockType.equals("DAY_LOCK") ? LOCK_DURATION_HOURS * 3600 : WINDOW_DURATION_MINUTES * 60;
@@ -550,6 +603,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
                 .build();
     }
     
+    // 构建被锁定 IP 信息 DTO
     private EmailVerificationService.LockedIpInfo buildLockedIpInfo(String ipAddress, Long ttl, String lockType) {
         LocalDateTime now = LocalDateTime.now();
         long totalSeconds = lockType.equals("DAY_LOCK") ? LOCK_DURATION_HOURS * 3600 : WINDOW_DURATION_MINUTES * 60;

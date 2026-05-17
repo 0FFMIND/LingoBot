@@ -1,5 +1,6 @@
 package com.lingobot.learning.memory.vocabulary;
 
+import com.lingobot.learning.util.UserInputSanitizer;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -239,7 +240,7 @@ public class VocabularyMemoryPromptBuilder {
 
                 if (hasMeaningCheck) {
                     if (card.getMeaningCheckUserAnswer() != null && !card.getMeaningCheckUserAnswer().isEmpty()) {
-                        sb.append("  释义检查-用户答案: ").append(card.getMeaningCheckUserAnswer()).append("\n");
+                        sb.append("  释义检查-用户答案: ").append(UserInputSanitizer.markAsUntrusted(card.getMeaningCheckUserAnswer())).append("\n");
                     }
                     if (card.getMeaningCheckAiFeedback() != null && !card.getMeaningCheckAiFeedback().isEmpty()) {
                         sb.append("  释义检查-AI反馈: ").append(card.getMeaningCheckAiFeedback()).append("\n");
@@ -248,7 +249,7 @@ public class VocabularyMemoryPromptBuilder {
 
                 if (hasSentenceAnalysis) {
                     if (card.getSentenceAnalysisUserAnswer() != null && !card.getSentenceAnalysisUserAnswer().isEmpty()) {
-                        sb.append("  句子分析-用户答案: ").append(card.getSentenceAnalysisUserAnswer()).append("\n");
+                        sb.append("  句子分析-用户答案: ").append(UserInputSanitizer.markAsUntrusted(card.getSentenceAnalysisUserAnswer())).append("\n");
                     }
                     if (card.getSentenceAnalysisAiFeedback() != null && !card.getSentenceAnalysisAiFeedback().isEmpty()) {
                         sb.append("  句子分析-AI反馈: ").append(card.getSentenceAnalysisAiFeedback()).append("\n");
@@ -257,7 +258,7 @@ public class VocabularyMemoryPromptBuilder {
 
                 if (!hasMeaningCheck && !hasSentenceAnalysis) {
                     if (card.getUserAnswer() != null && !card.getUserAnswer().isEmpty()) {
-                        sb.append("  用户答案: ").append(card.getUserAnswer()).append("\n");
+                        sb.append("  用户答案: ").append(UserInputSanitizer.markAsUntrusted(card.getUserAnswer())).append("\n");
                     }
                     if (card.getAiFeedback() != null && !card.getAiFeedback().isEmpty()) {
                         sb.append("  AI反馈: ").append(card.getAiFeedback()).append("\n");
@@ -344,7 +345,7 @@ public class VocabularyMemoryPromptBuilder {
 
                     if (hasMeaningCheck) {
                         if (record.getMeaningCheckUserAnswer() != null && !record.getMeaningCheckUserAnswer().isEmpty()) {
-                            sb.append("\n  释义检查-用户答案: ").append(record.getMeaningCheckUserAnswer());
+                            sb.append("\n  释义检查-用户答案: ").append(UserInputSanitizer.markAsUntrusted(record.getMeaningCheckUserAnswer()));
                         }
                         if (record.getMeaningCheckAiFeedback() != null && !record.getMeaningCheckAiFeedback().isEmpty()) {
                             sb.append("\n  释义检查-AI反馈: ").append(record.getMeaningCheckAiFeedback());
@@ -353,7 +354,7 @@ public class VocabularyMemoryPromptBuilder {
 
                     if (hasSentenceAnalysis) {
                         if (record.getSentenceAnalysisUserAnswer() != null && !record.getSentenceAnalysisUserAnswer().isEmpty()) {
-                            sb.append("\n  句子分析-用户答案: ").append(record.getSentenceAnalysisUserAnswer());
+                            sb.append("\n  句子分析-用户答案: ").append(UserInputSanitizer.markAsUntrusted(record.getSentenceAnalysisUserAnswer()));
                         }
                         if (record.getSentenceAnalysisAiFeedback() != null && !record.getSentenceAnalysisAiFeedback().isEmpty()) {
                             sb.append("\n  句子分析-AI反馈: ").append(record.getSentenceAnalysisAiFeedback());
@@ -362,7 +363,7 @@ public class VocabularyMemoryPromptBuilder {
 
                     if (!hasMeaningCheck && !hasSentenceAnalysis) {
                         if (record.getUserAnswer() != null && !record.getUserAnswer().isEmpty()) {
-                            sb.append("\n  用户答案: ").append(record.getUserAnswer());
+                            sb.append("\n  用户答案: ").append(UserInputSanitizer.markAsUntrusted(record.getUserAnswer()));
                         }
                         if (record.getAiFeedback() != null && !record.getAiFeedback().isEmpty()) {
                             sb.append("\n  AI反馈: ").append(record.getAiFeedback());

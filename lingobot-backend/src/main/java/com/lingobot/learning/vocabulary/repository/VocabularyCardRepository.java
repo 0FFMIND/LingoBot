@@ -179,6 +179,10 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
     @Query("SELECT COUNT(v) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.isRevealed = false")
     long countHiddenCardsByConversationId(@Param("conversationId") Long conversationId);
 
+    /** 统计对话中已完成学习的有效词汇卡数量 */
+    @Query("SELECT COUNT(v) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.isCompleted = true")
+    long countCompletedCardsByConversationId(@Param("conversationId") Long conversationId);
+
     /** 更新卡片为已揭露状态 */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional(propagation = Propagation.REQUIRES_NEW)

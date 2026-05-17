@@ -33,6 +33,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
   const maxTokens = useTokenUsageStore((state) => state.maxTokensPerConversation);
   const compactResult = useChatStore((state) => state.compactResult[publicId]);
   const clearCompactResult = useChatStore((state) => state.clearCompactResult);
+  const clearCompactCooldown = useChatStore((state) => state.clearCompactCooldown);
   const activeStatus = freshStatus || status;
 
   const getCombinedUsage = (): {
@@ -40,6 +41,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
     maxTokens: number;
     tokenRatio: number;
     wordCardsTotal: number;
+    wordCardsCompleted: number;
     hasLocalData: boolean;
   } => {
     const backendTokens = activeStatus.currentTokens ?? 0;
@@ -51,12 +53,14 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
     const effectiveMax = backendMax > 0 ? backendMax : maxTokens;
     const tokenRatio = Math.min(currentTokens / effectiveMax, 1);
     const wordCardsTotal = Math.max(activeStatus.wordCardsTotal ?? 0, localWordCards);
+    const wordCardsCompleted = activeStatus.wordCardsCompleted ?? 0;
 
     return {
       currentTokens,
       maxTokens: effectiveMax,
       tokenRatio,
       wordCardsTotal,
+      wordCardsCompleted,
       hasLocalData: localTokens > 0 || localWordCards > 0,
     };
   };
@@ -203,9 +207,9 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', padding: '2px 0' }}>
-              <span>单词卡片:</span>
+              <span>已学习单词卡片:</span>
               <span style={{ fontWeight: '500' }}>
-                {combined.wordCardsTotal} 张
+                {combined.wordCardsCompleted} 张
               </span>
             </div>
             {localUsage && localUsage.totalTokens > 0 && (
@@ -275,7 +279,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
           {compactResult && !isCurrentlyCompacting && (
             <div
               style={{
-                padding: '8px 10px',
+                padding: '10px',
                 background: compactResult.success ? '#d4edda' : '#f8d7da',
                 borderRadius: '6px',
                 marginBottom: '10px',
@@ -285,8 +289,8 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '16px' }}>
+                  <div style={{ fontWeight: '600', lineHeight: '1.4' }}>
                     {compactResult.success ? '✅' : '❌'} {compactResult.message}
                   </div>
                   {compactResult.success && compactResult.savedTokens !== undefined && (
@@ -329,6 +333,7 @@ const ContextStatusTooltip: React.FC<ContextStatusTooltipProps> = ({
                   onClick={(e) => {
                     e.stopPropagation();
                     clearCompactResult(publicId);
+                    clearCompactCooldown(publicId);
                   }}
                   style={{
                     background: 'none',

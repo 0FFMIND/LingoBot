@@ -48,14 +48,19 @@ public interface BalanceService {
     // 给当前登录用户充值指定金额
     BigDecimal addCurrentUserBalance(BigDecimal amount);
 
+    // 获取当前登录用户的交易记录（分页）
     Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable);
 
+    // 获取当前登录用户指定时间范围内的交易记录（分页）
     Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable, java.time.LocalDateTime startDate, java.time.LocalDateTime endDate);
 
+    // 获取当前登录用户的交易记录，支持按类型（收入/支出）和时间范围筛选（分页）
     Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable, String type, java.time.LocalDateTime startDate, java.time.LocalDateTime endDate);
 
+    // 获取当前登录用户的交易汇总统计
     TransactionSummaryDTO getCurrentUserTransactionSummary(java.time.LocalDateTime startDate, java.time.LocalDateTime endDate);
 
+    // 获取指定用户的可用余额
     BigDecimal getUserBalance(Long userId);
 
     // 获取指定用户的冻结余额

@@ -96,6 +96,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getErrorCode(), ex.getMessage()));
     }
 
+    // 媒体相关异常（TTS、音频处理等）→ 返回 HTTP + ErrorCode + 异常消息
+    @ExceptionHandler(MediaException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMediaException(MediaException ex) {
+        log.error("媒体异常: {}", ex.getMessage());
+        return ResponseEntity.status(extractHttpStatus(ex.getErrorCode()))
+                .body(ApiResponse.error(ex.getErrorCode(), ex.getMessage()));
+    }
+
     // 未被上面规则覆盖的 RuntimeException 兜底 → 500
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex) {

@@ -6,7 +6,7 @@ export interface UseAuthResult {
   isAuthenticated: boolean;
   currentUser: UserDTO | null;
   initializing: boolean;
-  login: typeof authService.login;
+  loginWithCode: typeof authService.loginWithCode;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -117,7 +117,7 @@ export function useAuth(): UseAuthResult {
     isAuthenticated,
     currentUser,
     initializing,
-    login: authService.login,
+    loginWithCode: authService.loginWithCode,
     logout,
     refreshUser,
   };

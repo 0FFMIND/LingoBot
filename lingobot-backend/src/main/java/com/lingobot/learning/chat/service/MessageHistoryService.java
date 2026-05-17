@@ -1,11 +1,10 @@
 package com.lingobot.learning.chat.service;
 
 import com.lingobot.core.conversation.dto.MessageDTO;
-import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.entity.Message;
-import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.core.conversation.repository.MessageRepository;
-import com.lingobot.infrastructure.common.exception.ChatException;
+import com.lingobot.learning.conversation.entity.ConversationLearningData;
+import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
 import com.lingobot.learning.mode.service.SystemPromptService;
 import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
@@ -26,9 +25,8 @@ public class MessageHistoryService {
     private final MessageRepository messageRepository;
     private final SystemPromptService systemPromptService;
     private final VocabularyCardRepository vocabularyCardRepository;
-    private final ConversationRepository conversationRepository;
+    private final ConversationLearningDataRepository learningDataRepository;
     
-    private static final int MAX_HISTORY_MESSAGES = 20;
     private static final int RECENT_CARDS_TO_KEEP_IN_DETAIL = 3;
     
     public List<OpenAiChatMessage> buildConversationHistory(Long conversationId) {
@@ -95,14 +93,21 @@ public class MessageHistoryService {
                     log.info("已添加词汇历史信息到 System Prompt，conversationId: {}", conversationId);
                 }
             }
+            
+            if (conversationId != null) {
+                String compactedSummary = getCompactedSummary(conversationId);
+                if (compactedSummary != null && !compactedSummary.isEmpty()) {
+                    systemPrompt = systemPrompt + "\n\n## 历史对话摘要\n" + compactedSummary;
+                    log.info("已添加压缩对话摘要到 System Prompt，conversationId: {}", conversationId);
+                }
+            }
+            
             messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
             log.info("已添加 System Prompt 用于模式: {}, Category: {}, Difficulty: {}",
                     learningMode, vocabularyCategory, vocabularyDifficulty);
         }
         
-        int startIndex = Math.max(0, endIndex - MAX_HISTORY_MESSAGES);
-        
-        for (int i = startIndex; i < endIndex; i++) {
+        for (int i = 0; i < endIndex; i++) {
             Message msg = allMessages.get(i);
             messages.add(OpenAiChatMessage.builder()
                     .role(msg.getRole())
@@ -110,16 +115,22 @@ public class MessageHistoryService {
                     .build());
         }
         
-        log.info("构建对话历史，共 {} 条消息（包含 System Prompt，从 {} 到 {}）", messages.size(), startIndex, endIndex);
+        log.info("构建对话历史，共 {} 条消息（包含 System Prompt）", messages.size());
         
         return messages;
     }
     
+    private String getCompactedSummary(Long conversationId) {
+        return learningDataRepository.findByConversationId(conversationId)
+                .map(ConversationLearningData::getCompactedSummary)
+                .orElse(null);
+    }
+
     private String buildVocabularyHistoryForPrompt(Long conversationId) {
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> ChatException.badRequest("对话不存在: " + conversationId));
-        
-        String compactedSummary = conversation.getCompactedSummary();
+        ConversationLearningData learningData = learningDataRepository.findByConversationId(conversationId)
+                .orElse(null);
+
+        String compactedSummary = learningData != null ? learningData.getCompactedSummary() : null;
         
         List<VocabularyCard> allCards = vocabularyCardRepository.findByConversationIdOrderByPositionAsc(conversationId);
         

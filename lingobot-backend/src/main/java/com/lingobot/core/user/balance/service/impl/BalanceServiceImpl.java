@@ -288,6 +288,7 @@ public class BalanceServiceImpl implements BalanceService {
         return addBalanceWithLog(user.getId(), amount, "充值");
     }
 
+    // 获取当前登录用户的交易记录（分页），按创建时间倒序
     @Override
     public Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable) {
         User user = getCurrentUser();
@@ -295,6 +296,7 @@ public class BalanceServiceImpl implements BalanceService {
                 .map(BalanceTransactionDTO::fromEntity);
     }
 
+    // 获取当前登录用户指定时间范围内的交易记录（分页）
     @Override
     public Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable, LocalDateTime startDate, LocalDateTime endDate) {
         User user = getCurrentUser();
@@ -302,6 +304,7 @@ public class BalanceServiceImpl implements BalanceService {
                 .map(BalanceTransactionDTO::fromEntity);
     }
 
+    // 获取当前登录用户的交易记录，支持按类型（收入/支出）和时间范围筛选（分页）
     @Override
     public Page<BalanceTransactionDTO> getCurrentUserTransactions(Pageable pageable, String type, LocalDateTime startDate, LocalDateTime endDate) {
         User user = getCurrentUser();
@@ -326,6 +329,7 @@ public class BalanceServiceImpl implements BalanceService {
                 : getCurrentUserTransactions(pageable);
     }
 
+    // 获取当前登录用户的交易汇总统计（总收入、总支出、净变动、记录数）
     @Override
     public TransactionSummaryDTO getCurrentUserTransactionSummary(LocalDateTime startDate, LocalDateTime endDate) {
         User user = getCurrentUser();

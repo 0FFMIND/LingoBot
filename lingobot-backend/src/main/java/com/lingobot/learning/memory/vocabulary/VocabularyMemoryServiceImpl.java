@@ -2,8 +2,8 @@ package com.lingobot.learning.memory.vocabulary;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lingobot.core.conversation.entity.Conversation;
-import com.lingobot.core.conversation.repository.ConversationRepository;
+import com.lingobot.learning.conversation.entity.ConversationLearningData;
+import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
 import com.lingobot.learning.vocabulary.entity.UserVocabulary;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.UserVocabularyRepository;
@@ -29,7 +29,7 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
 
     private final UserVocabularyRepository userVocabularyRepository;
     private final VocabularyCardRepository vocabularyCardRepository;
-    private final ConversationRepository conversationRepository;
+    private final ConversationLearningDataRepository learningDataRepository;
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -50,8 +50,26 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
     public VocabularyMemoryContext retrieveMemory(Long userId, Long conversationId,
                                                    VocabularyGenerationIntent intent,
                                                    VocabularyGenerationConstraints constraints) {
-        log.debug("Retrieving vocabulary memory for userId={}, conversationId={}, intent={}",
+        return retrieveMemoryWithLimits(userId, conversationId, intent,
+                MAX_L1_ITEMS, MAX_L1_ITEMS, MAX_L1_ITEMS,
+                MAX_MASTERED_WORDS, MAX_REVIEWING_WORDS, MAX_LEARNING_WORDS, MAX_WEAK_WORDS);
+    }
+
+    @Override
+    public VocabularyMemoryContext retrieveMemoryWithLimits(Long userId, Long conversationId,
+                                                             VocabularyGenerationIntent intent,
+                                                             int l1RecentLimit,
+                                                             int l1WrongLimit,
+                                                             int l1RegeneratedLimit,
+                                                             int l2MasteredLimit,
+                                                             int l2ReviewingLimit,
+                                                             int l2LearningLimit,
+                                                             int l2WeakLimit) {
+        log.debug("Retrieving vocabulary memory with limits for userId={}, conversationId={}, intent={}",
                 userId, conversationId, intent);
+        log.debug("Limits: l1Recent={}, l1Wrong={}, l1Regenerated={}, l2Mastered={}, l2Reviewing={}, l2Learning={}, l2Weak={}",
+                l1RecentLimit, l1WrongLimit, l1RegeneratedLimit,
+                l2MasteredLimit, l2ReviewingLimit, l2LearningLimit, l2WeakLimit);
 
         VocabularyMemoryContext.VocabularyMemoryContextBuilder builder = VocabularyMemoryContext.builder();
 
@@ -87,9 +105,9 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
         builder.excludedWords(excludedWords);
 
         if (userId != null) {
-            List<VocabularyMemoryRecord> l1Recent = getL1Records(L1_RECENT_PREFIX + userId, RECENT_TTL_DAYS);
-            List<VocabularyMemoryRecord> l1Wrong = getL1Records(L1_WRONG_PREFIX + userId, WRONG_TTL_DAYS);
-            List<VocabularyMemoryRecord> l1Regenerated = getL1Records(L1_REGENERATED_PREFIX + userId, REGENERATED_TTL_DAYS);
+            List<VocabularyMemoryRecord> l1Recent = retrieveL1Recent(userId, l1RecentLimit);
+            List<VocabularyMemoryRecord> l1Wrong = retrieveL1Wrong(userId, l1WrongLimit);
+            List<VocabularyMemoryRecord> l1Regenerated = retrieveL1Regenerated(userId, l1RegeneratedLimit);
 
             builder.l1RecentEmpty(l1Recent.isEmpty());
             builder.l1WrongEmpty(l1Wrong.isEmpty());
@@ -147,7 +165,6 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
                         }
                         record.getSourceTiers().add(VocabularyMemoryTier.L1_RECENT);
                     })
-                    .limit(MAX_L1_ITEMS)
                     .collect(Collectors.toList());
 
             List<VocabularyMemoryRecord> filteredWrong = l1Wrong.stream()
@@ -158,7 +175,6 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
                         }
                         record.getSourceTiers().add(VocabularyMemoryTier.L1_WRONG);
                     })
-                    .limit(MAX_L1_ITEMS)
                     .collect(Collectors.toList());
 
             List<VocabularyMemoryRecord> filteredRegenerated = l1Regenerated.stream()
@@ -169,54 +185,25 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
                         }
                         record.getSourceTiers().add(VocabularyMemoryTier.L1_REGENERATED);
                     })
-                    .limit(MAX_L1_ITEMS)
                     .collect(Collectors.toList());
 
             builder.recentWords(filteredRecent);
             builder.wrongWords(filteredWrong);
             builder.regeneratedWords(filteredRegenerated);
 
-            List<UserVocabulary> userVocabularies = userVocabularyRepository.findByUserId(userId);
+            List<VocabularyMemoryRecord> masteredWords = retrieveL2Mastered(userId, l2MasteredLimit);
+            List<VocabularyMemoryRecord> reviewingWords = retrieveL2Reviewing(userId, l2ReviewingLimit);
+            List<VocabularyMemoryRecord> learningWords = retrieveL2Learning(userId, l2LearningLimit);
+            List<VocabularyMemoryRecord> weakWords = retrieveL2Weak(userId, l2WeakLimit);
 
-            List<VocabularyMemoryRecord> masteredWords = getMasteredWords(userVocabularies);
-            masteredWords.forEach(record -> {
-                if (record.getSourceTiers() == null) {
-                    record.setSourceTiers(new ArrayList<>());
-                }
-                record.getSourceTiers().add(VocabularyMemoryTier.L2_MASTERED);
-            });
             builder.masteredWords(masteredWords);
-
-            List<VocabularyMemoryRecord> reviewingWords = getReviewingWords(userVocabularies);
-            reviewingWords.forEach(record -> {
-                if (record.getSourceTiers() == null) {
-                    record.setSourceTiers(new ArrayList<>());
-                }
-                record.getSourceTiers().add(VocabularyMemoryTier.L2_REVIEWING);
-            });
             builder.reviewingWords(reviewingWords);
-
-            List<VocabularyMemoryRecord> learningWords = getLearningWords(userVocabularies);
-            learningWords.forEach(record -> {
-                if (record.getSourceTiers() == null) {
-                    record.setSourceTiers(new ArrayList<>());
-                }
-                record.getSourceTiers().add(VocabularyMemoryTier.L2_LEARNING);
-            });
             builder.learningWords(learningWords);
-
-            List<VocabularyMemoryRecord> weakWords = getWeakWords(userVocabularies);
-            weakWords.forEach(record -> {
-                if (record.getSourceTiers() == null) {
-                    record.setSourceTiers(new ArrayList<>());
-                }
-                record.getSourceTiers().add(VocabularyMemoryTier.L2_WEAK);
-            });
             builder.weakWords(weakWords);
         }
 
         VocabularyMemoryContext context = builder.build();
-        log.debug("Retrieved memory context: totalItems={}, conversation={}, recent={}, wrong={}, regenerated={}, mastered={}, reviewing={}, learning={}, weak={}, excluded={}, merged={}",
+        log.debug("Retrieved memory context with limits: totalItems={}, conversation={}, recent={}, wrong={}, regenerated={}, mastered={}, reviewing={}, learning={}, weak={}",
                 context.totalMemoryItems(),
                 context.getConversationRecentCards().size(),
                 context.getRecentWords().size(),
@@ -225,11 +212,86 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
                 context.getMasteredWords().size(),
                 context.getReviewingWords().size(),
                 context.getLearningWords().size(),
-                context.getWeakWords().size(),
-                context.getExcludedWords().size(),
-                context.getMergedL1ToConversationWords().size());
+                context.getWeakWords().size());
 
         return context;
+    }
+
+    @Override
+    public List<VocabularyMemoryRecord> retrieveL1Recent(Long userId, int limit) {
+        if (userId == null) return new ArrayList<>();
+        List<VocabularyMemoryRecord> records = getL1Records(L1_RECENT_PREFIX + userId, RECENT_TTL_DAYS);
+        return records.stream().limit(limit).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<VocabularyMemoryRecord> retrieveL1Wrong(Long userId, int limit) {
+        if (userId == null) return new ArrayList<>();
+        List<VocabularyMemoryRecord> records = getL1Records(L1_WRONG_PREFIX + userId, WRONG_TTL_DAYS);
+        return records.stream().limit(limit).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<VocabularyMemoryRecord> retrieveL1Regenerated(Long userId, int limit) {
+        if (userId == null) return new ArrayList<>();
+        List<VocabularyMemoryRecord> records = getL1Records(L1_REGENERATED_PREFIX + userId, REGENERATED_TTL_DAYS);
+        return records.stream().limit(limit).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<VocabularyMemoryRecord> retrieveL2Mastered(Long userId, int limit) {
+        if (userId == null) return new ArrayList<>();
+        List<UserVocabulary> userVocabularies = userVocabularyRepository.findByUserId(userId);
+        List<VocabularyMemoryRecord> records = getMasteredWords(userVocabularies);
+        return records.stream()
+                .peek(record -> {
+                    if (record.getSourceTiers() == null) record.setSourceTiers(new ArrayList<>());
+                    record.getSourceTiers().add(VocabularyMemoryTier.L2_MASTERED);
+                })
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<VocabularyMemoryRecord> retrieveL2Reviewing(Long userId, int limit) {
+        if (userId == null) return new ArrayList<>();
+        List<UserVocabulary> userVocabularies = userVocabularyRepository.findByUserId(userId);
+        List<VocabularyMemoryRecord> records = getReviewingWords(userVocabularies);
+        return records.stream()
+                .peek(record -> {
+                    if (record.getSourceTiers() == null) record.setSourceTiers(new ArrayList<>());
+                    record.getSourceTiers().add(VocabularyMemoryTier.L2_REVIEWING);
+                })
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<VocabularyMemoryRecord> retrieveL2Learning(Long userId, int limit) {
+        if (userId == null) return new ArrayList<>();
+        List<UserVocabulary> userVocabularies = userVocabularyRepository.findByUserId(userId);
+        List<VocabularyMemoryRecord> records = getLearningWords(userVocabularies);
+        return records.stream()
+                .peek(record -> {
+                    if (record.getSourceTiers() == null) record.setSourceTiers(new ArrayList<>());
+                    record.getSourceTiers().add(VocabularyMemoryTier.L2_LEARNING);
+                })
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<VocabularyMemoryRecord> retrieveL2Weak(Long userId, int limit) {
+        if (userId == null) return new ArrayList<>();
+        List<UserVocabulary> userVocabularies = userVocabularyRepository.findByUserId(userId);
+        List<VocabularyMemoryRecord> records = getWeakWords(userVocabularies);
+        return records.stream()
+                .peek(record -> {
+                    if (record.getSourceTiers() == null) record.setSourceTiers(new ArrayList<>());
+                    record.getSourceTiers().add(VocabularyMemoryTier.L2_WEAK);
+                })
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -280,22 +342,22 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
         if (conversationId == null) {
             return null;
         }
-        return conversationRepository.findById(conversationId)
-                .map(conversation -> VocabularyCompactWatermark.builder()
-                        .lastCompactedCardId(conversation.getVocabularyLastCompactedCardId())
-                        .lastCompactedPosition(conversation.getVocabularyLastCompactedPosition())
-                        .lastCompactedAt(conversation.getVocabularyLastCompactedAt())
-                        .compactedCardCount(conversation.getVocabularyCompactedCardCount())
+        return learningDataRepository.findByConversationId(conversationId)
+                .map(learningData -> VocabularyCompactWatermark.builder()
+                        .lastCompactedCardId(learningData.getVocabularyLastCompactedCardId())
+                        .lastCompactedPosition(learningData.getVocabularyLastCompactedPosition())
+                        .lastCompactedAt(learningData.getVocabularyLastCompactedAt())
+                        .compactedCardCount(learningData.getVocabularyCompactedCardCount())
                         .build())
                 .orElse(null);
     }
-    
+
     private String getVocabularyCompactedSummary(Long conversationId) {
         if (conversationId == null) {
             return null;
         }
-        return conversationRepository.findById(conversationId)
-                .map(Conversation::getVocabularyCompactedSummary)
+        return learningDataRepository.findByConversationId(conversationId)
+                .map(ConversationLearningData::getVocabularyCompactedSummary)
                 .orElse(null);
     }
 
@@ -580,44 +642,45 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
             return null;
         }
         
-        return conversationRepository.findById(conversationId)
-                .map(conversation -> {
-                    List<VocabularyCard> allCards = vocabularyCardRepository
-                            .findByConversationIdOrderByPositionAsc(conversationId);
-                    
-                    if (allCards.isEmpty()) {
-                        return null;
-                    }
-                    
-                    VocabularyCard lastCard = allCards.get(allCards.size() - 1);
-                    LocalDateTime now = LocalDateTime.now();
-                    
-                    int currentCompactedCount = conversation.getVocabularyCompactedCardCount() != null 
-                            ? conversation.getVocabularyCompactedCardCount() : 0;
-                    int newlyCompactedCount = (int) allCards.stream()
-                            .filter(card -> conversation.getVocabularyLastCompactedPosition() == null 
-                                    || card.getPosition() > conversation.getVocabularyLastCompactedPosition())
-                            .count();
-                    
-                    conversation.setVocabularyCompactedSummary(compactedSummary);
-                    conversation.setVocabularyLastCompactedCardId(lastCard.getId());
-                    conversation.setVocabularyLastCompactedPosition(lastCard.getPosition());
-                    conversation.setVocabularyLastCompactedAt(now);
-                    conversation.setVocabularyCompactedCardCount(currentCompactedCount + newlyCompactedCount);
-                    
-                    conversationRepository.save(conversation);
-                    
-                    log.info("Compacted vocabulary history for conversationId={}, lastCompactedPosition={}, compactedCardCount={}",
-                            conversationId, lastCard.getPosition(), currentCompactedCount + newlyCompactedCount);
-                    
-                    return VocabularyCompactWatermark.builder()
-                            .lastCompactedCardId(lastCard.getId())
-                            .lastCompactedPosition(lastCard.getPosition())
-                            .lastCompactedAt(now)
-                            .compactedCardCount(currentCompactedCount + newlyCompactedCount)
-                            .build();
-                })
-                .orElse(null);
+        ConversationLearningData learningData = learningDataRepository.findByConversationId(conversationId)
+                .orElseGet(() -> ConversationLearningData.builder()
+                        .conversationId(conversationId)
+                        .build());
+
+        List<VocabularyCard> allCards = vocabularyCardRepository
+                .findByConversationIdOrderByPositionAsc(conversationId);
+
+        if (allCards.isEmpty()) {
+            return null;
+        }
+
+        VocabularyCard lastCard = allCards.get(allCards.size() - 1);
+        LocalDateTime now = LocalDateTime.now();
+
+        int currentCompactedCount = learningData.getVocabularyCompactedCardCount() != null
+                ? learningData.getVocabularyCompactedCardCount() : 0;
+        int newlyCompactedCount = (int) allCards.stream()
+                .filter(card -> learningData.getVocabularyLastCompactedPosition() == null
+                        || card.getPosition() > learningData.getVocabularyLastCompactedPosition())
+                .count();
+
+        learningData.setVocabularyCompactedSummary(compactedSummary);
+        learningData.setVocabularyLastCompactedCardId(lastCard.getId());
+        learningData.setVocabularyLastCompactedPosition(lastCard.getPosition());
+        learningData.setVocabularyLastCompactedAt(now);
+        learningData.setVocabularyCompactedCardCount(currentCompactedCount + newlyCompactedCount);
+
+        learningDataRepository.save(learningData);
+
+        log.info("Compacted vocabulary history for conversationId={}, lastCompactedPosition={}, compactedCardCount={}",
+                conversationId, lastCard.getPosition(), currentCompactedCount + newlyCompactedCount);
+
+        return VocabularyCompactWatermark.builder()
+                .lastCompactedCardId(lastCard.getId())
+                .lastCompactedPosition(lastCard.getPosition())
+                .lastCompactedAt(now)
+                .compactedCardCount(currentCompactedCount + newlyCompactedCount)
+                .build();
     }
     
     @Override

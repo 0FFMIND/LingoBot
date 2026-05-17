@@ -8,6 +8,8 @@ import com.lingobot.learning.vocabulary.dto.CreateVocabularyCardRequest;
 import com.lingobot.learning.vocabulary.dto.MeaningCheckStatusDTO;
 import com.lingobot.learning.vocabulary.dto.RegenerateCardAtPositionRequest;
 import com.lingobot.learning.vocabulary.dto.SentenceAnalysisStatusDTO;
+import com.lingobot.learning.vocabulary.dto.UpdateUserEnglishSentenceRequest;
+import com.lingobot.learning.vocabulary.dto.UpdateUserMeaningRequest;
 import com.lingobot.learning.vocabulary.dto.VocabularyBatchGenerationResult;
 import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
@@ -112,13 +114,9 @@ public class VocabularyCardController {
             @RequestParam(required = false) Integer currentPosition,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String difficulty) {
-        try {
-            Long conversationId = resolvePublicId(conversationPublicId);
-            VocabularyCardDTO card = vocabularyCardService.getNextCard(conversationId, currentPosition, category, difficulty);
-            return ResponseEntity.ok(ApiResponse.success(card));
-        } catch (Exception e) {
-            return ResponseEntity.ok(ApiResponse.success(e.getMessage(), null));
-        }
+        Long conversationId = resolvePublicId(conversationPublicId);
+        VocabularyCardDTO card = vocabularyCardService.getNextCard(conversationId, currentPosition, category, difficulty);
+        return ResponseEntity.ok(ApiResponse.success(card));
     }
 
     /**
@@ -131,13 +129,9 @@ public class VocabularyCardController {
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> getPrevCard(
             @PathVariable String conversationPublicId,
             @RequestParam(required = false) Integer currentPosition) {
-        try {
-            Long conversationId = resolvePublicId(conversationPublicId);
-            VocabularyCardDTO card = vocabularyCardService.getPrevCard(conversationId, currentPosition);
-            return ResponseEntity.ok(ApiResponse.success(card));
-        } catch (Exception e) {
-            return ResponseEntity.ok(ApiResponse.success(e.getMessage(), null));
-        }
+        Long conversationId = resolvePublicId(conversationPublicId);
+        VocabularyCardDTO card = vocabularyCardService.getPrevCard(conversationId, currentPosition);
+        return ResponseEntity.ok(ApiResponse.success(card));
     }
 
     /**
@@ -209,7 +203,7 @@ public class VocabularyCardController {
     @PutMapping("/cards/{cardId}/meaning")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> updateUserMeaning(
             @PathVariable Long cardId,
-            @RequestBody Map<String, String> request) {
+            @RequestBody UpdateUserMeaningRequest request) {
         VocabularyCardDTO card = vocabularyCardService.getCardById(cardId);
         Long conversationId = card != null ? card.getConversationId() : null;
         
@@ -218,7 +212,7 @@ public class VocabularyCardController {
         log.info("冻结点数: {}，用于释义检查", cost);
         
         try {
-            String userMeaning = request.get("userMeaning");
+            String userMeaning = request.getUserMeaning();
             VocabularyCardDTO updated = vocabularyCardService.updateUserMeaning(cardId, userMeaning);
             balanceService.confirmTransaction(transactionId);
             log.info("确认扣费: {}，释义检查成功", cost);
@@ -239,8 +233,8 @@ public class VocabularyCardController {
     @PutMapping("/cards/{cardId}/english-sentence")
     public ResponseEntity<ApiResponse<VocabularyCardDTO>> updateUserEnglishSentence(
             @PathVariable Long cardId,
-            @RequestBody Map<String, String> request) {
-        String userEnglishSentence = request.get("userEnglishSentence");
+            @RequestBody UpdateUserEnglishSentenceRequest request) {
+        String userEnglishSentence = request.getUserEnglishSentence();
         VocabularyCardDTO updated = vocabularyCardService.updateUserEnglishSentence(cardId, userEnglishSentence);
         return ResponseEntity.ok(ApiResponse.success("用户英文句子已更新", updated));
     }

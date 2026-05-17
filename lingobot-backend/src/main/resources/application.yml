@@ -80,3 +80,9 @@ llm:
 
 app:
   env: ${APP_ENV:production}
+
+compact:
+  enabled: ${COMPACT_ENABLED:true}
+  max-characters-threshold: ${COMPACT_MAX_CHARACTERS:5000}
+  min-messages-to-compact: ${COMPACT_MIN_MESSAGES:6}
+  recent-messages-to-keep: ${COMPACT_KEEP_RECENT:4}

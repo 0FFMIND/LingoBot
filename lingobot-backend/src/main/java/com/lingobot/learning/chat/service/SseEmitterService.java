@@ -169,7 +169,7 @@ public class SseEmitterService {
                         emitter.send(SseEmitter.event().data(json));
                     } catch (IOException e) {
                         log.warn("发送SSE 事件失败: {}", e.getMessage());
-                        throw new RuntimeException(e);
+                        throw ChatException.badRequest("发送SSE事件失败: " + e.getMessage());
                     }
                 })
                 .doOnComplete(() -> {
@@ -262,7 +262,7 @@ public class SseEmitterService {
                         emitter.send(SseEmitter.event().data(json));
                     } catch (IOException e) {
                         log.warn("发送SSE 事件失败: {}", e.getMessage());
-                        throw new RuntimeException(e);
+                        throw ChatException.badRequest("发送SSE事件失败: " + e.getMessage());
                     }
                 })
                 .doOnComplete(() -> {
@@ -355,7 +355,7 @@ public class SseEmitterService {
                         emitter.send(SseEmitter.event().data(json));
                     } catch (IOException e) {
                         log.warn("发送SSE 事件失败: {}", e.getMessage());
-                        throw new RuntimeException(e);
+                        throw ChatException.badRequest("发送SSE事件失败: " + e.getMessage());
                     }
                 })
                 .doOnComplete(() -> {

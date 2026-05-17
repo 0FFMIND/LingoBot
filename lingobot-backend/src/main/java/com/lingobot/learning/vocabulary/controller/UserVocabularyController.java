@@ -3,9 +3,8 @@ package com.lingobot.learning.vocabulary.controller;
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
-import com.lingobot.infrastructure.common.dto.PageResponseDTO;
+import com.lingobot.infrastructure.common.response.PageResponseDTO;
 import com.lingobot.infrastructure.common.response.ApiResponse;
-import com.lingobot.infrastructure.common.response.ErrorCode;
 import com.lingobot.learning.vocabulary.dto.AIModifyVocabularyRequest;
 import com.lingobot.learning.vocabulary.dto.UpdateUserVocabularyRequest;
 import com.lingobot.learning.vocabulary.dto.UpdateLearningStateRequest;
@@ -54,10 +53,6 @@ public class UserVocabularyController {
     @GetMapping("/stats")
     public ResponseEntity<ApiResponse<VocabularyStatsDTO>> getStats() {
         Long userId = authService.getCurrentUserId();
-        if (userId == null) {
-            return ResponseEntity.ok(ApiResponse.success(emptyStats()));
-        }
-
         VocabularyStatsDTO stats = userVocabularyService.getStats(userId);
         return ResponseEntity.ok(ApiResponse.success(stats));
     }
@@ -73,15 +68,6 @@ public class UserVocabularyController {
             @RequestParam(required = false, defaultValue = "20") int size) {
 
         Long userId = authService.getCurrentUserId();
-        if (userId == null) {
-            return ResponseEntity.ok(ApiResponse.success(PageResponseDTO.of(
-                    java.util.Collections.emptyList(),
-                    0,
-                    size,
-                    0
-            )));
-        }
-
         PageResponseDTO<UserVocabularyDTO> result = userVocabularyService.getUserVocabularies(
                 userId,
                 status,
@@ -99,10 +85,6 @@ public class UserVocabularyController {
     @PutMapping("/{id}/ignore")
     public ResponseEntity<ApiResponse<Void>> ignoreVocabulary(@PathVariable Long id) {
         Long userId = authService.getCurrentUserId();
-        if (userId == null) {
-            return ResponseEntity.ok(ApiResponse.success("Please login first", null));
-        }
-
         log.info("Ignoring vocabulary: userId={}, id={}", userId, id);
         return ResponseEntity.ok(ApiResponse.success("Operation succeeded", null));
     }
@@ -113,10 +95,6 @@ public class UserVocabularyController {
             @PathVariable Long id,
             @RequestBody UpdateUserVocabularyRequest request) {
         Long userId = authService.getCurrentUserId();
-        if (userId == null) {
-            return ResponseEntity.ok(ApiResponse.success("Please login first", null));
-        }
-
         UserVocabularyDTO updated = userVocabularyService.updateVocabulary(userId, id, request);
         return ResponseEntity.ok(ApiResponse.success("Vocabulary updated", updated));
     }
@@ -127,9 +105,6 @@ public class UserVocabularyController {
             @PathVariable Long id,
             @RequestBody UpdateLearningStateRequest request) {
         Long userId = authService.getCurrentUserId();
-        if (userId == null) {
-            return ResponseEntity.ok(ApiResponse.success("Please login first", null));
-        }
         UserVocabularyDTO updated = userVocabularyService.updateLearningState(userId, id, request);
         return ResponseEntity.ok(ApiResponse.success("Learning state updated", updated));
     }
@@ -149,9 +124,9 @@ public class UserVocabularyController {
             UserVocabularyDTO updated = vocabularyAIModifyService.modifyWithAI(request);
             balanceService.confirmTransaction(transactionId);
             return ResponseEntity.ok(ApiResponse.success("AI modify succeeded", updated));
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             balanceService.cancelTransaction(transactionId);
-            return ResponseEntity.ok(ApiResponse.error(ErrorCode.BAD_REQUEST, "AI modify failed: " + e.getMessage()));
+            throw e;
         }
     }
 

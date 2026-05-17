@@ -3,6 +3,7 @@ export interface ContextStatusDTO {
   maxTokens: number;
   tokenRatio: number;
   wordCardsTotal: number;
+  wordCardsCompleted: number;
   wordCardsSinceCompact: number;
   wordCardThreshold: number;
   shouldCompact: boolean;
