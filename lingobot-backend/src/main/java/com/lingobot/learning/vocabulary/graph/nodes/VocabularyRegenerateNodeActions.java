@@ -3,34 +3,25 @@ package com.lingobot.learning.vocabulary.graph.nodes;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lingobot.core.conversation.dto.TokenUsageDTO;
-import com.lingobot.core.conversation.entity.Conversation;
-import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.core.user.preference.dto.UserPreferenceDTO;
 import com.lingobot.core.user.preference.service.UserPreferenceService;
 import com.lingobot.learning.chat.service.ToolLoopService;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
-import com.lingobot.learning.llm.dto.openai.OpenAiTool;
-import com.lingobot.learning.llm.tool.service.McpService;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
+import com.lingobot.infrastructure.mcp.service.McpService;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationConstraints;
+import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryContext;
-import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryPromptBuilder;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryRecord;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
-import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
 import com.lingobot.learning.vocabulary.dto.WordCardData;
-import com.lingobot.learning.vocabulary.entity.VocabularyCard;
-import com.lingobot.learning.vocabulary.entity.VocabularyWord;
 import com.lingobot.learning.vocabulary.graph.VocabularyState;
-import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
-import com.lingobot.learning.vocabulary.service.UserVocabularyService;
-import com.lingobot.learning.vocabulary.service.VocabularyPromptService;
-import com.lingobot.learning.vocabulary.service.VocabularyWordService;
+import com.lingobot.learning.prompt.vocabulary.VocabularyCardGenerationPromptBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,10 +31,22 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * 单词卡片重新生成工作流节点动作集合。
+ *
+ * 为 VocabularyRegenerateGraph 提供各个节点的具体实现逻辑，包括：
+ * - MEMORY_RECALL：召回用户历史学习记忆，构建排除词列表
+ * - PLANNING：确定生成参数（分类、难度、模型），构建系统提示词
+ * - GENERATION：调用AI生成单词卡片
+ * - VALIDATION：校验生成的卡片数据完整性和合法性
+ *
+ * 注意：此工作流仅用于重新生成场景，不负责持久化，持久化由上层服务处理。
+ * 每个节点方法返回 AsyncNodeAction，在 CompletableFuture 中异步执行。
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class VocabularyNodeActions {
+public class VocabularyRegenerateNodeActions {
 
     private static final String DEFAULT_VOCABULARY_CATEGORY = "cefr";
     private static final String DEFAULT_VOCABULARY_DIFFICULTY = "b2";
@@ -52,19 +55,15 @@ public class VocabularyNodeActions {
 
     private final VocabularyMemoryService vocabularyMemoryService;
     private final UserPreferenceService userPreferenceService;
-    private final VocabularyPromptService vocabularyPromptService;
+    private final VocabularyCardGenerationPromptBuilder vocabularyCardGenerationPromptBuilder;
     private final VocabularyMemoryPromptBuilder memoryPromptBuilder;
     private final McpService mcpService;
     private final ToolLoopService toolLoopService;
-    private final ConversationRepository conversationRepository;
-    private final VocabularyCardRepository vocabularyCardRepository;
-    private final VocabularyWordService vocabularyWordService;
-    private final UserVocabularyService userVocabularyService;
     private final ObjectMapper objectMapper;
 
     public AsyncNodeAction<VocabularyState> memoryRecall() {
         return state -> CompletableFuture.supplyAsync(() -> {
-            log.info("Executing MEMORY_RECALL for conversation: {}, user: {}",
+            log.info("Executing REGEN_MEMORY_RECALL for conversation: {}, user: {}",
                     state.getConversationId(), state.getUserId());
 
             Map<String, Object> updates = new HashMap<>();
@@ -81,11 +80,11 @@ public class VocabularyNodeActions {
                 List<String> excludedWords = buildExcludedWords(memoryContext);
                 updates.put("excludedWords", excludedWords);
 
-                log.info("Memory recall completed: total memory items={}, excluded words={}",
+                log.info("Regenerate memory recall completed: total memory items={}, excluded words={}",
                         memoryContext.totalMemoryItems(), excludedWords.size());
 
             } catch (Exception e) {
-                log.warn("Memory recall failed, using empty context", e);
+                log.warn("Regenerate memory recall failed, using empty context", e);
                 updates.put("memoryContext", null);
                 updates.put("excludedWords", new ArrayList<String>());
             }
@@ -96,7 +95,12 @@ public class VocabularyNodeActions {
 
     public AsyncNodeAction<VocabularyState> planning() {
         return state -> CompletableFuture.supplyAsync(() -> {
-            log.info("Executing PLANNING for conversation: {}", state.getConversationId());
+            log.info("Executing REGEN_PLANNING for conversation: {}", state.getConversationId());
+
+            if (state.getIntent() != VocabularyGenerationIntent.REGENERATE
+                    || state.getRegeneratePosition() == null) {
+                throw new IllegalStateException("VocabularyRegenerateGraph only supports REGENERATE intent with regeneratePosition");
+            }
 
             Map<String, Object> updates = new HashMap<>();
 
@@ -133,7 +137,12 @@ public class VocabularyNodeActions {
                     .build();
             updates.put("constraints", constraints);
 
-            String systemPrompt = vocabularyPromptService.getDisplayFlashcardPrompt(category, difficulty);
+            String systemPrompt = vocabularyCardGenerationPromptBuilder.getRegenerateFlashcardPrompt(
+                    category, difficulty,
+                    state.getRegeneratePosition() + 1,
+                    state.getRegenerateOldWord(),
+                    state.getRegenerateOldPartOfSpeech(),
+                    state.getRegenerateOldMeaning());
 
             if (state.getMemoryContext() != null) {
                 String memoryPrompt = memoryPromptBuilder.buildPromptContext(state.getMemoryContext());
@@ -144,14 +153,14 @@ public class VocabularyNodeActions {
 
             updates.put("systemPrompt", systemPrompt);
 
-            log.info("Planning completed: category={}, difficulty={}, model={}", category, difficulty, model);
+            log.info("Regenerate planning completed: category={}, difficulty={}, model={}", category, difficulty, model);
             return updates;
         });
     }
 
     public AsyncNodeAction<VocabularyState> generation() {
         return state -> CompletableFuture.supplyAsync(() -> {
-            log.info("Executing GENERATION for conversation: {}, model: {}, retry: {}",
+            log.info("Executing REGEN_GENERATION for conversation: {}, model: {}, retry: {}",
                     state.getConversationId(), state.getModel(), state.getRetryCount());
 
             Map<String, Object> updates = new HashMap<>();
@@ -188,14 +197,14 @@ public class VocabularyNodeActions {
                 if (result.hasToolCalls() && result.getToolResultText() != null) {
                     WordCardData card = parseWordCardData(result.getToolResultText(), state);
                     updates.put("generatedCard", card);
-                    log.info("Generation completed: word={}", card.getWord());
+                    log.info("Regenerate generation completed: word={}", card.getWord());
                 } else {
-                    log.warn("AI did not return valid tool call");
+                    log.warn("AI did not return valid tool call for regenerate");
                     updates.put("generationError", "Invalid AI response");
                 }
 
             } catch (Exception e) {
-                log.error("Generation failed", e);
+                log.error("Regenerate generation failed", e);
                 updates.put("generationError", e.getMessage());
             }
 
@@ -209,7 +218,7 @@ public class VocabularyNodeActions {
             List<String> errors = new ArrayList<>();
 
             WordCardData card = state.getGeneratedCard();
-            log.info("Executing VALIDATION for word: {}", card != null ? card.getWord() : "null");
+            log.info("Executing REGEN_VALIDATION for word: {}", card != null ? card.getWord() : "null");
 
             if (card == null) {
                 errors.add("Generated card is null");
@@ -242,67 +251,11 @@ public class VocabularyNodeActions {
             updates.put("isValid", errors.isEmpty());
 
             if (errors.isEmpty()) {
-                log.info("Validation passed for word: {}", card.getWord());
+                log.info("Regenerate validation passed for word: {}", card.getWord());
             } else {
-                log.warn("Validation failed: {}", errors);
+                log.warn("Regenerate validation failed: {}", errors);
                 int retryCount = state.getRetryCount() + 1;
                 updates.put("retryCount", retryCount);
-            }
-
-            return updates;
-        });
-    }
-
-    public AsyncNodeAction<VocabularyState> persistence() {
-        return state -> CompletableFuture.supplyAsync(() -> {
-            Map<String, Object> updates = new HashMap<>();
-            WordCardData card = state.getGeneratedCard();
-
-            log.info("Executing PERSISTENCE for word: {}", card.getWord());
-
-            try {
-                VocabularyCardDTO saved = createCardInternal(state.getConversationId(), card, true);
-                updates.put("savedCard", saved);
-
-                log.info("Persistence completed: cardId={}, word={}", saved.getId(), saved.getWord());
-
-            } catch (Exception e) {
-                log.error("Persistence failed", e);
-                updates.put("persistenceError", e.getMessage());
-            }
-
-            return updates;
-        });
-    }
-
-    public AsyncNodeAction<VocabularyState> fallback() {
-        return state -> CompletableFuture.supplyAsync(() -> {
-            log.warn("Executing FALLBACK for conversation: {}", state.getConversationId());
-            Map<String, Object> updates = new HashMap<>();
-
-            String category = state.getCategory() != null ? state.getCategory() : DEFAULT_VOCABULARY_CATEGORY;
-            String difficulty = state.getDifficulty() != null ? state.getDifficulty() : "a1";
-
-            WordCardData defaultCard = WordCardData.builder()
-                    .word("hello")
-                    .phonetic("həˈloʊ")
-                    .partOfSpeech("int.")
-                    .meaning("你好")
-                    .example("Hello, how are you?")
-                    .exampleTranslation("你好，你好吗？")
-                    .synonyms(List.of("hi", "hey"))
-                    .category(category)
-                    .difficulty(difficulty)
-                    .build();
-
-            updates.put("generatedCard", defaultCard);
-
-            try {
-                VocabularyCardDTO saved = createCardInternal(state.getConversationId(), defaultCard, true);
-                updates.put("savedCard", saved);
-                log.info("Fallback persistence completed: cardId={}", saved.getId());
-            } catch (Exception e) {
-                log.error("Fallback persistence failed", e);
             }
 
             return updates;
@@ -363,88 +316,5 @@ public class VocabularyNodeActions {
 
     public boolean shouldRetry(VocabularyState state) {
         return !state.isValid() && state.getRetryCount() < MAX_RETRIES;
-    }
-
-    public boolean shouldFallback(VocabularyState state) {
-        return !state.isValid() && state.getRetryCount() >= MAX_RETRIES;
-    }
-
-    @Transactional
-    private VocabularyCardDTO createCardInternal(Long conversationId, WordCardData cardData, boolean isRevealed) {
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new RuntimeException("Conversation not found: " + conversationId));
-
-        Integer nextPosition = vocabularyCardRepository.findMaxActivePositionByConversationId(conversationId)
-                .map(pos -> pos + 1)
-                .orElse(0);
-
-        VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(cardData.getWord());
-
-        VocabularyCard card = VocabularyCard.builder()
-                .conversation(conversation)
-                .vocabularyWordId(vocabularyWord.getId())
-                .word(cardData.getWord())
-                .phonetic(cardData.getPhonetic())
-                .partOfSpeech(cardData.getPartOfSpeech())
-                .meaning(cardData.getMeaning())
-                .example(cardData.getExample())
-                .exampleTranslation(cardData.getExampleTranslation())
-                .chineseSentenceForTranslation(cardData.getExampleTranslation())
-                .category(cardData.getCategory())
-                .difficulty(cardData.getDifficulty())
-                .position(nextPosition)
-                .isCompleted(false)
-                .isRegenerated(false)
-                .isRevealed(isRevealed)
-                .regenerationIndex(0)
-                .build();
-
-        if (cardData.getSynonyms() != null && !cardData.getSynonyms().isEmpty()) {
-            card.setSynonyms(cardData.getSynonyms());
-        }
-
-        VocabularyCard saved = vocabularyCardRepository.save(card);
-
-        Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
-        if (userId != null) {
-            userVocabularyService.upsertRecordOnly(userId, saved);
-            vocabularyMemoryService.recordInteraction(userId, saved, VocabularyMemoryEventType.SEEN);
-        }
-
-        return toDTO(saved);
-    }
-
-    private VocabularyCardDTO toDTO(VocabularyCard card) {
-        return VocabularyCardDTO.builder()
-                .id(card.getId())
-                .conversationId(card.getConversation().getId())
-                .word(card.getWord())
-                .phonetic(card.getPhonetic())
-                .partOfSpeech(card.getPartOfSpeech())
-                .meaning(card.getMeaning())
-                .example(card.getExample())
-                .exampleTranslation(card.getExampleTranslation())
-                .synonyms(card.getSynonyms())
-                .category(card.getCategory())
-                .difficulty(card.getDifficulty())
-                .position(card.getPosition())
-                .userMeaningGuess(card.getUserMeaningGuess())
-                .meaningCheckResult(card.getMeaningCheckResult())
-                .meaningIsCorrect(card.getMeaningIsCorrect())
-                .meaningCheckCompleted(card.getMeaningCheckCompleted())
-                .chineseSentenceForTranslation(card.getChineseSentenceForTranslation())
-                .userEnglishSentence(card.getUserEnglishSentence())
-                .sentenceAnalysis(card.getSentenceAnalysis())
-                .sentenceAnalysisCompleted(card.getSentenceAnalysisCompleted())
-                .sentenceHasNewWord(card.getSentenceHasNewWord())
-                .sentenceMeaningMatches(card.getSentenceMeaningMatches())
-                .isCompleted(card.getIsCompleted())
-                .isRevealed(card.getIsRevealed())
-                .isRegenerated(card.getIsRegenerated())
-                .regenerationIndex(card.getRegenerationIndex())
-                .regeneratedWords(List.of())
-                .createdAt(card.getCreatedAt())
-                .updatedAt(card.getUpdatedAt())
-                .build();
     }
 }

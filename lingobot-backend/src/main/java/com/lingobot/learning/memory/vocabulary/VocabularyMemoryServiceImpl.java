@@ -6,6 +6,7 @@ import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversati
 import com.lingobot.learning.conversation.vocabulary.service.VocabularyConversationDataService;
 import com.lingobot.learning.vocabulary.entity.UserVocabulary;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
+import com.lingobot.learning.vocabulary.entity.VocabularyStatus;
 import com.lingobot.learning.vocabulary.repository.UserVocabularyRepository;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -191,10 +195,69 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
             builder.wrongWords(filteredWrong);
             builder.regeneratedWords(filteredRegenerated);
 
-            List<VocabularyMemoryRecord> masteredWords = retrieveL2Mastered(userId, l2MasteredLimit);
-            List<VocabularyMemoryRecord> reviewingWords = retrieveL2Reviewing(userId, l2ReviewingLimit);
-            List<VocabularyMemoryRecord> learningWords = retrieveL2Learning(userId, l2LearningLimit);
-            List<VocabularyMemoryRecord> weakWords = retrieveL2Weak(userId, l2WeakLimit);
+            List<VocabularyMemoryRecord> allMasteredWords = retrieveL2Mastered(userId, Integer.MAX_VALUE);
+            List<VocabularyMemoryRecord> allReviewingWords = retrieveL2Reviewing(userId, Integer.MAX_VALUE);
+            List<VocabularyMemoryRecord> allLearningWords = retrieveL2Learning(userId, Integer.MAX_VALUE);
+            List<VocabularyMemoryRecord> allWeakWords = retrieveL2Weak(userId, Integer.MAX_VALUE);
+
+            Map<String, VocabularyMemoryRecord> l1WordMap = Stream.of(
+                            filteredRecent.stream(),
+                            filteredWrong.stream(),
+                            filteredRegenerated.stream()
+                    )
+                    .flatMap(s -> s)
+                    .collect(Collectors.toMap(
+                            record -> normalize(record.getWord()),
+                            record -> record,
+                            (existing, replacement) -> existing
+                    ));
+
+            Consumer<VocabularyMemoryRecord> mergeL2ToL1 = l2Record -> {
+                String normalizedWord = normalize(l2Record.getWord());
+                VocabularyMemoryRecord l1Record = l1WordMap.get(normalizedWord);
+                if (l1Record != null) {
+                    if (l1Record.getSourceTiers() == null) {
+                        l1Record.setSourceTiers(new ArrayList<>());
+                    }
+                    l2Record.getSourceTiers().forEach(tier -> {
+                        if (!l1Record.getSourceTiers().contains(tier)) {
+                            l1Record.getSourceTiers().add(tier);
+                        }
+                    });
+                }
+            };
+
+            Predicate<VocabularyMemoryRecord> l2Filter = l2Record -> {
+                String normalizedWord = normalize(l2Record.getWord());
+                if (conversationWordMap.containsKey(normalizedWord)) {
+                    return false;
+                }
+                return !l1WordMap.containsKey(normalizedWord);
+            };
+
+            List<VocabularyMemoryRecord> masteredWords = allMasteredWords.stream()
+                    .peek(mergeL2ToL1)
+                    .filter(l2Filter)
+                    .limit(l2MasteredLimit)
+                    .collect(Collectors.toList());
+
+            List<VocabularyMemoryRecord> reviewingWords = allReviewingWords.stream()
+                    .peek(mergeL2ToL1)
+                    .filter(l2Filter)
+                    .limit(l2ReviewingLimit)
+                    .collect(Collectors.toList());
+
+            List<VocabularyMemoryRecord> learningWords = allLearningWords.stream()
+                    .peek(mergeL2ToL1)
+                    .filter(l2Filter)
+                    .limit(l2LearningLimit)
+                    .collect(Collectors.toList());
+
+            List<VocabularyMemoryRecord> weakWords = allWeakWords.stream()
+                    .peek(mergeL2ToL1)
+                    .filter(l2Filter)
+                    .limit(l2WeakLimit)
+                    .collect(Collectors.toList());
 
             builder.masteredWords(masteredWords);
             builder.reviewingWords(reviewingWords);
@@ -342,7 +405,7 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
         if (conversationId == null) {
             return null;
         }
-        return learningDataRepository.findByConversationId(conversationId)
+        return vocabDataService.getByConversationId(conversationId)
                 .map(learningData -> VocabularyCompactWatermark.builder()
                         .lastCompactedCardId(learningData.getVocabularyLastCompactedCardId())
                         .lastCompactedPosition(learningData.getVocabularyLastCompactedPosition())
@@ -442,7 +505,7 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
 
     private List<VocabularyMemoryRecord> getMasteredWords(List<UserVocabulary> vocabularies) {
         return vocabularies.stream()
-                .filter(uv -> uv.getStatus() == com.lingobot.learning.vocabulary.entity.VocabularyStatus.MASTERED
+                .filter(uv -> uv.getStatus() == VocabularyStatus.MASTERED
                         || (uv.getMasteryScore() != null && uv.getMasteryScore().compareTo(new java.math.BigDecimal("0.8")) >= 0))
                 .sorted((a, b) -> b.getMasteryScore().compareTo(a.getMasteryScore()))
                 .limit(MAX_MASTERED_WORDS)
@@ -452,7 +515,7 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
 
     private List<VocabularyMemoryRecord> getReviewingWords(List<UserVocabulary> vocabularies) {
         return vocabularies.stream()
-                .filter(uv -> uv.getStatus() == com.lingobot.learning.vocabulary.entity.VocabularyStatus.REVIEWING)
+                .filter(uv -> uv.getStatus() == VocabularyStatus.REVIEWING)
                 .sorted((a, b) -> {
                     if (a.getNextReviewAt() == null && b.getNextReviewAt() == null) return 0;
                     if (a.getNextReviewAt() == null) return 1;
@@ -466,7 +529,7 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
 
     private List<VocabularyMemoryRecord> getLearningWords(List<UserVocabulary> vocabularies) {
         return vocabularies.stream()
-                .filter(uv -> uv.getStatus() == com.lingobot.learning.vocabulary.entity.VocabularyStatus.LEARNING)
+                .filter(uv -> uv.getStatus() == VocabularyStatus.LEARNING)
                 .sorted((a, b) -> {
                     if (a.getUpdatedAt() == null && b.getUpdatedAt() == null) return 0;
                     if (a.getUpdatedAt() == null) return 1;

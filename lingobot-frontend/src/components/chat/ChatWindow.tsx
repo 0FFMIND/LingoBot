@@ -69,12 +69,14 @@ const ChatWindow: React.FC = () => {
   const {
     currentVocabularyCard,
     vocabularyCardLoading,
+    vocabularyCardError,
     handlePrevWord,
     handleNextWord,
     handleRegenerateWord,
     saveUserMeaning,
     saveUserEnglishSentence,
     analyzeUserSentence,
+    clearError: clearVocabularyError,
   } = useVocabularyStore()
   const preferences = usePreferences(isAuthenticated)
 
@@ -86,11 +88,13 @@ const ChatWindow: React.FC = () => {
   const chatProvider = preferences.chatProvider
   const chatModelId = preferences.chatModel
   const fullChatModel = `${chatProvider}/${chatModelId}`
+  const model = chatProvider as ModelType
   const vocabularyCategory = preferences.vocabularyCategory
   const vocabularyDifficulty = preferences.vocabularyDifficulty
   const vocabularyProvider = preferences.vocabularyProvider
   const vocabularyModelId = preferences.vocabularyModel
   const fullVocabularyModel = `${vocabularyProvider}/${vocabularyModelId}`
+  const activeRequestModel = learningMode === 'vocabulary' ? fullVocabularyModel : fullChatModel
 
   // Local UI state
   const [inputValue, setInputValue] = useState('')
@@ -109,6 +113,7 @@ const ChatWindow: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const previousConversationPublicIdRef = useRef<string | null>(null)
+  const vocabularyAutoLoadAttemptRef = useRef<string | null>(null)
 
   const learningConfig = LEARNING_MODES[learningMode]
 
@@ -250,6 +255,31 @@ const ChatWindow: React.FC = () => {
   }
 
   const renderVocabularyView = () => {
+    if (vocabularyCardError && !vocabularyCardLoading) {
+      const isInsufficientBalance = vocabularyCardError.includes('余额不足') || vocabularyCardError.includes('insufficient')
+      return (
+        <div className="vocabulary-view-empty">
+          <div className="empty-icon">{isInsufficientBalance ? '💰' : '⚠️'}</div>
+          <h3>{isInsufficientBalance ? '余额不足' : '加载失败'}</h3>
+          <p className="vocabulary-error-message">{vocabularyCardError}</p>
+          {isInsufficientBalance && (
+            <p className="vocabulary-error-hint">请前往「账户设置 &gt; 账户余额」充值后继续使用</p>
+          )}
+          <button 
+            className="vocabulary-retry-btn"
+            onClick={() => {
+              clearVocabularyError()
+              if (currentConversation) {
+                useVocabularyStore.getState().loadCard(currentConversation.publicId, vocabularyCategory, vocabularyDifficulty)
+              }
+            }}
+          >
+            🔄 重新加载
+          </button>
+        </div>
+      )
+    }
+
     if (currentVocabularyCard) {
       const vocabData = {
         action: 'new_word',
@@ -414,23 +444,31 @@ const ChatWindow: React.FC = () => {
     const conversationPublicId = currentConversation?.publicId ?? null
     if (previousConversationPublicIdRef.current !== conversationPublicId) {
       previousConversationPublicIdRef.current = conversationPublicId
+      vocabularyAutoLoadAttemptRef.current = null
       useVocabularyStore.getState().reset()
     }
   }, [currentConversation?.publicId])
 
   useEffect(() => {
+    const conversationPublicId = currentConversation?.publicId
+    const autoLoadKey = conversationPublicId
+      ? `${conversationPublicId}:${vocabularyCategory}:${vocabularyDifficulty}`
+      : null
+
     if (
       learningMode === 'vocabulary' &&
       isAuthenticated &&
-      currentConversation &&
+      conversationPublicId &&
       !currentVocabularyCard &&
       !vocabularyCardLoading &&
-      !loading
+      !loading &&
+      vocabularyAutoLoadAttemptRef.current !== autoLoadKey
     ) {
       console.log('📚 词汇学习模式：自动初始化词汇卡，难度:', vocabularyDifficulty)
-      useVocabularyStore.getState().loadCard(currentConversation.publicId, vocabularyCategory, vocabularyDifficulty)
+      vocabularyAutoLoadAttemptRef.current = autoLoadKey
+      useVocabularyStore.getState().loadCard(conversationPublicId, vocabularyCategory, vocabularyDifficulty)
     }
-  }, [learningMode, isAuthenticated, currentConversation, currentVocabularyCard, vocabularyCardLoading, loading, vocabularyDifficulty])
+  }, [learningMode, isAuthenticated, currentConversation?.publicId, currentVocabularyCard, vocabularyCardLoading, loading, vocabularyCategory, vocabularyDifficulty])
 
   const handleSend = useCallback(() => {
     if (!isAuthenticated) {
@@ -444,7 +482,7 @@ const ChatWindow: React.FC = () => {
         conversationPublicId: currentConversation.publicId,
         content: inputValue.trim(),
         mode,
-        model,
+        model: activeRequestModel,
         learningMode,
         messageType: 'image',
         imageData: selectedImage.data,
@@ -461,7 +499,7 @@ const ChatWindow: React.FC = () => {
           conversationPublicId: currentConversation.publicId,
           content: inputValue.trim(),
           mode,
-          model,
+          model: fullVocabularyModel,
           learningMode,
           vocabularyCategory,
           vocabularyDifficulty,
@@ -471,7 +509,7 @@ const ChatWindow: React.FC = () => {
           conversationPublicId: currentConversation.publicId,
           content: inputValue.trim(),
           mode,
-          model,
+          model: fullChatModel,
           learningMode,
           vocabularyCategory,
           vocabularyDifficulty,
@@ -481,7 +519,7 @@ const ChatWindow: React.FC = () => {
     }
   }, [
     inputValue, selectedImage, isAuthenticated, currentConversation, loading, showModeSelector,
-    disabled, isVoiceRecording, mode, model, learningMode, vocabularyCategory, vocabularyDifficulty,
+    disabled, isVoiceRecording, mode, activeRequestModel, fullChatModel, fullVocabularyModel, learningMode, vocabularyCategory, vocabularyDifficulty,
     sendMessage, sendImageMessage, setShowAuthModal,
   ])
 
@@ -491,7 +529,7 @@ const ChatWindow: React.FC = () => {
         conversationPublicId: currentConversation.publicId,
         content: '',
         mode,
-        model,
+        model: activeRequestModel,
         learningMode,
         messageType: 'audio',
         audioData,
@@ -502,7 +540,7 @@ const ChatWindow: React.FC = () => {
       })
     }
     setIsVoiceRecording(false)
-  }, [loading, disabled, currentConversation, mode, model, learningMode, vocabularyCategory, vocabularyDifficulty, sendAudioMessage])
+  }, [loading, disabled, currentConversation, mode, activeRequestModel, learningMode, vocabularyCategory, vocabularyDifficulty, sendAudioMessage])
 
   const handleAudioCancel = useCallback(() => {
     setIsVoiceRecording(false)
@@ -664,7 +702,7 @@ const ChatWindow: React.FC = () => {
           conversationPublicId: currentConversation.publicId,
           content: editContent.trim(),
           mode,
-          model,
+          model: activeRequestModel,
           learningMode,
           audioData: editAudioData || undefined,
           audioFormat: editAudioFormat || undefined,

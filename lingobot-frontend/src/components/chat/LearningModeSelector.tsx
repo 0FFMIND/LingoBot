@@ -51,6 +51,17 @@ export const vocabularySubModes = [
     bgColor: '#ede9fe',
     description: '新词学习 + 复习巩固，全面提升',
     features: ['智能平衡', '最高效率'],
+    recommended: false,
+  },
+  {
+    intent: 'smart_recommend' as VocabularyIntent,
+    label: '智能推荐',
+    labelEn: 'Smart Recommend',
+    icon: '🤖',
+    color: '#f59e0b',
+    bgColor: '#fef3c7',
+    description: 'AI智能分析您的学习数据，推荐最适合的学习内容',
+    features: ['个性化推荐', '精准学习'],
     recommended: true,
   },
 ]
@@ -154,7 +165,7 @@ export function VocabularySubModeSelector({
       <div className="vocabulary-submode-recommend">
         <span className="vocabulary-submode-recommend-icon">💡</span>
         <p className="vocabulary-submode-recommend-text">
-          <strong>推荐</strong> - 根据您的学习数据，我们推荐混合模式，能够帮助您在学习新词的同时巩固已有词汇，达到最佳学习效果。
+          <strong>建议选择</strong> - 根据您的学习数据，我们建议智能推荐模式，AI会自动分析您的学习情况，为您定制最适合的学习内容。
         </p>
       </div>
 

@@ -2,6 +2,7 @@ package com.lingobot.learning.vocabulary.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lingobot.infrastructure.common.config.LlmProperties;
 import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
@@ -9,6 +10,7 @@ import com.lingobot.infrastructure.mcp.service.McpService;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryInteractionType;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
+import com.lingobot.learning.prompt.vocabulary.VocabularyInteractionCheckPromptBuilder;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,14 +35,14 @@ public class SentenceAnalysisService {
 
     private final ToolLoopService toolLoopService;
     private final McpService mcpService;
-    private final VocabularyPromptService vocabularyPromptService;
+    private final VocabularyInteractionCheckPromptBuilder vocabularyInteractionCheckPromptBuilder;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final UserVocabularyService userVocabularyService;
     private final VocabularyMemoryService vocabularyMemoryService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
 
-    private static final String DEFAULT_MODEL = "qwen";
+    private static final String DEFAULT_MODEL = LlmProperties.MODEL_QWEN_FLASH;
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
@@ -74,7 +76,7 @@ public class SentenceAnalysisService {
                 return;
             }
 
-            String systemPrompt = vocabularyPromptService.getSentenceAnalysisPrompt(
+            String systemPrompt = vocabularyInteractionCheckPromptBuilder.getSentenceAnalysisPrompt(
                     word,
                     card.getPhonetic(),
                     card.getPartOfSpeech(),

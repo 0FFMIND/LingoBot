@@ -29,4 +29,10 @@ public class TokenUsageDTO implements Serializable {
     private Integer completionTokens;
     // 总 token 数
     private Integer totalTokens;
+
+    public boolean isEmpty() {
+        return (promptTokens == null || promptTokens == 0)
+                && (completionTokens == null || completionTokens == 0)
+                && (totalTokens == null || totalTokens == 0);
+    }
 }

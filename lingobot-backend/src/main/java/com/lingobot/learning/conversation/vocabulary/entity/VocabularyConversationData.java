@@ -41,4 +41,7 @@ public class VocabularyConversationData {
     @Column(name = "vocabulary_compacted_card_count")
     @Builder.Default
     private Integer vocabularyCompactedCardCount = 0;
+
+    @Column(name = "last_viewed_position")
+    private Integer lastViewedPosition;
 }

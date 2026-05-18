@@ -150,4 +150,19 @@ public interface VocabularyCardService {
      * @return 批量生成结果
      */
     VocabularyBatchGenerationResult getBatchStatus(Long conversationId);
+
+    /**
+     * 获取指定位置周围的词汇卡窗口
+     * @param conversationId 对话ID
+     * @param position 中心位置
+     * @return 词汇卡DTO列表（窗口内的卡片）
+     */
+    List<VocabularyCardDTO> getCardsAroundPosition(Long conversationId, Integer position);
+
+    /**
+     * 更新用户最后查看的词汇卡位置
+     * @param conversationId 对话ID
+     * @param position 位置
+     */
+    void updateLastViewedPosition(Long conversationId, Integer position);
 }

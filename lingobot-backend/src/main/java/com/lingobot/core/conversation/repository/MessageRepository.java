@@ -23,6 +23,9 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     // 查询指定会话的所有消息，按时间升序排列
     List<Message> findByConversationIdOrderByTimestampAsc(Long conversationId);
 
+    // 查询指定会话最近的 10 条消息，按时间倒序排列
+    List<Message> findTop10ByConversationIdOrderByTimestampDesc(Long conversationId);
+
     // 查询指定会话最近的 N 条消息，按时间倒序排列（通过 Pageable 限制数量）
     List<Message> findByConversationIdOrderByTimestampDesc(Long conversationId, Pageable pageable);
 

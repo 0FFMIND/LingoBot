@@ -18,6 +18,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -44,6 +46,7 @@ public class VocabularyCard {
     /** 所属对话*/
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "conversation_id", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private Conversation conversation;
 
     /** 关联的标准化单词ID */

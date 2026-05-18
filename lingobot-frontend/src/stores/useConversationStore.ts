@@ -186,9 +186,21 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }))
 
       try {
-        await conversationApi.updateLearningMode(newConversation.publicId, selectedMode)
+        const updatedFromLearningMode = await conversationApi.updateLearningMode(newConversation.publicId, selectedMode)
+        let finalUpdated = updatedFromLearningMode
         if (selectedMode === 'vocabulary' && vocabularyIntent) {
-          await conversationApi.updateVocabularyIntent(newConversation.publicId, vocabularyIntent)
+          const updatedFromVocabularyIntent = await conversationApi.updateVocabularyIntent(newConversation.publicId, vocabularyIntent)
+          finalUpdated = updatedFromVocabularyIntent || updatedFromLearningMode
+        }
+        if (finalUpdated) {
+          set(s => ({
+            conversations: s.conversations.map(c =>
+              c.publicId === newConversation.publicId ? { ...c, ...finalUpdated, learningMode: selectedMode, vocabularyIntent } : c
+            ),
+            currentConversation: s.currentConversation?.publicId === newConversation.publicId
+              ? { ...s.currentConversation, ...finalUpdated, learningMode: selectedMode, vocabularyIntent }
+              : s.currentConversation,
+          }))
         }
       } catch (e) {
         console.error('保存学习模式到后端失败:', e)
@@ -269,7 +281,17 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }
 
       try {
-        await conversationApi.updateLearningMode(publicId, selectedMode)
+        const updatedConversation = await conversationApi.updateLearningMode(publicId, selectedMode)
+        if (updatedConversation) {
+          set(s => ({
+            conversations: s.conversations.map(c =>
+              c.publicId === publicId ? { ...c, ...updatedConversation, learningMode: selectedMode } : c
+            ),
+            currentConversation: s.currentConversation?.publicId === publicId
+              ? { ...s.currentConversation, ...updatedConversation, learningMode: selectedMode }
+              : s.currentConversation,
+          }))
+        }
       } catch (e) {
         console.error('保存学习模式到后端失败:', e)
       }
@@ -303,8 +325,19 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       }
 
       try {
-        await conversationApi.updateLearningMode(publicId, selectedMode)
-        await conversationApi.updateVocabularyIntent(publicId, intent)
+        const updatedFromLearningMode = await conversationApi.updateLearningMode(publicId, selectedMode)
+        const updatedFromVocabularyIntent = await conversationApi.updateVocabularyIntent(publicId, intent)
+        const finalUpdated = updatedFromVocabularyIntent || updatedFromLearningMode
+        if (finalUpdated) {
+          set(s => ({
+            conversations: s.conversations.map(c =>
+              c.publicId === publicId ? { ...c, ...finalUpdated, learningMode: selectedMode, vocabularyIntent: intent } : c
+            ),
+            currentConversation: s.currentConversation?.publicId === publicId
+              ? { ...s.currentConversation, ...finalUpdated, learningMode: selectedMode, vocabularyIntent: intent }
+              : s.currentConversation,
+          }))
+        }
       } catch (e) {
         console.error('保存学习模式到后端失败:', e)
       }

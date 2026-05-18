@@ -1,12 +1,9 @@
-package com.lingobot.infrastructure.mcp.service;
+package com.lingobot.infrastructure.tool.service;
 
-import com.lingobot.infrastructure.mcp.dto.McpTool;
-import com.lingobot.infrastructure.mcp.dto.McpToolCall;
-import com.lingobot.infrastructure.mcp.dto.McpToolResult;
-import com.lingobot.infrastructure.mcp.dto.McpTool.Property;
-import com.lingobot.infrastructure.mcp.dto.McpTool.ToolArguments;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.lingobot.infrastructure.tool.dto.ToolCall;
+import com.lingobot.infrastructure.tool.dto.ToolDefinition;
+import com.lingobot.infrastructure.tool.dto.ToolResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,58 +15,54 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * MCP 工具服务
- * 提供工具列表查询、工具调用、格式转换等功能
- */
+// 工具服务
+// 提供工具列表查询、工具调用、格式转换等功能
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class McpService {
+public class ToolService {
 
-    private final McpToolRegistry toolRegistry;
+    private final ToolRegistry toolRegistry;
     private final ObjectMapper objectMapper;
 
+    // 初始化方法，应用启动时执行
     @PostConstruct
     public void init() {
-        log.info("MCP Service initialized");
+        log.info("Tool Service initialized");
     }
 
-    /**
-     * 获取所有MCP 工具列表
-     */
-    public List<McpTool> listTools() {
+    // 获取所有工具列表
+    public List<ToolDefinition> listTools() {
         return toolRegistry.getAllTools();
     }
 
-    /**
-     * 获取 OpenAI 格式的工具列表     * 用于与OpenAI API 兼容的工具调用     */
+    // 获取 OpenAI 格式的工具列表
     public List<OpenAiTool> getOpenAiTools() {
-        List<McpTool> mcpTools = toolRegistry.getAllTools();
+        List<ToolDefinition> toolDefinitions = toolRegistry.getAllTools();
         List<OpenAiTool> openAiTools = new ArrayList<>();
-        
-        for (McpTool mcpTool : mcpTools) {
-            openAiTools.add(convertToOpenAiTool(mcpTool));
+
+        for (ToolDefinition toolDefinition : toolDefinitions) {
+            openAiTools.add(convertToOpenAiTool(toolDefinition));
         }
-        
-        log.info("Converted {} MCP tools to OpenAI format", openAiTools.size());
+
+        log.info("Converted {} tools to OpenAI format", openAiTools.size());
         return openAiTools;
     }
 
-    /**
-     * 根据模式获取 OpenAI 格式的工具列表     */
+    // 根据模式获取 OpenAI 格式的工具列表
     public List<OpenAiTool> getOpenAiToolsForMode(String mode) {
-        List<McpTool> mcpTools = toolRegistry.getToolsForMode(mode);
+        List<ToolDefinition> toolDefinitions = toolRegistry.getToolsForMode(mode);
         List<OpenAiTool> openAiTools = new ArrayList<>();
-        
-        for (McpTool mcpTool : mcpTools) {
-            openAiTools.add(convertToOpenAiTool(mcpTool));
+
+        for (ToolDefinition toolDefinition : toolDefinitions) {
+            openAiTools.add(convertToOpenAiTool(toolDefinition));
         }
-        
-        log.info("Converted {} MCP tools for mode '{}' to OpenAI format", openAiTools.size(), mode);
+
+        log.info("Converted {} tools for mode '{}' to OpenAI format", openAiTools.size(), mode);
         return openAiTools;
     }
 
+    // 根据模式和词汇操作类型获取 OpenAI 格式的工具列表
     public List<OpenAiTool> getOpenAiToolsForMode(String mode, String vocabularyAction) {
         List<OpenAiTool> tools = getOpenAiToolsForMode(mode);
         if (!"vocabulary".equals(mode) || vocabularyAction == null || vocabularyAction.isBlank()) {
@@ -83,36 +76,32 @@ public class McpService {
                 .toList();
     }
 
-    /**
-     * 调用指定的MCP 工具
-     */
-    public McpToolResult callTool(McpToolCall call) {
+    // 调用指定的工具
+    public ToolResult callTool(ToolCall call) {
         log.info("Calling tool: {}, id: {}", call.getName(), call.getId());
         return toolRegistry.executeTool(call);
     }
 
-    /**
-     * 将 MCP 工具定义转换为OpenAI 格式
-     */
-    private OpenAiTool convertToOpenAiTool(McpTool mcpTool) {
+    // 将工具定义转换为 OpenAI 格式
+    private OpenAiTool convertToOpenAiTool(ToolDefinition toolDefinition) {
         OpenAiTool.Function.FunctionBuilder functionBuilder = OpenAiTool.Function.builder()
-                .name(mcpTool.getName())
-                .description(mcpTool.getDescription());
+                .name(toolDefinition.getName())
+                .description(toolDefinition.getDescription());
 
-        if (mcpTool.getArguments() != null) {
+        if (toolDefinition.getArguments() != null) {
             OpenAiTool.Parameters.ParametersBuilder paramsBuilder = OpenAiTool.Parameters.builder()
-                    .type(mcpTool.getArguments().getType());
+                    .type(toolDefinition.getArguments().getType());
 
-            if (mcpTool.getArguments().getProperties() != null) {
+            if (toolDefinition.getArguments().getProperties() != null) {
                 Map<String, OpenAiTool.Property> properties = new HashMap<>();
-                for (Map.Entry<String, McpTool.Property> entry : mcpTool.getArguments().getProperties().entrySet()) {
+                for (Map.Entry<String, ToolDefinition.Property> entry : toolDefinition.getArguments().getProperties().entrySet()) {
                     properties.put(entry.getKey(), convertProperty(entry.getValue()));
                 }
                 paramsBuilder.properties(properties);
             }
 
-            if (mcpTool.getArguments().getRequired() != null) {
-                paramsBuilder.required(new ArrayList<>(mcpTool.getArguments().getRequired()));
+            if (toolDefinition.getArguments().getRequired() != null) {
+                paramsBuilder.required(new ArrayList<>(toolDefinition.getArguments().getRequired()));
             }
 
             functionBuilder.parameters(paramsBuilder.build());
@@ -124,6 +113,7 @@ public class McpService {
                 .build();
     }
 
+    // 窄化词汇工具的参数定义
     private OpenAiTool narrowVocabularyTool(
             OpenAiTool tool,
             String action) {
@@ -186,22 +176,20 @@ public class McpService {
                 .build();
     }
 
-    /**
-     * 将 MCP 属性定义转换为 OpenAI 格式
-     */
-    private OpenAiTool.Property convertProperty(McpTool.Property mcpProp) {
+    // 将工具属性定义转换为 OpenAI 格式
+    private OpenAiTool.Property convertProperty(ToolDefinition.Property property) {
         OpenAiTool.Property.PropertyBuilder builder = OpenAiTool.Property.builder()
-                .type(mcpProp.getType())
-                .description(mcpProp.getDescription());
+                .type(property.getType())
+                .description(property.getDescription());
 
-        if (mcpProp.getEnums() != null) {
-            builder.enums(new ArrayList<>(mcpProp.getEnums()));
+        if (property.getEnums() != null) {
+            builder.enums(new ArrayList<>(property.getEnums()));
         }
 
-        if (mcpProp.getItems() != null) {
+        if (property.getItems() != null) {
             OpenAiTool.Items items = OpenAiTool.Items.builder()
-                    .type(mcpProp.getItems().getType())
-                    .enums(mcpProp.getItems().getEnums() != null ? new ArrayList<>(mcpProp.getItems().getEnums()) : null)
+                    .type(property.getItems().getType())
+                    .enums(property.getItems().getEnums() != null ? new ArrayList<>(property.getItems().getEnums()) : null)
                     .build();
             builder.items(items);
         }

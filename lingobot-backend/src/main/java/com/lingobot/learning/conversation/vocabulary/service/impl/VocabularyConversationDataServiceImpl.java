@@ -86,4 +86,15 @@ public class VocabularyConversationDataServiceImpl implements VocabularyConversa
     public void deleteByConversationId(Long conversationId) {
         repository.deleteByConversationId(conversationId);
     }
+
+    @Override
+    @Transactional
+    public VocabularyConversationData updateLastViewedPosition(Long conversationId, Integer position) {
+        VocabularyConversationData data = repository.findByConversationId(conversationId)
+                .orElseGet(() -> VocabularyConversationData.builder()
+                        .conversationId(conversationId)
+                        .build());
+        data.setLastViewedPosition(position);
+        return repository.save(data);
+    }
 }

@@ -1,16 +1,16 @@
 package com.lingobot.learning.chat.controller;
 
 import com.lingobot.core.conversation.service.ConversationService;
-import com.lingobot.learning.conversation.entity.ConversationLearningData;
-import com.lingobot.learning.conversation.repository.ConversationLearningDataRepository;
+import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversationData;
+import com.lingobot.learning.conversation.vocabulary.repository.VocabularyConversationDataRepository;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.config.LlmProperties;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 import com.lingobot.learning.chat.service.ContextManagerService;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
-import com.lingobot.learning.llm.service.LlmService;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
+import com.lingobot.infrastructure.llm.service.LlmService;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +36,7 @@ import java.util.Map;
 public class ContextController {
 
     private final ContextManagerService contextManagerService;
-    private final ConversationLearningDataRepository learningDataRepository;
+    private final VocabularyConversationDataRepository learningDataRepository;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final BalanceService balanceService;
     private final ApiConfigProperties apiConfigProperties;
@@ -53,8 +53,8 @@ public class ContextController {
     @PostMapping("/compact/{publicId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> compact(@PathVariable String publicId) {
         Long conversationId = conversationService.resolvePublicIdToId(publicId);
-        ConversationLearningData learningData = learningDataRepository.findByConversationId(conversationId)
-                .orElseGet(() -> ConversationLearningData.builder()
+        VocabularyConversationData learningData = learningDataRepository.findByConversationId(conversationId)
+                .orElseGet(() -> VocabularyConversationData.builder()
                         .conversationId(conversationId)
                         .build());
 

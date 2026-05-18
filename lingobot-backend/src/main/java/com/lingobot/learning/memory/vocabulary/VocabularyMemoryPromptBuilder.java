@@ -213,9 +213,6 @@ public class VocabularyMemoryPromptBuilder {
                 } else {
                     sb.append("- [当前词] ").append(card.getWord() != null ? card.getWord() : "");
                 }
-                if (card.getRegenerationIndex() != null && card.getRegenerationIndex() > 0) {
-                    sb.append(" (第").append(card.getRegenerationIndex()).append("版)");
-                }
                 sb.append("\n");
                 if (card.getPartOfSpeech() != null && !card.getPartOfSpeech().isEmpty()) {
                     sb.append("  词性: ").append(card.getPartOfSpeech()).append("\n");

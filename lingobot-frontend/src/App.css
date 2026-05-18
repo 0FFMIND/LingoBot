@@ -9047,6 +9047,7 @@
 .vocabulary-view-empty .empty-icon {
   font-size: 96px;
   margin-bottom: 24px;
+  opacity: 1;
 }
 
 .vocabulary-view-empty h3 {
@@ -9059,6 +9060,41 @@
 .vocabulary-view-empty p {
   color: #64748b;
   font-size: 16px;
+}
+
+.vocabulary-error-message {
+  color: #dc2626 !important;
+  font-weight: 500;
+  margin-bottom: 8px !important;
+}
+
+.vocabulary-error-hint {
+  color: #94a3b8 !important;
+  font-size: 14px !important;
+  margin-bottom: 20px !important;
+}
+
+.vocabulary-retry-btn {
+  margin-top: 20px;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.vocabulary-retry-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.vocabulary-retry-btn:active {
+  transform: translateY(0);
 }
 
 .vocabulary-loading-overlay {
@@ -9095,6 +9131,20 @@
 
 /* 响应式设计 - 词汇卡片 */
 @media (max-width: 768px) {
+  .vocabulary-view-empty {
+    padding: 40px 20px;
+    min-height: 300px;
+  }
+
+  .vocabulary-view-empty .empty-icon {
+    font-size: 72px;
+    opacity: 1;
+  }
+
+  .vocabulary-view-empty h3 {
+    font-size: 22px;
+  }
+
   .vocabulary-progress-strip {
     min-height: 58px;
     padding: 0 16px;
@@ -10475,6 +10525,22 @@
 .vocabulary-loading .loading-spinner {
   width: 20px;
   height: 20px;
+  border-width: 2px;
+}
+
+.load-more-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.load-more-indicator .loading-spinner {
+  width: 16px;
+  height: 16px;
   border-width: 2px;
 }
 

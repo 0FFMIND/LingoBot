@@ -24,6 +24,7 @@ public class OpenAiTool {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Function {
         private String name;
         private String description;
@@ -34,6 +35,7 @@ public class OpenAiTool {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Parameters {
         private String type;
         private Map<String, Property> properties;
@@ -44,6 +46,7 @@ public class OpenAiTool {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Property {
         private String type;
         private String description;
@@ -55,6 +58,7 @@ public class OpenAiTool {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Items {
         private String type;
         private List<String> enums;

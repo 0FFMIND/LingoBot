@@ -10,6 +10,7 @@ import {
 export interface UseVocabularyResult {
   currentVocabularyCard: VocabularyCardDTO | null;
   vocabularyCardLoading: boolean;
+  vocabularyCardError: string | null;
   vocabularyCategory: VocabularyCategory;
   vocabularyDifficulty: VocabularyDifficulty;
   userMeaningInput: string;
@@ -157,6 +158,7 @@ export function useVocabulary(
   return {
     currentVocabularyCard,
     vocabularyCardLoading,
+    vocabularyCardError: null,
     vocabularyCategory,
     vocabularyDifficulty,
     userMeaningInput,

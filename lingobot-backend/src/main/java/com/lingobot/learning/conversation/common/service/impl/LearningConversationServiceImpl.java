@@ -70,9 +70,10 @@ public class LearningConversationServiceImpl implements LearningConversationServ
                     currentTitle.trim().isEmpty() ||
                     currentTitle.startsWith("新对话") ||
                     currentTitle.equals("词汇拓展") ||
+                    currentTitle.equals("词汇扩展") ||
                     currentTitle.equals("日常对话")) {
                 LocalDateTime now = LocalDateTime.now();
-                String title = String.format("词汇扩展 %d月%d日%02d时%02d分",
+                String title = String.format("词汇拓展 %d月%d日%02d时%02d分",
                         now.getMonthValue(), now.getDayOfMonth(),
                         now.getHour(), now.getMinute());
                 conversation.setTitle(title);

@@ -13,9 +13,9 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "conversation")
 public class ConversationProperties {
 
-    // 会话列表默认返回的最近会话数量
-    private int defaultConversationListSize = 20;
+    private int defaultConversationListSize;
 
-    // 消息历史默认返回的最近消息数量
-    private int defaultMessageHistorySize = 10;
+    private int vocabularyWindowSize;
+
+    private int vocabularyDefaultBatchSize;
 }

@@ -73,7 +73,7 @@ llm:
   api-key: ${LLM_API_KEY:${OPENROUTER_API_KEY:}}  # API 密钥，优先读取 LLM_API_KEY，其次读取 OPENROUTER_API_KEY
   model: ${LLM_MODEL:qwen/qwen3.5-flash-02-23}  # 默认使用的文本模型
   audio-model: ${LLM_AUDIO_MODEL:xiaomi/mimo-v2-omni}  # 音频处理使用的多模态模型
-  temperature: ${LLM_TEMPERATURE:0.7}  # 温度参数，控制输出随机性，0.7 平衡创造性和稳定性
+  temperature: ${LLM_TEMPERATURE:0.5}  # 温度参数，控制输出随机性，0.7 平衡创造性和稳定性
   max-tokens: ${LLM_MAX_TOKENS:8192}  # 最大生成 token 数
   timeout: ${LLM_TIMEOUT:120000}  # 请求超时时间，默认 2 分钟（120000 毫秒）
   audio-enabled: ${LLM_AUDIO_ENABLED:true}  # 是否启用音频功能
@@ -83,11 +83,12 @@ app:
 
 compact:
   enabled: ${COMPACT_ENABLED:true}  # 是否启用会话压缩功能
-  max-characters-threshold: ${COMPACT_MAX_CHARACTERS:5000}  # 触发压缩的字符数阈值
+  max-characters-threshold: ${COMPACT_MAX_CHARACTERS:10000}  # 触发压缩的字符数阈值
   min-messages-to-compact: ${COMPACT_MIN_MESSAGES:6}  # 触发压缩的最少消息数
   recent-messages-to-keep: ${COMPACT_KEEP_RECENT:4}  # 压缩时保留的最近消息数
 
 
 conversation:
   default-conversation-list-size: ${CONVERSATION_LIST_SIZE:20}  # 会话列表默认返回的最近会话数量
-  default-message-history-size: ${MESSAGE_HISTORY_SIZE:10}  # 消息历史默认返回的最近消息数量
+  vocabulary-window-size: ${VOCABULARY_WINDOW_SIZE:10}  # 词汇卡片窗口召回数量
+  vocabulary-default-batch-size: ${VOCABULARY_DEFAULT_BATCH_SIZE:10}  # 批量生成词汇卡的默认数量

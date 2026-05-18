@@ -3,14 +3,8 @@ api:
 
   endpoints:
     vocabulary:
-      generate-card:
-        path: /api/vocabulary/conversations/{conversationId}/generate
-        method: POST
-        cost: 0.1
-        description: AI生成新词汇卡
-
       regenerate-card:
-        path: /api/vocabulary/conversations/{conversationId}/regenerate
+        path: /api/vocabulary/conversations/{conversationPublicId}/regenerate-at-position
         method: POST
         cost: 0.1
         description: 重新生成词汇卡
@@ -28,16 +22,10 @@ api:
         description: AI分析用户翻译的英文句子
 
       generate-batch-cards:
-        path: /api/vocabulary/conversations/{conversationId}/generate-batch
+        path: /api/vocabulary/conversations/{conversationPublicId}/generate-batch
         method: POST
-        cost: 0.1
+        cost: 1
         description: 批量生成10张词汇卡
-
-      reveal-card:
-        path: /api/vocabulary/conversations/{conversationId}/reveal-next
-        method: POST
-        cost: 0.1
-        description: 揭露下一张词汇卡
 
     user-vocabulary:
       ai-modify:

@@ -5,8 +5,8 @@ import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversationData;
 import com.lingobot.learning.conversation.vocabulary.repository.VocabularyConversationDataRepository;
-import com.lingobot.learning.mode.service.SystemPromptService;
-import com.lingobot.learning.llm.dto.openai.OpenAiChatMessage;
+import com.lingobot.learning.prompt.chat.ChatPromptBuilder;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 public class MessageHistoryService {
     
     private final MessageRepository messageRepository;
-    private final SystemPromptService systemPromptService;
+    private final ChatPromptBuilder chatPromptBuilder;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final VocabularyConversationDataRepository vocabDataRepository;
     
@@ -84,7 +84,7 @@ public class MessageHistoryService {
                                                                              String vocabularyDifficulty, Long conversationId) {
         List<OpenAiChatMessage> messages = new ArrayList<>();
         
-        String systemPrompt = systemPromptService.getSystemPrompt(learningMode, vocabularyCategory, vocabularyDifficulty);
+        String systemPrompt = chatPromptBuilder.getSystemPrompt(learningMode);
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
             if ("vocabulary".equals(learningMode) && conversationId != null) {
                 String vocabularyHistoryInfo = buildVocabularyHistoryForPrompt(conversationId);

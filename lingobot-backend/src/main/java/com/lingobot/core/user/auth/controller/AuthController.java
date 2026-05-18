@@ -14,9 +14,11 @@ import com.lingobot.core.user.auth.repository.UserRepository;
 import com.lingobot.core.user.auth.service.AuthService;
 import com.lingobot.core.user.auth.service.EmailVerificationService;
 import com.lingobot.core.user.auth.service.JwtService;
+import com.lingobot.core.user.balance.entity.UserBalance;
 import com.lingobot.core.user.balance.repository.UserBalanceRepository;
 import com.lingobot.infrastructure.common.config.AppProperties;
 import com.lingobot.infrastructure.common.response.ApiResponse;
+import com.lingobot.infrastructure.common.response.ErrorCode;
 import com.lingobot.infrastructure.util.IpUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -140,21 +142,21 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> devAutoLogin() {
         if (!appProperties.isDev()) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(ApiResponse.error(com.lingobot.infrastructure.common.response.ErrorCode.FORBIDDEN, "仅开发环境可用"));
+                    .body(ApiResponse.error(ErrorCode.FORBIDDEN, "仅开发环境可用"));
         }
         
         User adminUser = userRepository.findByRole(User.Role.ROLE_ADMIN).stream().findFirst().orElse(null);
         
         if (adminUser == null) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ApiResponse.error(com.lingobot.infrastructure.common.response.ErrorCode.INTERNAL_ERROR, "未找到管理员用户"));
+                    .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR, "未找到管理员用户"));
         }
         
         String token = jwtService.generateToken(adminUser.getUsername(), adminUser.getId());
         
         BigDecimal balance = BigDecimal.ZERO;
         BigDecimal frozenBalance = BigDecimal.ZERO;
-        com.lingobot.core.user.balance.entity.UserBalance userBalance = userBalanceRepository.findByUserId(adminUser.getId()).orElse(null);
+        UserBalance userBalance = userBalanceRepository.findByUserId(adminUser.getId()).orElse(null);
         if (userBalance != null) {
             balance = userBalance.getBalance() != null ? userBalance.getBalance() : BigDecimal.ZERO;
             frozenBalance = userBalance.getFrozenBalance() != null ? userBalance.getFrozenBalance() : BigDecimal.ZERO;

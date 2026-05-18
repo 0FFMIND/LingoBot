@@ -31,6 +31,7 @@ public class OpenAiChatMessage {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class ToolCall {
         private String id;
         private String type;
@@ -41,6 +42,7 @@ public class OpenAiChatMessage {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class FunctionCall {
         private String name;
         private String arguments;

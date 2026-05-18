@@ -18,4 +18,6 @@ public interface VocabularyConversationDataService {
                                                       Integer compactedCardCount);
 
     void deleteByConversationId(Long conversationId);
+
+    VocabularyConversationData updateLastViewedPosition(Long conversationId, Integer position);
 }

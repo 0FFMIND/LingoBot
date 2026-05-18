@@ -1,6 +1,6 @@
 export type LearningMode = 'chat' | 'vocabulary';
 
-export type VocabularyIntent = 'new_word' | 'review' | 'hybrid';
+export type VocabularyIntent = 'new_word' | 'review' | 'smart_recommend' | 'hybrid';
 
 export type VocabularyStatus = 'NEW' | 'LEARNING' | 'REVIEWING' | 'MASTERED';
 export type VocabularyEventType = 'NEW_LEARNING' | 'REVIEW' | 'HYBRID';

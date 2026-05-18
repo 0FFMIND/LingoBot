@@ -358,6 +358,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         {loadingMore && (
           <div className="load-more-indicator">
+            <div className="loading-spinner"></div>
             <span>加载中...</span>
           </div>
         )}

@@ -3,6 +3,8 @@ package com.lingobot.learning.vocabulary.controller;
 import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
+import com.lingobot.infrastructure.common.config.ConversationProperties;
+import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.infrastructure.common.response.ApiResponse;
 
 import com.lingobot.learning.vocabulary.dto.MeaningCheckStatusDTO;
@@ -41,6 +43,7 @@ public class VocabularyCardController {
     private final BalanceService balanceService;
     private final ApiConfigProperties apiConfigProperties;
     private final ConversationService conversationService;
+    private final ConversationProperties conversationProperties;
 
     private Long resolvePublicId(String publicId) {
         return conversationService.resolvePublicIdToId(publicId);
@@ -240,7 +243,7 @@ public class VocabularyCardController {
         // Use a native projection so the response reflects the database row, not a stale JPA entity.
         VocabularyCardRepository.MeaningCheckStatusProjection card = vocabularyCardRepository
                 .findMeaningCheckStatusByCardId(cardId)
-                .orElseThrow(() -> com.lingobot.infrastructure.common.exception.ChatException.badRequest("Vocabulary card not found: " + cardId));
+                .orElseThrow(() -> ChatException.badRequest("Vocabulary card not found: " + cardId));
         MeaningCheckStatusDTO status = MeaningCheckStatusDTO.builder()
                 .cardId(card.getCardId())
                 .word(card.getWord() != null ? card.getWord() : "")
@@ -299,7 +302,7 @@ public class VocabularyCardController {
             String category = request != null ? (String) request.get("category") : null;
             String difficulty = request != null ? (String) request.get("difficulty") : null;
             Integer batchSize = request != null && request.get("batchSize") != null
-                    ? (Integer) request.get("batchSize") : 10;
+                    ? (Integer) request.get("batchSize") : conversationProperties.getVocabularyDefaultBatchSize();
 
             VocabularyBatchGenerationResult result = vocabularyCardService.generateBatchCards(
                     conversationId, category, difficulty, batchSize);
@@ -354,5 +357,36 @@ public class VocabularyCardController {
         Long conversationId = resolvePublicId(conversationPublicId);
         VocabularyBatchGenerationResult status = vocabularyCardService.getBatchStatus(conversationId);
         return ResponseEntity.ok(ApiResponse.success(status));
+    }
+
+    /**
+     * 获取指定位置周围的词汇卡窗口
+     * @param conversationPublicId 对话的publicId
+     * @param position 中心位置
+     * @return 词汇卡列表（窗口内的卡片）
+     */
+    @GetMapping("/conversations/{conversationPublicId}/cards/window")
+    public ResponseEntity<ApiResponse<List<VocabularyCardDTO>>> getCardsAroundPosition(
+            @PathVariable String conversationPublicId,
+            @RequestParam Integer position) {
+        Long conversationId = resolvePublicId(conversationPublicId);
+        List<VocabularyCardDTO> cards = vocabularyCardService.getCardsAroundPosition(conversationId, position);
+        return ResponseEntity.ok(ApiResponse.success(cards));
+    }
+
+    /**
+     * 更新用户最后查看的词汇卡位置
+     * @param conversationPublicId 对话的publicId
+     * @param position 位置
+     * @return 更新成功响应
+     */
+    @PutMapping("/conversations/{conversationPublicId}/last-viewed-position")
+    public ResponseEntity<ApiResponse<Void>> updateLastViewedPosition(
+            @PathVariable String conversationPublicId,
+            @RequestBody Map<String, Integer> request) {
+        Long conversationId = resolvePublicId(conversationPublicId);
+        Integer position = request.get("position");
+        vocabularyCardService.updateLastViewedPosition(conversationId, position);
+        return ResponseEntity.ok(ApiResponse.success("位置已更新", null));
     }
 }

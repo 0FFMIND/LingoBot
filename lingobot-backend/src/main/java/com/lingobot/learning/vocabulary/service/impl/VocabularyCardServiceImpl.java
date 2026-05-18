@@ -1,11 +1,13 @@
 package com.lingobot.learning.vocabulary.service.impl;
 
+import com.lingobot.infrastructure.common.config.ConversationProperties;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.repository.ConversationRepository;
 import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversationData;
 import com.lingobot.learning.conversation.vocabulary.repository.VocabularyConversationDataRepository;
-import com.lingobot.learning.vocabulary.graph.VocabularyGraph;
+import com.lingobot.learning.conversation.vocabulary.service.VocabularyConversationDataService;
+import com.lingobot.learning.vocabulary.graph.VocabularyRegenerateGraph;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
 
@@ -35,7 +37,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -64,8 +68,10 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     private final UserVocabularyEventService eventService;
     private final VocabularyCardSnapshotService snapshotService;
     private final VocabularyMemoryService vocabularyMemoryService;
-    private final VocabularyGraph vocabularyGraph;
+    private final VocabularyRegenerateGraph vocabularyRegenerateGraph;
     private final VocabularyBatchGraph vocabularyBatchGraph;
+    private final ConversationProperties conversationProperties;
+    private final VocabularyConversationDataService vocabularyConversationDataService;
     
     /** Redis 缓存键前缀 - 单个单词卡*/
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
@@ -294,6 +300,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         nextCard.setHasPrev(nextIndex > 0);
         nextCard.setHasNext(nextIndex < cardDTOs.size() - 1);
 
+        updateLastViewedPosition(conversationId, nextCard.getPosition());
+
         return nextCard;
     }
 
@@ -330,22 +338,40 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         prevCard.setHasPrev(prevIndex > 0);
         prevCard.setHasNext(prevIndex < cardDTOs.size() - 1);
 
+        updateLastViewedPosition(conversationId, prevCard.getPosition());
+
         return prevCard;
     }
 
     @Override
     public VocabularyCardDTO getCurrentCard(Long conversationId) {
         List<VocabularyCardDTO> cardDTOs = getAllCards(conversationId);
-        
+
         if (cardDTOs.isEmpty()) {
             return null;
         }
 
+        Integer lastViewedPosition = vocabDataRepository.findByConversationId(conversationId)
+                .map(VocabularyConversationData::getLastViewedPosition)
+                .orElse(null);
+
         int targetIndex = -1;
-        for (int i = 0; i < cardDTOs.size(); i++) {
-            if (!cardDTOs.get(i).getIsCompleted()) {
-                targetIndex = i;
-                break;
+
+        if (lastViewedPosition != null) {
+            for (int i = 0; i < cardDTOs.size(); i++) {
+                if (cardDTOs.get(i).getPosition().equals(lastViewedPosition)) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (targetIndex < 0) {
+            for (int i = 0; i < cardDTOs.size(); i++) {
+                if (!cardDTOs.get(i).getIsCompleted()) {
+                    targetIndex = i;
+                    break;
+                }
             }
         }
 
@@ -358,6 +384,8 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         currentCard.setTotalCount(cardDTOs.size());
         currentCard.setHasPrev(targetIndex > 0);
         currentCard.setHasNext(targetIndex < cardDTOs.size() - 1);
+
+        updateLastViewedPosition(conversationId, currentCard.getPosition());
 
         return currentCard;
     }
@@ -497,45 +525,34 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     }
 
     /**
-     * 通过 AI Agent 生成随机单词卡片数据。
-     * 核心流程：读取用户偏好 → 构建 System Prompt（含历史词汇）→ 调用 AI 工具 → 解析返回结果。
+     * 通过 AI Agent 重新生成单词卡片数据。
+     * 核心流程：调用 VocabularyRegenerateGraph 生成新卡片（不负责持久化）。
      * @param conversationId 对话ID
      * @param category 词汇类别（cefr/ielts/toefl），null 时从用户偏好读取
      * @param difficulty 难度级别，null 时从用户偏好读取
-     * @param intent 生成意图（next_word / regenerate / new_word / review / hybrid）
-     * @return 解析后的单词卡片数据，AI 失败时返回默认单词
+     * @param regeneratePosition 重新生成的位置
+     * @param oldWord 被替换的旧单词
+     * @param oldPartOfSpeech 被替换的旧词性
+     * @param oldMeaning 被替换的旧释义
+     * @return 解析后的单词卡片数据，AI 失败时抛出异常
      */
-    private WordCardData generateRandomWord(Long conversationId, String category, String difficulty, String intent) {
-        log.info("=== 开始生成词汇卡（LangGraph4j 模式）===");
-        log.info("conversationId: {}, category: {}, difficulty: {}, intent: {}", conversationId, category, difficulty, intent);
+    private WordCardData regenerateWordCard(Long conversationId, String category, String difficulty,
+                                       Integer regeneratePosition, String oldWord,
+                                       String oldPartOfSpeech, String oldMeaning) {
+        log.info("=== 开始重新生成词汇卡 ===");
+        log.info("conversationId: {}, category: {}, difficulty: {}, position: {}",
+                conversationId, category, difficulty, regeneratePosition);
 
         Conversation conversation = getConversation(conversationId);
         Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
 
-        VocabularyGenerationIntent generationIntent = switch (intent) {
-            case "regenerate" -> VocabularyGenerationIntent.REGENERATE;
-            case "new_word" -> VocabularyGenerationIntent.NEW_WORD;
-            case "review" -> VocabularyGenerationIntent.REVIEW;
-            case "hybrid" -> VocabularyGenerationIntent.HYBRID;
-            default -> VocabularyGenerationIntent.NEXT_WORD;
-        };
+        Optional<WordCardData> result = vocabularyRegenerateGraph.execute(
+                conversationId, userId, category, difficulty,
+                regeneratePosition, oldWord, oldPartOfSpeech, oldMeaning);
 
-        Optional<WordCardData> result = vocabularyGraph.execute(
-                conversationId, userId, category, difficulty, generationIntent);
-
-        return result.orElseGet(() -> {
-            log.warn("LangGraph execution did not produce a result, using fallback");
-            return WordCardData.builder()
-                    .word("hello")
-                    .phonetic("həˈloʊ")
-                    .partOfSpeech("int.")
-                    .meaning("你好")
-                    .example("Hello, how are you?")
-                    .exampleTranslation("你好，你好吗？")
-                    .synonyms(List.of("hi", "hey"))
-                    .category("cefr")
-                    .difficulty("a1")
-                    .build();
+        return result.orElseThrow(() -> {
+            log.warn("VocabularyRegenerateGraph execution did not produce a result");
+            return ChatException.badRequest("词汇重新生成失败，请稍后重试");
         });
     }
 
@@ -625,7 +642,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
     @Override
     @Transactional
     public VocabularyBatchGenerationResult generateBatchCards(Long conversationId, String category, String difficulty) {
-        return generateBatchCards(conversationId, category, difficulty, 10);
+        return generateBatchCards(conversationId, category, difficulty, conversationProperties.getVocabularyDefaultBatchSize());
     }
 
     @Override
@@ -640,12 +657,12 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         String vocabularyIntentStr = vocabDataRepository.findByConversationId(conversationId)
                 .map(VocabularyConversationData::getVocabularyIntent)
                 .orElse(null);
-        com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent intent =
-                com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent.NEW_WORD;
+        VocabularyGenerationIntent intent =
+                VocabularyGenerationIntent.NEW_WORD;
         
         if (vocabularyIntentStr != null && !vocabularyIntentStr.isBlank()) {
             try {
-                intent = com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent.valueOf(
+                intent = VocabularyGenerationIntent.valueOf(
                         vocabularyIntentStr.toUpperCase());
                 log.info("Using vocabulary intent from conversation: {}", intent);
             } catch (IllegalArgumentException e) {
@@ -695,15 +712,16 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
 
         Long userId = conversation.getUser() != null ? conversation.getUser().getId() : null;
         vocabularyMemoryService.recordInteraction(userId, existingCard,
-                com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType.REGENERATED);
+                VocabularyMemoryEventType.REGENERATED);
 
-        WordCardData generated = generateRandomWord(conversationId, category, difficulty, "regenerate");
+        WordCardData generated = regenerateWordCard(conversationId, category, difficulty,
+                position, existingCard.getWord(), existingCard.getPartOfSpeech(), existingCard.getMeaning());
 
         conversation = getConversation(conversationId);
         ensureConversationStillExists(conversationId);
         conversation = getConversation(conversationId);
 
-        com.lingobot.learning.vocabulary.entity.VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(generated.getWord());
+        VocabularyWord vocabularyWord = vocabularyWordService.findOrCreateWord(generated.getWord());
         log.info("Using VocabularyWord: id={}, normalizedWord={}", vocabularyWord.getId(), vocabularyWord.getNormalizedWord());
 
         VocabularyCard newCard = VocabularyCard.builder()
@@ -733,7 +751,7 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
         if (userId != null) {
             userVocabularyService.upsertRecordOnly(userId, saved);
             vocabularyMemoryService.recordInteraction(userId, saved,
-                    com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType.SEEN);
+                    VocabularyMemoryEventType.SEEN);
             log.info("Created UserVocabulary record for userId={}, vocabularyWordId={}",
                     userId, vocabularyWord.getId());
         }
@@ -777,5 +795,43 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
                 .totalHidden(hiddenCards.size())
                 .totalCount(allCards.size())
                 .build();
+    }
+
+    @Override
+    public List<VocabularyCardDTO> getCardsAroundPosition(Long conversationId, Integer position) {
+        int windowSize = conversationProperties.getVocabularyWindowSize();
+        int leftSize = (windowSize - 1) / 2;
+        int rightSize = windowSize - 1 - leftSize;
+        int startPos = Math.max(0, position - leftSize);
+        int endPos = position + rightSize;
+
+        List<VocabularyCard> cards = vocabularyCardRepository.findActiveCardsByPositionRange(
+                conversationId, startPos, endPos);
+
+        long totalCount = getCardCount(conversationId);
+        List<VocabularyCardDTO> allCards = getAllCards(conversationId);
+        Map<Integer, Integer> positionToIndex = new HashMap<>();
+        for (int i = 0; i < allCards.size(); i++) {
+            positionToIndex.put(allCards.get(i).getPosition(), i);
+        }
+
+        return cards.stream()
+                .map(card -> {
+                    VocabularyCardDTO dto = toDTO(card);
+                    dto.setTotalCount((int) totalCount);
+                    dto.setHasPrev(card.getPosition() > 0);
+                    dto.setHasNext(card.getPosition() < totalCount - 1);
+                    Integer cardIndex = positionToIndex.get(card.getPosition());
+                    if (cardIndex != null) {
+                        dto.setCurrentIndex(cardIndex);
+                    }
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void updateLastViewedPosition(Long conversationId, Integer position) {
+        vocabularyConversationDataService.updateLastViewedPosition(conversationId, position);
     }
 }

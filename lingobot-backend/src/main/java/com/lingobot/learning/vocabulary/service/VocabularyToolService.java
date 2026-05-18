@@ -1,253 +1,49 @@
-package com.lingobot.infrastructure.mcp.tools;
+package com.lingobot.learning.vocabulary.service;
 
-import com.lingobot.infrastructure.mcp.dto.McpTool;
-import com.lingobot.infrastructure.mcp.dto.McpToolCall;
-import com.lingobot.infrastructure.mcp.dto.McpToolResult;
-import com.lingobot.infrastructure.mcp.service.McpToolHandler;
-import com.lingobot.infrastructure.mcp.service.ToolCategory;
-import com.lingobot.infrastructure.mcp.service.ToolMode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
-import com.lingobot.learning.vocabulary.service.UserVocabularyService;
-import com.lingobot.learning.vocabulary.service.VocabularyStateService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.util.*;
 
 /**
- * 词汇学习 MCP 工具
- * 用于 AI 与前端交互，展示单词卡片
- * 支持操作：display_flashcard（展示单词卡）、check_meaning_accuracy（检查用户释义准确性） */
+ * 词汇工具业务服务。
+ *
+ * 封装词汇学习相关的工具业务逻辑，包括单词卡展示、
+ * 释义检查、句子分析等核心功能。
+ *
+ * 作为词汇工具的业务层，被工具适配器调用，
+ * 不直接处理工具调用的参数解析和格式转换。
+ */
 @Slf4j
-@Component
+@Service
 @RequiredArgsConstructor
-public class VocabularyTool implements McpToolHandler {
+public class VocabularyToolService {
 
-    private static final String TOOL_NAME = "vocabulary";
-    private static final List<String> SUPPORTED_MODES = List.of(
-            ToolMode.CHAT,
-            ToolMode.AGENT,
-            ToolMode.VOCABULARY
-    );
-    
-    /** Redis 缓存键前缀 - 单个单词卡*/
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
-    /** Redis 缓存键前缀 - 对话的所有有效卡片列表*/
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
-    /** Redis 缓存键前缀 - 对话的有效卡片数量*/
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
-    
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final VocabularyStateService vocabularyStateService;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final UserVocabularyService userVocabularyService;
     private final StringRedisTemplate stringRedisTemplate;
 
-    @Override
-    public String getName() {
-        return TOOL_NAME;
-    }
-
-    @Override
-    public ToolCategory getCategory() {
-        return ToolCategory.ONE_TIME;
-    }
-
-    @Override
-    public List<String> getSupportedModes() {
-        return SUPPORTED_MODES;
-    }
-
     /**
-     * 获取工具定义，描述工具的参数和功能
-     * 这些信息会被传递给 AI 模型，让 AI 了解如何调用此工具
+     * 展示单词卡。
+     *
+     * 接收单词信息，保存当前学习状态，并返回格式化的展示数据。
+     *
+     * @param args 单词卡参数，包含 word、phonetic、partOfSpeech 等
+     * @param conversationId 对话 ID
+     * @return 单词卡展示结果
      */
-    @Override
-    public McpTool getToolDefinition() {
-        Map<String, McpTool.Property> properties = new HashMap<>();
-
-        properties.put("action", McpTool.Property.builder()
-                .type("string")
-                .description("操作类型：display_flashcard（展示单词卡）、display_flashcard_batch（批量展示单词卡）、check_meaning_accuracy（检查用户释义准确性）、analyze_sentence（分析用户英文造句）")
-                .enums(Arrays.asList(
-                        "display_flashcard",
-                        "display_flashcard_batch",
-                        "check_meaning_accuracy",
-                        "analyze_sentence"
-                ))
-                .build());
-
-        properties.put("cards", McpTool.Property.builder()
-                .type("array")
-                .description("单词卡数组（用于 display_flashcard_batch），每个元素包含 word、phonetic、partOfSpeech、meaning、example、exampleTranslation、synonyms、vocabularyCategory、vocabularyDifficulty")
-                .items(McpTool.Items.builder().type("object").build())
-                .build());
-
-        properties.put("word", McpTool.Property.builder()
-                .type("string")
-                .description("英文单词")
-                .build());
-
-        properties.put("phonetic", McpTool.Property.builder()
-                .type("string")
-                .description("音标（IPA 格式）")
-                .build());
-
-        properties.put("partOfSpeech", McpTool.Property.builder()
-                .type("string")
-                .description("词性，如 n., v., adj., adv., int., conj., prep., pron. 等")
-                .build());
-
-        properties.put("meaning", McpTool.Property.builder()
-                .type("string")
-                .description("中文释义")
-                .build());
-
-        properties.put("example", McpTool.Property.builder()
-                .type("string")
-                .description("使用该单词的自然英文例句，难度须与单词难度匹配")
-                .build());
-
-        properties.put("exampleTranslation", McpTool.Property.builder()
-                .type("string")
-                .description("英文例句的准确中文翻译")
-                .build());
-
-        properties.put("synonyms", McpTool.Property.builder()
-                .type("array")
-                .description("同义词列表（数组）")
-                .items(McpTool.Items.builder().type("string").build())
-                .build());
-
-        properties.put("vocabularyCategory", McpTool.Property.builder()
-                .type("string")
-                .description("词汇划分标准：cefr（CEFR 等级）、ielts（雅思）、toefl（托福）")
-                .enums(Arrays.asList("cefr", "ielts", "toefl"))
-                .build());
-
-        properties.put("vocabularyDifficulty", McpTool.Property.builder()
-                .type("string")
-                .description("难度级别：CEFR 使用 a1/a2/b1/b2/c1/c2；IELTS 使用 4.0-5.0/5.5-6.5/7.0-8.0/8.5-9.0；TOEFL 使用 60-80/81-100/101-110/111-120")
-                .build());
-
-        properties.put("user_meaning", McpTool.Property.builder()
-                .type("string")
-                .description("用户输入的中文释义（用于 check_meaning_accuracy）")
-                .build());
-
-        properties.put("is_correct", McpTool.Property.builder()
-                .type("boolean")
-                .description("用户释义是否正确（用于check_meaning_accuracy）")
-                .build());
-
-        properties.put("check_feedback", McpTool.Property.builder()
-                .type("string")
-                .description("对用户释义的详细反馈（用于check_meaning_accuracy）")
-                .build());
-
-        properties.put("chineseSentenceForTranslation", McpTool.Property.builder()
-                .type("string")
-                .description("一个自然的中文句子，供用户翻译成英文，难度须与单词难度匹配")
-                .build());
-
-        properties.put("meaning_matches", McpTool.Property.builder()
-                .type("boolean")
-                .description("用户英文句子的意思是否与中文例句匹配（用于analyze_sentence）")
-                .build());
-
-        properties.put("has_new_word", McpTool.Property.builder()
-                .type("boolean")
-                .description("用户英文句子是否正确包含新单词（用于analyze_sentence）")
-                .build());
-
-        properties.put("feedback", McpTool.Property.builder()
-                .type("string")
-                .description("对用户英文句子的详细中文反馈，指出优点和改进建议（用于analyze_sentence）")
-                .build());
-
-        // 构建工具定义，返回给前端和 AI 模型
-        return McpTool.builder()
-                .name(TOOL_NAME)
-                .description("英语词汇学习工具。用于展示单词卡片。AI 应该：1. 生成单词、音标、词性、释义、同义词、词汇划分标准和难度级别后调用 display_flashcard")
-                .arguments(McpTool.ToolArguments.builder()
-                        .type("object")
-                        .properties(properties)
-                        .required(Collections.singletonList("action"))
-                        .build())
-                .build();
-    }
-
-    @Override
-    public McpToolResult execute(McpToolCall call) {
-        Map<String, Object> args = call.getArguments();
-        String action = args != null && args.containsKey("action")
-                ? (String) args.get("action")
-                : "display_flashcard";
-
-        Long conversationId = parseConversationId(call.getConversationId());
-        log.info("VocabularyTool action: {}, conversationId: {}", action, conversationId);
-
-        try {
-            Map<String, Object> result;
-            switch (action) {
-                case "display_flashcard":
-                    result = displayFlashcard(args, conversationId);
-                    break;
-                case "display_flashcard_batch":
-                    result = displayFlashcardBatch(args, conversationId);
-                    break;
-                case "check_meaning_accuracy":
-                    result = checkMeaningAccuracy(args, conversationId);
-                    break;
-                case "analyze_sentence":
-                    result = analyzeSentence(args, conversationId);
-                    break;
-                default:
-                    result = displayFlashcard(args, conversationId);
-            }
-
-            String resultJson = objectMapper.writeValueAsString(result);
-
-            return McpToolResult.builder()
-                    .id(call.getId())
-                    .name(TOOL_NAME)
-                    .success(true)
-                    .content(Collections.singletonList(
-                            McpToolResult.Content.builder()
-                                    .type("text")
-                                    .text(resultJson)
-                                    .build()
-                    ))
-                    .build();
-
-        } catch (Exception e) {
-            log.error("Error executing vocabulary tool", e);
-            return McpToolResult.builder()
-                    .id(call.getId())
-                    .name(TOOL_NAME)
-                    .success(false)
-                    .error("Failed to execute vocabulary tool: " + e.getMessage())
-                    .build();
-        }
-    }
-
-    private Long parseConversationId(String conversationIdStr) {
-        if (conversationIdStr == null || conversationIdStr.isEmpty()) {
-            return null;
-        }
-        try {
-            return Long.parseLong(conversationIdStr);
-        } catch (NumberFormatException e) {
-            log.warn("Invalid conversationId: {}", conversationIdStr);
-            return null;
-        }
-    }
-
-    private Map<String, Object> displayFlashcard(Map<String, Object> args, Long conversationId) {
+    public Map<String, Object> displayFlashcard(Map<String, Object> args, Long conversationId) {
         String word = args != null && args.containsKey("word")
                 ? (String) args.get("word")
                 : null;
@@ -272,7 +68,6 @@ public class VocabularyTool implements McpToolHandler {
         String vocabularyDifficulty = args != null && args.containsKey("vocabularyDifficulty")
                 ? (String) args.get("vocabularyDifficulty")
                 : "b2";
-        // 解析同义词参数
         List<String> synonyms = new ArrayList<>();
         if (args != null && args.containsKey("synonyms")) {
             Object synonymsObj = args.get("synonyms");
@@ -281,7 +76,6 @@ public class VocabularyTool implements McpToolHandler {
             }
         }
 
-        // 保存当前单词状态到会话中，用于后续造句反馈时的上下文参数
         if (conversationId != null) {
             vocabularyStateService.saveCurrentWord(
                     conversationId, word, phonetic, partOfSpeech, meaning,
@@ -302,15 +96,24 @@ public class VocabularyTool implements McpToolHandler {
         result.put("vocabularyCategory", vocabularyCategory);
         result.put("vocabularyDifficulty", vocabularyDifficulty);
         result.put("display_mode", "word_only");
-        result.put("message", word != null && phonetic != null 
-                ? String.format("%s [%s]", word, phonetic) 
+        result.put("message", word != null && phonetic != null
+                ? String.format("%s [%s]", word, phonetic)
                 : word);
 
         return result;
     }
 
+    /**
+     * 批量展示单词卡。
+     *
+     * 接收多张单词卡数据，保存首张单词的学习状态，并返回格式化的批量展示数据。
+     *
+     * @param args 批量单词卡参数，包含 cards 数组
+     * @param conversationId 对话 ID
+     * @return 批量单词卡展示结果
+     */
     @SuppressWarnings("unchecked")
-    private Map<String, Object> displayFlashcardBatch(Map<String, Object> args, Long conversationId) {
+    public Map<String, Object> displayFlashcardBatch(Map<String, Object> args, Long conversationId) {
         List<Map<String, Object>> cardsData = args != null && args.containsKey("cards")
                 ? (List<Map<String, Object>>) args.get("cards")
                 : new ArrayList<>();
@@ -390,7 +193,16 @@ public class VocabularyTool implements McpToolHandler {
         return result;
     }
 
-    private Map<String, Object> checkMeaningAccuracy(Map<String, Object> args, Long conversationId) {
+    /**
+     * 检查用户释义准确性。
+     *
+     * 接收用户输入的释义和 AI 评估结果，持久化到数据库并更新学习进度。
+     *
+     * @param args 释义检查参数，包含 user_meaning、is_correct、check_feedback 等
+     * @param conversationId 对话 ID
+     * @return 释义检查结果
+     */
+    public Map<String, Object> checkMeaningAccuracy(Map<String, Object> args, Long conversationId) {
         String userMeaning = args != null && args.containsKey("user_meaning")
                 ? (String) args.get("user_meaning")
                 : "";
@@ -433,7 +245,6 @@ public class VocabularyTool implements McpToolHandler {
             result.put("correct_meaning", cachedState.get("meaning"));
         }
 
-        // 持久化检查结果到数据库
         if (conversationId != null && isCorrect != null) {
             try {
                 List<VocabularyCard> candidates = vocabularyCardRepository.findIncompleteByConversationId(conversationId);
@@ -465,14 +276,23 @@ public class VocabularyTool implements McpToolHandler {
                     log.warn("No vocabulary card found to persist meaning check for conversation={}", conversationId);
                 }
             } catch (Exception e) {
-                log.error("Failed to persist meaning check result in VocabularyTool", e);
+                log.error("Failed to persist meaning check result", e);
             }
         }
 
         return result;
     }
-    
-    private Map<String, Object> analyzeSentence(Map<String, Object> args, Long conversationId) {
+
+    /**
+     * 分析用户英文句子。
+     *
+     * 接收句子分析结果，持久化到数据库并更新学习进度。
+     *
+     * @param args 句子分析参数，包含 word、meaning_matches、has_new_word、feedback 等
+     * @param conversationId 对话 ID
+     * @return 句子分析结果
+     */
+    public Map<String, Object> analyzeSentence(Map<String, Object> args, Long conversationId) {
         String word = args != null && args.containsKey("word") ? (String) args.get("word") : "";
         Boolean meaningMatches = args != null && args.containsKey("meaning_matches")
                 ? (Boolean) args.get("meaning_matches") : null;
@@ -526,7 +346,7 @@ public class VocabularyTool implements McpToolHandler {
                     log.warn("No vocabulary card found to persist sentence analysis for conversation={}", conversationId);
                 }
             } catch (Exception e) {
-                log.error("Failed to persist sentence analysis result in VocabularyTool", e);
+                log.error("Failed to persist sentence analysis result", e);
             }
         }
 
@@ -534,8 +354,12 @@ public class VocabularyTool implements McpToolHandler {
     }
 
     /**
-     * 清除单词卡及其所属对话的所有缓存
-     * 用于更新/删除操作
+     * 清除单词卡及其所属对话的所有缓存。
+     *
+     * 用于更新/删除操作后清除相关缓存，确保数据一致性。
+     *
+     * @param cardId 单词卡 ID
+     * @param conversationId 对话 ID
      */
     private void evictCardAndConversationCache(Long cardId, Long conversationId) {
         try {

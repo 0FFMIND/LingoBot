@@ -5,5 +5,6 @@ public enum VocabularyGenerationIntent {
     REGENERATE,
     NEW_WORD,
     REVIEW,
+    SMART_RECOMMEND,
     HYBRID
 }

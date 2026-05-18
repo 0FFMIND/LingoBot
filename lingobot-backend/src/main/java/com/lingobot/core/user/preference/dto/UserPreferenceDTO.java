@@ -41,4 +41,12 @@ public class UserPreferenceDTO {
     private LocalDateTime createdAt;
     // 更新时间
     private LocalDateTime updatedAt;
+
+    public String getVocabularyFullModel() {
+        if (vocabularyProvider != null && !vocabularyProvider.isEmpty()
+                && vocabularyModel != null && !vocabularyModel.isEmpty()) {
+            return vocabularyProvider + "/" + vocabularyModel;
+        }
+        return vocabularyModel;
+    }
 }

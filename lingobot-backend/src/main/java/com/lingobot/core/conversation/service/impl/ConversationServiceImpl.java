@@ -110,10 +110,10 @@ public class ConversationServiceImpl implements ConversationService {
 
         List<Conversation> conversations;
         if (currentUserId != null) {
-            conversations = conversationRepository.findByUserIdOrderByUpdatedAtDesc(currentUserId, pageable);
+            conversations = conversationRepository.findListByUserIdOrderByUpdatedAtDesc(currentUserId, pageable);
             log.info("获取用户对话列表（最近{}条），用户ID: {}, 对话数 {}", listSize, currentUserId, conversations.size());
         } else {
-            conversations = conversationRepository.findAllByOrderByUpdatedAtDesc(pageable);
+            conversations = conversationRepository.findListAllByOrderByUpdatedAtDesc(pageable);
             log.info("获取所有对话列表（最近{}条），对话数: {}", listSize, conversations.size());
         }
 

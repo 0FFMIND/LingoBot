@@ -25,10 +25,10 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
     Page<Conversation> findAllByOrderByUpdatedAtDesc(Pageable pageable);
 
     // 查询指定用户最近的 N 条会话（通过 Pageable 限制数量）
-    List<Conversation> findByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
+    List<Conversation> findListByUserIdOrderByUpdatedAtDesc(Long userId, Pageable pageable);
 
     // 查询最近的 N 条会话（通过 Pageable 限制数量）
-    List<Conversation> findAllByOrderByUpdatedAtDesc(Pageable pageable);
+    List<Conversation> findListAllByOrderByUpdatedAtDesc(Pageable pageable);
 
     // 根据 ID 和用户 ID 查询会话（用于权限校验）
     Optional<Conversation> findByIdAndUserId(Long id, Long userId);

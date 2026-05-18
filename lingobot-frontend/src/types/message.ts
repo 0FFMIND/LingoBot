@@ -1,5 +1,3 @@
-import { ModelType } from './preferences';
-
 export type MessageType = 'text' | 'audio' | 'image' | 'chat' | 'vocabulary';
 
 export interface MessageDTO {
@@ -45,7 +43,7 @@ export interface ChatRequest {
   conversationPublicId?: string;
   content: string;
   mode?: 'chat' | 'agent';
-  model?: ModelType;
+  model?: string;
   messageType?: MessageType;
   executionMode?: ExecutionMode;
   audioData?: string;
@@ -78,7 +76,7 @@ export interface RetryMessageRequest {
   conversationId?: number;
   conversationPublicId?: string;
   assistantMessageId: number;
-  model?: ModelType;
+  model?: string;
   mode?: 'chat' | 'agent';
   learningMode?: string;
   vocabularyCategory?: string;

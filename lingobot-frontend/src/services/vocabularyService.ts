@@ -108,7 +108,7 @@ export const vocabularyService = {
   ): Promise<VocabularyCardDTO> => {
     const batch = await httpClient.post<VocabularyBatchGenerationResult>(
       `/vocabulary/conversations/${conversationPublicId}/generate-batch`,
-      { category, difficulty, batchSize: 10 }
+      { category, difficulty }
     );
 
     const card = batch.revealedCards?.[0] ?? batch.hiddenCards?.[0];
@@ -116,6 +116,20 @@ export const vocabularyService = {
       throw new Error('Batch vocabulary generation returned no cards');
     }
 
+    await refreshCurrentUserBalance();
+    return card;
+  },
+
+  regenerateCard: async (
+    conversationPublicId: string,
+    position: number,
+    category?: VocabularyCategory,
+    difficulty?: VocabularyDifficulty
+  ): Promise<VocabularyCardDTO> => {
+    const card = await httpClient.post<VocabularyCardDTO>(
+      `/vocabulary/conversations/${conversationPublicId}/regenerate-at-position`,
+      { position, category, difficulty }
+    );
     await refreshCurrentUserBalance();
     return card;
   },
@@ -183,6 +197,25 @@ export const vocabularyService = {
 
   getCardCount: async (conversationPublicId: string): Promise<number> => {
     return httpClient.get<number>(`/vocabulary/conversations/${conversationPublicId}/count`);
+  },
+
+  getCardsAroundPosition: async (
+    conversationPublicId: string,
+    position: number
+  ): Promise<VocabularyCardDTO[]> => {
+    return httpClient.get<VocabularyCardDTO[]>(
+      `/vocabulary/conversations/${conversationPublicId}/cards/window?position=${position}`
+    );
+  },
+
+  updateLastViewedPosition: async (
+    conversationPublicId: string,
+    position: number
+  ): Promise<void> => {
+    return httpClient.put<void>(
+      `/vocabulary/conversations/${conversationPublicId}/last-viewed-position`,
+      { position }
+    );
   },
 
   getMeaningCheckStatus: async (cardId: number): Promise<MeaningCheckStatus> => {

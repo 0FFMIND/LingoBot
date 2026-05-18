@@ -19,4 +19,5 @@ public class VocabularyConversationDataDTO {
     private Integer vocabularyLastCompactedPosition;
     private LocalDateTime vocabularyLastCompactedAt;
     private Integer vocabularyCompactedCardCount;
+    private Integer lastViewedPosition;
 }

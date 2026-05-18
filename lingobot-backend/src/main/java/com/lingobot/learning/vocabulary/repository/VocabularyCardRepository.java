@@ -1,5 +1,6 @@
 package com.lingobot.learning.vocabulary.repository;
 
+import com.lingobot.learning.vocabulary.dto.ConversationOverviewDTO;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +31,10 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
     /** 获取对话中所有有效词汇卡（未被重新生成的，isRegenerated=false），按位置排序*/
     @Query("SELECT v FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false ORDER BY v.position ASC")
     List<VocabularyCard> findActiveCardsByConversationId(@Param("conversationId") Long conversationId);
+
+    /** 按位置范围获取对话的有效词汇卡（isRegenerated=false）*/
+    @Query("SELECT v FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.position BETWEEN :startPos AND :endPos ORDER BY v.position ASC")
+    List<VocabularyCard> findActiveCardsByPositionRange(@Param("conversationId") Long conversationId, @Param("startPos") Integer startPos, @Param("endPos") Integer endPos);
 
     /** 获取对话中有效词汇卡的最大位置（用于判断是否是最后一张） */
     @Query("SELECT MAX(v.position) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false")
@@ -182,6 +187,16 @@ public interface VocabularyCardRepository extends JpaRepository<VocabularyCard, 
     /** 统计对话中已完成学习的有效词汇卡数量 */
     @Query("SELECT COUNT(v) FROM VocabularyCard v WHERE v.conversation.id = :conversationId AND v.isRegenerated = false AND v.isCompleted = true")
     long countCompletedCardsByConversationId(@Param("conversationId") Long conversationId);
+
+    /** 获取对话统计概览（一次性查询所有统计数据） */
+    default ConversationOverviewDTO getConversationOverview(Long conversationId) {
+        return ConversationOverviewDTO.builder()
+                .activeCount(countActiveCardsByConversationId(conversationId))
+                .revealedCount(countRevealedCardsByConversationId(conversationId))
+                .hiddenCount(countHiddenCardsByConversationId(conversationId))
+                .completedCount(countCompletedCardsByConversationId(conversationId))
+                .build();
+    }
 
     /** 更新卡片为已揭露状态 */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

@@ -1,5 +1,6 @@
 package com.lingobot.learning.vocabulary.graph;
 
+import com.lingobot.infrastructure.common.config.ConversationProperties;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.vocabulary.dto.VocabularyBatchGenerationResult;
 import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
@@ -20,68 +21,90 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+/**
+ * 批量单词卡片生成工作流。
+ *
+ * 使用 LangGraph 构建状态机工作流，一次性生成多张单词卡片。
+ * 执行顺序：MEMORY_RECALL → PLANNING → GENERATION → VALIDATION → PERSISTENCE
+ *
+ * 工作流特点：
+ * - VALIDATION 节点根据校验结果决定后续流向：
+ *   校验通过 → PERSISTENCE（持久化）
+ *   校验失败但未超过重试次数 → GENERATION（重新生成）
+ *   校验失败且超过重试次数 → END（结束）
+ * - 批量生成的卡片中，第一张默认已揭示（isRevealed=true），其余为隐藏状态
+ * - execute 方法支持指定批量大小，未指定时使用配置中的默认值
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class VocabularyBatchGraph {
 
     private final VocabularyBatchNodeActions nodeActions;
+    private final ConversationProperties conversationProperties;
 
     private CompiledGraph<VocabularyBatchState> compiledGraph;
 
+    // Spring 启动时初始化并编译工作流图
     @PostConstruct
     public void init() throws GraphStateException {
-        log.info("Initializing VocabularyBatchGraph...");
+        log.info("开始初始化 VocabularyBatchGraph 批量工作流...");
 
         AgentStateFactory<VocabularyBatchState> stateFactory = VocabularyBatchState::new;
         StateGraph<VocabularyBatchState> workflow = new StateGraph<>(stateFactory);
 
-        workflow.addNode("MEMORY_RECALL", nodeActions.memoryRecall());
+        // 注册工作流节点
+        workflow.addNode("LIGHTWEIGHT_RECALL", nodeActions.lightweightRecall());
+        workflow.addNode("AGENT_MEMORY_RECALL", nodeActions.agentMemoryRecall());
         workflow.addNode("PLANNING", nodeActions.planning());
         workflow.addNode("GENERATION", nodeActions.generation());
         workflow.addNode("VALIDATION", nodeActions.validation());
         workflow.addNode("PERSISTENCE", nodeActions.persistence());
-        workflow.addNode("FALLBACK", nodeActions.fallback());
 
-        workflow.addEdge(StateGraph.START, "MEMORY_RECALL");
-        workflow.addEdge("MEMORY_RECALL", "PLANNING");
+        // 设置线性执行顺序
+        workflow.addEdge(StateGraph.START, "LIGHTWEIGHT_RECALL");
+        workflow.addEdge("LIGHTWEIGHT_RECALL", "AGENT_MEMORY_RECALL");
+        workflow.addEdge("AGENT_MEMORY_RECALL", "PLANNING");
         workflow.addEdge("PLANNING", "GENERATION");
         workflow.addEdge("GENERATION", "VALIDATION");
 
+        // 校验节点的条件分支映射
         Map<String, String> validationEdgeMappings = new HashMap<>();
         validationEdgeMappings.put("PERSISTENCE", "PERSISTENCE");
         validationEdgeMappings.put("GENERATION", "GENERATION");
-        validationEdgeMappings.put("FALLBACK", "FALLBACK");
+        validationEdgeMappings.put("END", StateGraph.END);
 
+        // 校验节点的条件分支逻辑
         workflow.addConditionalEdges(
                 "VALIDATION",
                 state -> CompletableFuture.supplyAsync(() -> {
                     if (state.isValid()) {
                         return "PERSISTENCE";
                     } else if (nodeActions.shouldRetry(state)) {
-                        log.info("Batch validation failed, retrying generation (attempt {})", state.getRetryCount());
+                        log.info("批量校验失败，重试生成中（第 {} 次）", state.getRetryCount());
                         return "GENERATION";
                     } else {
-                        log.warn("Max retries exceeded for batch generation, falling back");
-                        return "FALLBACK";
+                        log.warn("已达最大重试次数，批量生成终止，返回空结果");
+                        return "END";
                     }
                 }),
                 validationEdgeMappings
         );
 
         workflow.addEdge("PERSISTENCE", StateGraph.END);
-        workflow.addEdge("FALLBACK", StateGraph.END);
 
         this.compiledGraph = workflow.compile();
 
-        log.info("VocabularyBatchGraph initialized successfully");
+        log.info("VocabularyBatchGraph 批量工作流初始化完成");
     }
 
+    // 执行批量单词卡片生成（使用默认批量大小）
     public Optional<VocabularyBatchGenerationResult> execute(Long conversationId, Long userId, String category,
                                                               String difficulty, VocabularyGenerationIntent intent) {
-        return execute(conversationId, userId, category, difficulty, intent, 10);
+        return execute(conversationId, userId, category, difficulty, intent, conversationProperties.getVocabularyDefaultBatchSize());
     }
 
+    // 执行批量单词卡片生成（指定批量大小）
     public Optional<VocabularyBatchGenerationResult> execute(Long conversationId, Long userId, String category,
                                                               String difficulty, VocabularyGenerationIntent intent,
                                                               int batchSize) {
@@ -95,7 +118,7 @@ public class VocabularyBatchGraph {
             inputs.put("batchSize", batchSize);
             inputs.put("retryCount", 0);
 
-            log.info("Executing VocabularyBatchGraph: conversationId={}, userId={}, category={}, difficulty={}, intent={}, batchSize={}",
+            log.info("开始执行 VocabularyBatchGraph: conversationId={}, userId={}, category={}, difficulty={}, intent={}, batchSize={}",
                     conversationId, userId, category, difficulty, intent, batchSize);
 
             Optional<VocabularyBatchState> finalState = compiledGraph.invoke(inputs);
@@ -104,6 +127,7 @@ public class VocabularyBatchGraph {
                 VocabularyBatchState state = finalState.get();
                 List<VocabularyCardDTO> allCards = state.getSavedCards();
 
+                // 分离已揭示和未揭示的卡片
                 List<VocabularyCardDTO> revealedCards = allCards.stream()
                         .filter(card -> Boolean.TRUE.equals(card.getIsRevealed()))
                         .collect(Collectors.toList());
@@ -120,16 +144,16 @@ public class VocabularyBatchGraph {
                         .totalCount(allCards.size())
                         .build();
 
-                log.info("VocabularyBatchGraph completed successfully: total={}, revealed={}, hidden={}",
+                log.info("VocabularyBatchGraph 执行成功: total={}, revealed={}, hidden={}",
                         allCards.size(), revealedCards.size(), hiddenCards.size());
                 return Optional.of(result);
             }
 
-            log.warn("VocabularyBatchGraph completed without saved cards");
+            log.warn("VocabularyBatchGraph 执行完成，但未生成有效卡片");
             return Optional.empty();
 
         } catch (Exception e) {
-            log.error("VocabularyBatchGraph execution failed", e);
+            log.error("VocabularyBatchGraph 执行失败", e);
             return Optional.empty();
         }
     }
