@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
+
 /**
  * 词汇 Agent 规划响应 DTO。
  *
@@ -18,7 +20,9 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AgentPlanResponse {
+public class AgentPlanResponse implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     // 记忆抓取计划，包含各级记忆的抓取数量限制和规划理由
     private MemoryRecallPlan plan;

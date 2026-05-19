@@ -40,6 +40,7 @@ public class VocabularyAgentService {
     private final LlmProperties llmProperties;
     private final VocabularyMemoryService vocabularyMemoryService;
     private final ConversationService conversationService;
+    private final VocabularyAgentPromptBuilder vocabularyAgentPromptBuilder;
     private final ObjectMapper objectMapper;
 
     /**
@@ -71,13 +72,15 @@ public class VocabularyAgentService {
 
         MemoryRecallPlan plan = generateMemoryPlan(request);
 
-        log.info("Generated memory plan: intent={}, l1Recent={}, l1Wrong={}, l1Regenerated={}, l2Mastered={}, l2Reviewing={}, l2Learning={}, l2Weak={}",
+        log.info("Generated memory plan: intent={}, recommendedIntent={}, l1Recent={}, l1Wrong={}, l1Regenerated={}, l2Mastered={}, l2Reviewing={}, l2Learning={}, l2Weak={}",
                 request.getIntent(),
+                plan.getRecommendedIntent(),
                 plan.getL1RecentLimit(), plan.getL1WrongLimit(), plan.getL1RegeneratedLimit(),
                 plan.getL2MasteredLimit(), plan.getL2ReviewingLimit(), plan.getL2LearningLimit(), plan.getL2WeakLimit());
         log.info("Plan reasoning: {}", plan.getReasoning());
 
-        VocabularyGenerationIntent intent = parseIntent(request.getIntent());
+        String effectiveIntent = plan.getRecommendedIntent() != null ? plan.getRecommendedIntent() : request.getIntent();
+        VocabularyGenerationIntent intent = parseIntent(effectiveIntent);
         VocabularyMemoryContext memoryContext = vocabularyMemoryService.retrieveMemoryWithLimits(
                 request.getUserId(),
                 conversationId,
@@ -140,6 +143,7 @@ public class VocabularyAgentService {
     private MemoryRecallPlan getHeuristicPlan(String intent) {
         return switch (intent) {
             case "new_word" -> MemoryRecallPlan.builder()
+                    .recommendedIntent("new_word")
                     .l1RecentLimit(10)
                     .l1WrongLimit(10)
                     .l1RegeneratedLimit(10)
@@ -151,6 +155,7 @@ public class VocabularyAgentService {
                     .build();
 
             case "review" -> MemoryRecallPlan.builder()
+                    .recommendedIntent("review")
                     .l1RecentLimit(5)
                     .l1WrongLimit(15)
                     .l1RegeneratedLimit(5)
@@ -162,6 +167,7 @@ public class VocabularyAgentService {
                     .build();
 
             case "hybrid" -> MemoryRecallPlan.builder()
+                    .recommendedIntent("hybrid")
                     .l1RecentLimit(8)
                     .l1WrongLimit(12)
                     .l1RegeneratedLimit(5)
@@ -172,7 +178,20 @@ public class VocabularyAgentService {
                     .reasoning("Hybrid mode: balance between review and new words")
                     .build();
 
+            case "smart_recommend" -> MemoryRecallPlan.builder()
+                    .recommendedIntent("hybrid")
+                    .l1RecentLimit(DEFAULT_LIMIT)
+                    .l1WrongLimit(DEFAULT_LIMIT)
+                    .l1RegeneratedLimit(DEFAULT_LIMIT)
+                    .l2MasteredLimit(DEFAULT_LIMIT)
+                    .l2ReviewingLimit(DEFAULT_LIMIT)
+                    .l2LearningLimit(DEFAULT_LIMIT)
+                    .l2WeakLimit(DEFAULT_LIMIT)
+                    .reasoning("Smart recommend mode: default to hybrid, LLM will adjust based on user state")
+                    .build();
+
             default -> MemoryRecallPlan.builder()
+                    .recommendedIntent("hybrid")
                     .l1RecentLimit(DEFAULT_LIMIT)
                     .l1WrongLimit(DEFAULT_LIMIT)
                     .l1RegeneratedLimit(DEFAULT_LIMIT)
@@ -199,14 +218,18 @@ public class VocabularyAgentService {
     private MemoryRecallPlan askLlmForPlan(AgentPlanRequest request, MemoryRecallPlan heuristicPlan) throws Exception {
         List<OpenAiChatMessage> messages = new ArrayList<>();
 
-        String systemPrompt = vocabularyAgentPromptBuilder.buildSystemPrompt();
+        String systemPrompt = "smart_recommend".equals(request.getIntent())
+                ? vocabularyAgentPromptBuilder.buildSmartRecommendSystemPrompt()
+                : vocabularyAgentPromptBuilder.buildNormalSystemPrompt();
         messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
 
         String userPrompt = vocabularyAgentPromptBuilder.buildUserPrompt(
                 request.getIntent(),
                 request.getCurrentWord(),
                 request.getUserMessage(),
-                heuristicPlan);
+                heuristicPlan,
+                request.getLearningOverview(),
+                request.getConversationOverview());
         messages.add(OpenAiChatMessage.createTextMessage("user", userPrompt));
 
         String response = llmService.chat(llmProperties.getModel(), messages);
@@ -232,6 +255,7 @@ public class VocabularyAgentService {
             JsonNode node = objectMapper.readTree(jsonStr);
 
             return MemoryRecallPlan.builder()
+                    .recommendedIntent(node.path("recommendedIntent").asText(fallback.getRecommendedIntent()))
                     .l1RecentLimit(node.path("l1RecentLimit").asInt(fallback.getL1RecentLimit()))
                     .l1WrongLimit(node.path("l1WrongLimit").asInt(fallback.getL1WrongLimit()))
                     .l1RegeneratedLimit(node.path("l1RegeneratedLimit").asInt(fallback.getL1RegeneratedLimit()))
@@ -276,6 +300,7 @@ public class VocabularyAgentService {
      */
     private MemoryRecallPlan validateAndAdjustPlan(MemoryRecallPlan plan, MemoryRecallPlan fallback) {
         return MemoryRecallPlan.builder()
+                .recommendedIntent(plan.getRecommendedIntent() != null ? plan.getRecommendedIntent() : fallback.getRecommendedIntent())
                 .l1RecentLimit(clamp(plan.getL1RecentLimit(), 0, MAX_LIMIT, fallback.getL1RecentLimit()))
                 .l1WrongLimit(clamp(plan.getL1WrongLimit(), 0, MAX_LIMIT, fallback.getL1WrongLimit()))
                 .l1RegeneratedLimit(clamp(plan.getL1RegeneratedLimit(), 0, MAX_LIMIT, fallback.getL1RegeneratedLimit()))
@@ -315,6 +340,9 @@ public class VocabularyAgentService {
      * @return 内部会话 ID，可能为 null
      */
     private Long resolveConversationId(AgentPlanRequest request) {
+        if (request.getConversationId() != null) {
+            return request.getConversationId();
+        }
         if (request.getConversationPublicId() != null) {
             return conversationService.resolvePublicIdToId(request.getConversationPublicId());
         }
@@ -324,18 +352,19 @@ public class VocabularyAgentService {
     /**
      * 将字符串意图转换为 VocabularyGenerationIntent 枚举。
      *
-     * 支持的意图：new_word、review、hybrid，其他值默认返回 NEXT_WORD。
+     * 支持的意图：new_word、review、hybrid、smart_recommend，其他值默认返回 SMART_RECOMMEND。
      *
      * @param intent 字符串形式的学习意图
      * @return 对应的枚举值
      */
     private VocabularyGenerationIntent parseIntent(String intent) {
-        if (intent == null) return VocabularyGenerationIntent.NEXT_WORD;
+        if (intent == null) return VocabularyGenerationIntent.SMART_RECOMMEND;
         return switch (intent) {
             case "new_word" -> VocabularyGenerationIntent.NEW_WORD;
             case "review" -> VocabularyGenerationIntent.REVIEW;
             case "hybrid" -> VocabularyGenerationIntent.HYBRID;
-            default -> VocabularyGenerationIntent.NEXT_WORD;
+            case "smart_recommend" -> VocabularyGenerationIntent.SMART_RECOMMEND;
+            default -> VocabularyGenerationIntent.SMART_RECOMMEND;
         };
     }
 }

@@ -5,9 +5,9 @@ import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatResponse;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
 import com.lingobot.infrastructure.llm.service.ModelRouterService;
-import com.lingobot.infrastructure.mcp.dto.McpToolCall;
-import com.lingobot.infrastructure.mcp.dto.McpToolResult;
-import com.lingobot.infrastructure.mcp.service.McpService;
+import com.lingobot.infrastructure.tool.dto.ToolCall;
+import com.lingobot.infrastructure.tool.dto.ToolResult;
+import com.lingobot.infrastructure.tool.service.ToolService;
 import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -27,7 +27,7 @@ import java.util.UUID;
 public class ToolLoopService {
     
     private final ModelRouterService modelRouterService;
-    private final McpService mcpService;
+    private final ToolService toolService;
     private final ObjectMapper objectMapper;
     
     private static final int MAX_TOOL_CALLS = 10;
@@ -61,7 +61,7 @@ public class ToolLoopService {
                             toolCall.getFunction() != null ? toolCall.getFunction().getName() : "unknown",
                             toolCall.getId());
 
-                    McpToolResult result = executeToolCall(conversationId, toolCall);
+                    ToolResult result = executeToolCall(conversationId, toolCall);
                     
                     String toolResultContent = formatToolResultForMessage(result);
                     
@@ -91,7 +91,7 @@ public class ToolLoopService {
             List<OpenAiChatMessage> messages, List<OpenAiTool> tools, String model) {
         int retryCount = 0;
         List<OpenAiChatMessage> currentMessages = new ArrayList<>(messages);
-        List<McpToolResult> toolResults = new ArrayList<>();
+        List<ToolResult> toolResults = new ArrayList<>();
         int totalPromptTokens = 0;
         int totalCompletionTokens = 0;
         int totalTokens = 0;
@@ -131,13 +131,13 @@ public class ToolLoopService {
                 log.info("AI requested {} tool calls (one-time execution)", toolCalls.size());
 
                 for (OpenAiChatMessage.ToolCall toolCall : toolCalls) {
-                    McpToolResult result = executeToolCall(conversationId, toolCall);
+                    ToolResult result = executeToolCall(conversationId, toolCall);
                     toolResults.add(result);
                 }
 
                 if (!toolResults.isEmpty()) {
                     StringBuilder sb = new StringBuilder();
-                    for (McpToolResult result : toolResults) {
+                    for (ToolResult result : toolResults) {
                         sb.append(extractToolResultForDisplay(result));
                         if (toolResults.size() > 1) {
                             sb.append("\n\n");
@@ -173,9 +173,9 @@ public class ToolLoopService {
         return executeOneTimeToolCall(conversationId, messages, tools, model);
     }
     
-    public McpToolResult executeToolCall(Long conversationId, OpenAiChatMessage.ToolCall toolCall) {
+    public ToolResult executeToolCall(Long conversationId, OpenAiChatMessage.ToolCall toolCall) {
         if (toolCall.getFunction() == null) {
-            return McpToolResult.builder()
+            return ToolResult.builder()
                     .id(toolCall.getId())
                     .name("unknown")
                     .success(false)
@@ -195,7 +195,7 @@ public class ToolLoopService {
             }
         } catch (Exception e) {
             log.error("Failed to parse tool arguments: {}", argumentsJson, e);
-            return McpToolResult.builder()
+            return ToolResult.builder()
                     .id(toolCall.getId())
                     .name(toolName)
                     .success(false)
@@ -203,21 +203,21 @@ public class ToolLoopService {
                     .build();
         }
         
-        McpToolCall mcpCall = McpToolCall.builder()
+        ToolCall toolCallRequest = ToolCall.builder()
                 .id(toolCall.getId() != null ? toolCall.getId() : UUID.randomUUID().toString())
                 .name(toolName)
                 .arguments(arguments)
                 .conversationId(conversationId != null ? conversationId.toString() : null)
                 .build();
         
-        return mcpService.callTool(mcpCall);
+        return toolService.callTool(toolCallRequest);
     }
     
-    private String formatToolResult(McpToolResult result) {
+    private String formatToolResult(ToolResult result) {
         if (result.isSuccess()) {
             if (result.getContent() != null && !result.getContent().isEmpty()) {
                 StringBuilder sb = new StringBuilder();
-                for (McpToolResult.Content content : result.getContent()) {
+                for (ToolResult.Content content : result.getContent()) {
                     if ("text".equals(content.getType()) && content.getText() != null) {
                         sb.append(content.getText());
                     }
@@ -230,11 +230,11 @@ public class ToolLoopService {
         }
     }
     
-    public String formatToolResultForMessage(McpToolResult result) {
+    public String formatToolResultForMessage(ToolResult result) {
         return formatToolResult(result);
     }
     
-    private String extractToolResultForDisplay(McpToolResult result) {
+    private String extractToolResultForDisplay(ToolResult result) {
         if (!result.isSuccess()) {
             return "Error: " + result.getError();
         }
@@ -243,7 +243,7 @@ public class ToolLoopService {
             return "Tool executed successfully";
         }
         
-        for (McpToolResult.Content content : result.getContent()) {
+        for (ToolResult.Content content : result.getContent()) {
             if ("text".equals(content.getType()) && content.getText() != null) {
                 String text = content.getText();
                 try {

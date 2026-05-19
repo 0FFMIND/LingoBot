@@ -8,14 +8,12 @@ import com.lingobot.core.user.preference.service.UserPreferenceService;
 import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
-import com.lingobot.infrastructure.mcp.service.McpService;
+import com.lingobot.infrastructure.tool.service.ToolService;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationConstraints;
-import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryContext;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryPromptBuilder;
-import com.lingobot.learning.memory.vocabulary.VocabularyMemoryRecord;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
-import com.lingobot.learning.vocabulary.dto.WordCardData;
+import com.lingobot.learning.vocabulary.card.dto.response.WordCardData;
 import com.lingobot.learning.vocabulary.graph.VocabularyState;
 import com.lingobot.learning.prompt.vocabulary.VocabularyCardGenerationPromptBuilder;
 import lombok.RequiredArgsConstructor;
@@ -28,8 +26,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * 单词卡片重新生成工作流节点动作集合。
@@ -57,7 +53,7 @@ public class VocabularyRegenerateNodeActions {
     private final UserPreferenceService userPreferenceService;
     private final VocabularyCardGenerationPromptBuilder vocabularyCardGenerationPromptBuilder;
     private final VocabularyMemoryPromptBuilder memoryPromptBuilder;
-    private final McpService mcpService;
+    private final ToolService toolService;
     private final ToolLoopService toolLoopService;
     private final ObjectMapper objectMapper;
 
@@ -77,16 +73,12 @@ public class VocabularyRegenerateNodeActions {
 
                 updates.put("memoryContext", memoryContext);
 
-                List<String> excludedWords = buildExcludedWords(memoryContext);
-                updates.put("excludedWords", excludedWords);
-
-                log.info("Regenerate memory recall completed: total memory items={}, excluded words={}",
-                        memoryContext.totalMemoryItems(), excludedWords.size());
+                log.info("Regenerate memory recall completed: total memory items={}",
+                        memoryContext.totalMemoryItems());
 
             } catch (Exception e) {
                 log.warn("Regenerate memory recall failed, using empty context", e);
                 updates.put("memoryContext", null);
-                updates.put("excludedWords", new ArrayList<String>());
             }
 
             return updates;
@@ -97,9 +89,8 @@ public class VocabularyRegenerateNodeActions {
         return state -> CompletableFuture.supplyAsync(() -> {
             log.info("Executing REGEN_PLANNING for conversation: {}", state.getConversationId());
 
-            if (state.getIntent() != VocabularyGenerationIntent.REGENERATE
-                    || state.getRegeneratePosition() == null) {
-                throw new IllegalStateException("VocabularyRegenerateGraph only supports REGENERATE intent with regeneratePosition");
+            if (state.getRegeneratePosition() == null) {
+                throw new IllegalStateException("VocabularyRegenerateGraph requires regeneratePosition");
             }
 
             Map<String, Object> updates = new HashMap<>();
@@ -133,7 +124,6 @@ public class VocabularyRegenerateNodeActions {
             var constraints = VocabularyGenerationConstraints.builder()
                     .category(category)
                     .difficulty(difficulty)
-                    .excludeWords(state.getExcludedWords())
                     .build();
             updates.put("constraints", constraints);
 
@@ -169,7 +159,7 @@ public class VocabularyRegenerateNodeActions {
                 List<OpenAiChatMessage> messages = new ArrayList<>();
                 messages.add(OpenAiChatMessage.createTextMessage("system", state.getSystemPrompt()));
 
-                List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary", "display_flashcard");
+                List<OpenAiTool> tools = toolService.getOpenAiTool("vocabulary", "display_flashcard");
 
                 if (tools == null || tools.isEmpty()) {
                     updates.put("generationError", "No vocabulary tools available");
@@ -238,13 +228,6 @@ public class VocabularyRegenerateNodeActions {
                 if (card.getExampleTranslation() == null || card.getExampleTranslation().isBlank()) {
                     errors.add("ExampleTranslation is empty");
                 }
-
-                if (card.getWord() != null && state.getExcludedWords() != null) {
-                    String normalizedWord = card.getWord().toLowerCase().trim();
-                    if (state.getExcludedWords().contains(normalizedWord)) {
-                        errors.add("Word '" + card.getWord() + "' is in excluded list");
-                    }
-                }
             }
 
             updates.put("validationErrors", errors);
@@ -262,19 +245,7 @@ public class VocabularyRegenerateNodeActions {
         });
     }
 
-    private List<String> buildExcludedWords(VocabularyMemoryContext context) {
-        return Stream.of(
-                        context.getConversationRecentCards().stream(),
-                        context.getRecentWords().stream(),
-                        context.getRegeneratedWords().stream()
-                )
-                .flatMap(s -> s)
-                .map(VocabularyMemoryRecord::getWord)
-                .filter(word -> word != null && !word.isBlank())
-                .map(String::toLowerCase)
-                .distinct()
-                .collect(Collectors.toList());
-    }
+
 
     private WordCardData parseWordCardData(String toolResultText, VocabularyState state) throws Exception {
         Map<String, Object> parsed = objectMapper.readValue(

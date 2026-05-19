@@ -18,4 +18,8 @@ public class ConversationProperties {
     private int vocabularyWindowSize;
 
     private int vocabularyDefaultBatchSize;
+
+    private int vocabularyMaxTokens;
+
+    private int chatMaxTokens;
 }

@@ -2,8 +2,8 @@ package com.lingobot.learning.vocabulary.graph;
 
 import com.lingobot.infrastructure.common.config.ConversationProperties;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
-import com.lingobot.learning.vocabulary.dto.VocabularyBatchGenerationResult;
-import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
+import com.lingobot.learning.vocabulary.card.dto.response.VocabularyBatchGenerationResult;
+import com.lingobot.learning.vocabulary.card.dto.response.VocabularyCardDTO;
 import com.lingobot.learning.vocabulary.graph.nodes.VocabularyBatchNodeActions;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
  * 批量单词卡片生成工作流。
  *
  * 使用 LangGraph 构建状态机工作流，一次性生成多张单词卡片。
- * 执行顺序：MEMORY_RECALL → PLANNING → GENERATION → VALIDATION → PERSISTENCE
+ * 执行顺序：LIGHTWEIGHT_RECALL → PLANNING → AGENT_MEMORY_RECALL → GENERATION → VALIDATION → PERSISTENCE
  *
  * 工作流特点：
  * - VALIDATION 节点根据校验结果决定后续流向：
@@ -61,7 +61,7 @@ public class VocabularyBatchGraph {
         workflow.addNode("VALIDATION", nodeActions.validation());
         workflow.addNode("PERSISTENCE", nodeActions.persistence());
 
-        // 设置线性执行顺序
+        // 设置线性执行顺序：先 LIGHTWEIGHT_RECALL 拿概览，再 AGENT_MEMORY_RECALL 做记忆规划，最后 PLANNING 汇总
         workflow.addEdge(StateGraph.START, "LIGHTWEIGHT_RECALL");
         workflow.addEdge("LIGHTWEIGHT_RECALL", "AGENT_MEMORY_RECALL");
         workflow.addEdge("AGENT_MEMORY_RECALL", "PLANNING");

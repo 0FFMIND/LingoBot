@@ -10,8 +10,8 @@ import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
 import com.lingobot.infrastructure.llm.service.ModelRouterService;
-import com.lingobot.infrastructure.mcp.dto.McpToolResult;
-import com.lingobot.infrastructure.mcp.service.McpService;
+import com.lingobot.infrastructure.tool.dto.ToolResult;
+import com.lingobot.infrastructure.tool.service.ToolService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,7 +32,7 @@ public class SseEmitterService {
     
     private final ConversationService conversationService;
     private final ModelRouterService modelRouterService;
-    private final McpService mcpService;
+    private final ToolService toolService;
     private final ToolLoopService toolLoopService;
     private final ObjectMapper objectMapper;
     
@@ -461,7 +461,7 @@ public class SseEmitterService {
                         log.info("Calling tool: {} with id: {}", toolName, toolId);
                         sendSseEvent(emitter, StreamEvent.toolCall(toolName, toolId));
                         
-                        McpToolResult result = toolLoopService.executeToolCall(conversationId, toolCall);
+                        ToolResult result = toolLoopService.executeToolCall(conversationId, toolCall);
                         
                         String resultContent = toolLoopService.formatToolResultForMessage(result);
                         

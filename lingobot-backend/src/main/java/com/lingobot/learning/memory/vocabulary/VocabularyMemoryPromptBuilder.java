@@ -73,7 +73,7 @@ public class VocabularyMemoryPromptBuilder {
             if (hasCompactedSummary) {
                 sb.append("#### 新增学习记录\n");
             }
-            sb.append("用户在当前对话中学习了以下单词，请确保不重复：\n\n");
+            sb.append("用户在当前对话中学习了以下单词：\n\n");
             sb.append(formatConversationCards(context.getConversationRecentCards()));
             sb.append("\n");
         }
@@ -185,7 +185,7 @@ public class VocabularyMemoryPromptBuilder {
         return sb.toString();
     }
 
-    private String formatConversationCards(List<VocabularyMemoryRecord> cards) {
+    public String formatConversationCards(List<VocabularyMemoryRecord> cards) {
         Map<Integer, List<VocabularyMemoryRecord>> cardsByPosition = cards.stream()
                 .filter(card -> card.getPosition() != null)
                 .collect(Collectors.groupingBy(VocabularyMemoryRecord::getPosition));

@@ -7,7 +7,6 @@ import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatRequest;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatResponse;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
 import com.lingobot.infrastructure.common.exception.ChatException;
-import com.lingobot.infrastructure.util.JsonLogUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -17,28 +16,36 @@ import reactor.core.publisher.Flux;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.function.Consumer;
 
+import static com.lingobot.infrastructure.llm.service.LlmUtil.*;
+
+/**
+ * LLM 服务层。
+ *
+ * 封装与大语言模型 API 的所有交互，提供统一的调用接口：
+ * - 非流式文本聊天（chat）
+ * - 带工具调用的非流式聊天（chatWithTools）
+ * - 流式文本聊天（chatStream）
+ * - 多模态聊天（音频、图片、音视频混合）
+ * - 工具调用解析（兼容原生格式与提示词格式）
+ *
+ * 所有请求统一使用 OpenAI 兼容格式，支持通过 LlmProperties 配置不同的模型提供商。
+ * 音频输入会自动转换为支持的格式，不支持多模态的模型会自动回退到文本模型。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class LlmService {
 
-    private static final String TOOL_CALL_MARKER = "TOOL_CALL:";
+
 
     private final LlmProperties llmProperties;
     private final ObjectMapper objectMapper;
     private final AudioConversionService audioConversionService;
 
-    /**
-     * 单次非流式文本请求入口。
-     * 普通文本调用也复用 chatWithTools(messages, null)，这样模型配置、请求构造和响应解析只维护一套逻辑。
-     */
+    // 单次非流式文本请求入口，普通文本调用也复用 chatWithTools(messages, null)
     public String chat(String model, List<OpenAiChatMessage> messages) {
         OpenAiChatResponse response = chatWithTools(model, messages, null);
         if (response.getChoices() == null || response.getChoices().isEmpty()) {
@@ -51,10 +58,7 @@ public class LlmService {
         return text;
     }
 
-    /**
-     * 单次非流式文本请求入口。
-     * tools 为空时就是普通聊天；tools 非空时启用 tool_choice=auto，并在响应返回后解析原生或兼容格式的工具调用。
-     */
+    // 带工具调用的单次非流式请求入口，tools 为空时就是普通聊天
     public OpenAiChatResponse chatWithTools(String model, List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
         boolean hasTools = tools != null && !tools.isEmpty();
         String fullModelName = llmProperties.getFullModelName(model);
@@ -73,63 +77,63 @@ public class LlmService {
                 .toolChoice(hasTools ? "auto" : null)
                 .build();
 
-        logRequest(request);
+        logRequest(request, objectMapper);
 
         OpenAiChatResponse response = callApi(request);
 
         return hasTools ? parseToolCallFromResponse(response) : response;
     }
 
+    // 流式文本聊天请求，通过 SSE 方式逐字返回 AI 响应
     public Flux<String> chatStream(String model, List<OpenAiChatMessage> messages) {
         String fullModelName = llmProperties.getFullModelName(model);
         return chatStreamInternalWithModel(translateForModel(messages, null), fullModelName);
     }
 
+    // 带工具调用的流式聊天请求，当前实现与普通流式聊天相同
     public Flux<String> chatStreamWithTools(String model, List<OpenAiChatMessage> messages, List<OpenAiTool> tools) {
         String fullModelName = llmProperties.getFullModelName(model);
         return chatStreamInternalWithModel(translateForModel(messages, null), fullModelName);
     }
 
+    // 异步流式聊天请求，通过回调处理响应，订阅后立即返回不阻塞
     public void chatStreamAsync(String model, List<OpenAiChatMessage> messages,
                                 Consumer<String> onChunk,
                                 Runnable onComplete,
                                 Consumer<Throwable> onError) {
         chatStream(model, messages).doOnNext(onChunk).doOnComplete(onComplete).doOnError(onError).subscribe();
     }
-    
-    public boolean hasAudioMessage(List<OpenAiChatMessage> messages) {
-        return messages.stream()
-                .anyMatch(OpenAiChatMessage::hasAudioContent);
-    }
-    
+
+    // 带音频输入的流式聊天（使用默认模型）
     public Flux<String> chatStreamWithAudio(
             List<OpenAiChatMessage> messages,
             String audioData,
             String audioFormat) {
         return chatStreamWithAudio(messages, audioData, audioFormat, null);
     }
-    
+
+    // 带音频输入的流式聊天（指定模型），自动处理音频格式转换和模型回退
     public Flux<String> chatStreamWithAudio(
             List<OpenAiChatMessage> messages,
             String audioData,
             String audioFormat,
             String model) {
-        
+
         if (!llmProperties.isAudioEnabled()) {
             log.warn("音频功能未启用，使用文本模式");
             return chatStream(model, messages);
         }
-        
-        AudioConversionService.ConversionResult conversionResult = 
+
+        AudioConversionService.ConversionResult conversionResult =
                 audioConversionService.convertIfNeeded(audioData, audioFormat);
-        
+
         String finalAudioData = conversionResult.base64Audio();
         String finalFormat = conversionResult.format();
-        
+
         if (!finalFormat.equals(normalizeAudioFormat(audioFormat))) {
             log.info("音频格式已转换: {} -> {}", audioFormat, finalFormat);
         }
-        
+
         String fullModelName = llmProperties.getFullModelName(model);
         LlmProperties.ModelCapabilityConfig config = llmProperties.getAudioModelConfigForModel(model);
         if (!config.isSupportsAudio()) {
@@ -138,7 +142,7 @@ public class LlmService {
             fullModelName = fallbackModel;
             config = llmProperties.getAudioModelConfig();
         }
-        
+
         log.info("调用多模态音频处理API - 模型: {} ({}), 消息数: {}, 音频格式: {}, 支持: 音频={}, 图像={}, 视频={}",
                 config.getDisplayName(),
                 fullModelName,
@@ -151,100 +155,30 @@ public class LlmService {
         log.info("价格参数 - 输入: ${}/M tokens, 输出: ${}/M tokens",
                 config.getInputPricePerMillion(),
                 config.getOutputPricePerMillion());
-        
+
         List<OpenAiChatMessage> sendMessages = prepareAudioMessages(messages, finalAudioData, finalFormat);
-        
+
         return chatStreamInternalWithModel(sendMessages, fullModelName);
     }
-    
-    private List<OpenAiChatMessage> prepareAudioMessages(
-            List<OpenAiChatMessage> messages,
-            String audioData,
-            String audioFormat) {
-        
-        List<OpenAiChatMessage> result = new ArrayList<>();
-        
-        for (OpenAiChatMessage msg : messages) {
-            if ("user".equals(msg.getRole()) && !msg.hasAudioContent()) {
-                String textContent = extractTextContent(msg.getContent());
-                OpenAiChatMessage audioMessage = OpenAiChatMessage.createAudioMessage(
-                        "user",
-                        textContent,
-                        audioData,
-                        normalizeAudioFormat(audioFormat)
-                );
-                result.add(audioMessage);
-            } else {
-                result.add(msg);
-            }
-        }
-        
-        return result;
-    }
-    
-    private String extractTextContent(Object content) {
-        if (content == null) {
-            return null;
-        }
-        if (content instanceof String) {
-            return (String) content;
-        }
-        return content.toString();
-    }
-    
-    private String normalizeAudioFormat(String format) {
-        if (format == null) {
-            return "wav";
-        }
-        String lowerFormat = format.toLowerCase();
-        
-        if (lowerFormat.contains("webm") || lowerFormat.contains("opus")) {
-            return "webm";
-        }
-        if (lowerFormat.contains("mp3")) {
-            return "mp3";
-        }
-        if (lowerFormat.contains("m4a") || lowerFormat.contains("mp4")) {
-            return "m4a";
-        }
-        if (lowerFormat.contains("wav")) {
-            return "wav";
-        }
-        if (lowerFormat.contains("flac")) {
-            return "flac";
-        }
-        if (lowerFormat.contains("ogg") || lowerFormat.contains("oga")) {
-            return "ogg";
-        }
-        if (lowerFormat.contains("aiff")) {
-            return "aiff";
-        }
-        
-        log.warn("未知音频格式: {}, 使用默认 wav", format);
-        return "wav";
-    }
-    
-    public boolean hasImageMessage(List<OpenAiChatMessage> messages) {
-        return messages.stream()
-                .anyMatch(OpenAiChatMessage::hasImageContent);
-    }
-    
+
+    // 带图片输入的流式聊天（使用默认模型）
     public Flux<String> chatStreamWithImage(
             List<OpenAiChatMessage> messages,
             String imageData,
             String imageFormat) {
         return chatStreamWithImage(messages, imageData, imageFormat, null);
     }
-    
+
+    // 带图片输入的流式聊天（指定模型）
     public Flux<String> chatStreamWithImage(
             List<OpenAiChatMessage> messages,
             String imageData,
             String imageFormat,
             String model) {
-        
+
         String fullModelName = llmProperties.getFullModelName(model);
         LlmProperties.ModelCapabilityConfig config = llmProperties.getAudioModelConfigForModel(model);
-        
+
         if (!config.isSupportsImage()) {
             log.warn("当前模型 {} 不支持图片输入，尝试使用支持图片的模型", config.getDisplayName());
         }
@@ -261,12 +195,13 @@ public class LlmService {
         log.info("价格参数 - 输入: ${}/M tokens, 输出: ${}/M tokens",
                 config.getInputPricePerMillion(),
                 config.getOutputPricePerMillion());
-        
+
         List<OpenAiChatMessage> sendMessages = prepareImageMessages(messages, imageData, imageFormat);
-        
+
         return chatStreamInternalWithModel(sendMessages, fullModelName);
     }
-    
+
+    // 带音频和图片混合输入的流式聊天（使用默认模型）
     public Flux<String> chatStreamWithAudioAndImage(
             List<OpenAiChatMessage> messages,
             String audioData,
@@ -275,7 +210,8 @@ public class LlmService {
             String imageFormat) {
         return chatStreamWithAudioAndImage(messages, audioData, audioFormat, imageData, imageFormat, null);
     }
-    
+
+    // 带音频和图片混合输入的流式聊天（指定模型），不支持音频的模型会自动回退
     public Flux<String> chatStreamWithAudioAndImage(
             List<OpenAiChatMessage> messages,
             String audioData,
@@ -283,7 +219,7 @@ public class LlmService {
             String imageData,
             String imageFormat,
             String model) {
-        
+
         String fullModelName = llmProperties.getFullModelName(model);
         LlmProperties.ModelCapabilityConfig config = llmProperties.getAudioModelConfigForModel(model);
         if (!config.isSupportsAudio()) {
@@ -292,7 +228,7 @@ public class LlmService {
             fullModelName = fallbackModel;
             config = llmProperties.getAudioModelConfig();
         }
-        
+
         log.info("调用多模态混合输入API - 模型: {} ({}), 消息数: {}, 支持: 音频={}, 图像={}, 视频={}",
                 config.getDisplayName(),
                 fullModelName,
@@ -300,93 +236,14 @@ public class LlmService {
                 config.isSupportsAudio(),
                 config.isSupportsImage(),
                 config.isSupportsVideo());
-        
+
         List<OpenAiChatMessage> sendMessages = prepareMultiModalMessages(
                 messages, audioData, audioFormat, imageData, imageFormat);
-        
+
         return chatStreamInternalWithModel(sendMessages, fullModelName);
     }
-    
-    private List<OpenAiChatMessage> prepareImageMessages(
-            List<OpenAiChatMessage> messages,
-            String imageData,
-            String imageFormat) {
-        
-        List<OpenAiChatMessage> result = new ArrayList<>();
-        
-        for (OpenAiChatMessage msg : messages) {
-            if ("user".equals(msg.getRole()) && !msg.hasImageContent()) {
-                String textContent = extractTextContent(msg.getContent());
-                OpenAiChatMessage imageMessage = OpenAiChatMessage.createImageMessage(
-                        "user",
-                        textContent,
-                        imageData,
-                        normalizeImageFormat(imageFormat)
-                );
-                result.add(imageMessage);
-            } else {
-                result.add(msg);
-            }
-        }
-        
-        return result;
-    }
-    
-    private List<OpenAiChatMessage> prepareMultiModalMessages(
-            List<OpenAiChatMessage> messages,
-            String audioData,
-            String audioFormat,
-            String imageData,
-            String imageFormat) {
-        
-        List<OpenAiChatMessage> result = new ArrayList<>();
-        
-        for (OpenAiChatMessage msg : messages) {
-            if ("user".equals(msg.getRole()) && !msg.hasAudioContent() && !msg.hasImageContent()) {
-                String textContent = extractTextContent(msg.getContent());
-                OpenAiChatMessage multiModalMessage = OpenAiChatMessage.createMultiModalMessage(
-                        "user",
-                        textContent,
-                        audioData,
-                        audioFormat != null ? normalizeAudioFormat(audioFormat) : null,
-                        imageData,
-                        imageFormat != null ? normalizeImageFormat(imageFormat) : null
-                );
-                result.add(multiModalMessage);
-            } else {
-                result.add(msg);
-            }
-        }
-        
-        return result;
-    }
-    
-    private String normalizeImageFormat(String format) {
-        if (format == null) {
-            return "png";
-        }
-        String lowerFormat = format.toLowerCase();
-        
-        if (lowerFormat.contains("png")) {
-            return "png";
-        }
-        if (lowerFormat.contains("jpeg") || lowerFormat.contains("jpg")) {
-            return "jpeg";
-        }
-        if (lowerFormat.contains("gif")) {
-            return "gif";
-        }
-        if (lowerFormat.contains("webp")) {
-            return "webp";
-        }
-        if (lowerFormat.contains("bmp")) {
-            return "bmp";
-        }
-        
-        log.warn("未知图片格式: {}, 使用默认 png", format);
-        return "png";
-    }
-    
+
+    // 内部流式请求实现（指定模型名），使用 Java HttpClient 发送 SSE 请求
     private Flux<String> chatStreamInternalWithModel(List<OpenAiChatMessage> messages, String model) {
         log.info("调用 Chat Completions API 流式，模型: {}, 消息数: {}",
                 model, messages.size());
@@ -402,7 +259,7 @@ public class LlmService {
                         .build();
 
                 String json = objectMapper.writeValueAsString(request);
-                log.info("流式请求 JSON: {}", JsonLogUtils.toLogString(objectMapper, request));
+                log.info("流式请求 JSON: {}", json);
 
                 java.net.http.HttpRequest httpRequest = java.net.http.HttpRequest.newBuilder()
                         .uri(java.net.URI.create(llmProperties.getBaseUrl() + "/v1/chat/completions"))
@@ -478,76 +335,7 @@ public class LlmService {
         }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
     }
 
-    /**
-     * 将消息转换为模型理解的格式
-     * 使用原生 OpenAI 格式，不再做文本格式转换
-     * 1. tool 角色消息保持原生格式（不转换为 user 角色）
-     * 2. assistant 的 toolCalls 保持原生格式（不转换为 TOOL_CALL: 文本格式）
-     * 3. 不再通过系统提示中添加工具调用格式说明，因为使用原生 tools 参数
-     */
-    private List<OpenAiChatMessage> translateForModel(List<OpenAiChatMessage> messages,
-                                                       List<OpenAiTool> tools) {
-        List<OpenAiChatMessage> result = new ArrayList<>();
-
-        for (OpenAiChatMessage msg : messages) {
-            result.add(msg);
-        }
-
-        return result;
-    }
-
-    private String buildToolCallJson(OpenAiChatMessage.ToolCall tc) {
-        try {
-            return "{\"name\":\"" + tc.getFunction().getName()
-                    + "\",\"arguments\":" + tc.getFunction().getArguments() + "}";
-        } catch (Exception e) {
-            return "{}";
-        }
-    }
-
-    private String buildToolSystemPrompt(List<OpenAiTool> tools) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("你可以使用以下工具来帮助用户解决问题。\n");
-        sb.append("当你需要调用工具时，必须严格按照以下格式输出，不要添加任何其他内容：\n");
-        sb.append(TOOL_CALL_MARKER + " {\"name\": \"<工具名称>\", \"arguments\": {<参数JSON>}}\n\n");
-        sb.append("可用工具列表：\n");
-        
-        for (OpenAiTool tool : tools) {
-            OpenAiTool.Function func = tool.getFunction();
-            sb.append("- ").append(func.getName()).append(": ").append(func.getDescription()).append("\n");
-            
-            OpenAiTool.Parameters params = func.getParameters();
-            if (params != null && params.getProperties() != null && !params.getProperties().isEmpty()) {
-                sb.append("  参数：\n");
-                for (Map.Entry<String, OpenAiTool.Property> entry : params.getProperties().entrySet()) {
-                    String paramName = entry.getKey();
-                    OpenAiTool.Property prop = entry.getValue();
-                    
-                    sb.append("    - ").append(paramName);
-                    if (prop.getType() != null) {
-                        sb.append(" (").append(prop.getType()).append(")");
-                    }
-                    if (prop.getDescription() != null) {
-                        sb.append(": ").append(prop.getDescription());
-                    }
-                    
-                    if (prop.getEnums() != null && !prop.getEnums().isEmpty()) {
-                        sb.append("。可选值：").append(String.join(", ", prop.getEnums()));
-                    }
-                    
-                    if (params.getRequired() != null && params.getRequired().contains(paramName)) {
-                        sb.append(" [必需]");
-                    }
-                    
-                    sb.append("\n");
-                }
-            }
-            sb.append("\n");
-        }
-        
-        return sb.toString();
-    }
-
+    // 从 AI 响应中解析工具调用，仅支持原生 tool_calls 格式
     private OpenAiChatResponse parseToolCallFromResponse(OpenAiChatResponse response) {
         if (response.getChoices() == null || response.getChoices().isEmpty()) return response;
 
@@ -561,100 +349,18 @@ public class LlmService {
         log.info("=== 原始响应结束 ===");
 
         OpenAiChatMessage message = response.getChoices().get(0).getMessage();
-        
+
         if (message.getToolCalls() != null && !message.getToolCalls().isEmpty()) {
             log.info("检测到原生 tool_calls 格式，工具调用数: {}", message.getToolCalls().size());
             for (OpenAiChatMessage.ToolCall toolCall : message.getToolCalls()) {
                 log.info("  工具: {}", toolCall.getFunction() != null ? toolCall.getFunction().getName() : "unknown");
             }
-            return response;
         }
 
-        String content = message.getContentAsString();
-        if (content == null) {
-            log.info("AI 响应中没有工具调用，也没有文本内容");
-            return response;
-        }
-
-        int idx = content.indexOf(TOOL_CALL_MARKER);
-        if (idx < 0) {
-            log.info("AI 响应中没有找到工具调用标记 {}，将作为普通文本响应处理", TOOL_CALL_MARKER);
-            return response;
-        }
-
-        log.info("检测到兼容格式 TOOL_CALL: 标记，开始解析...");
-
-        try {
-            String after = content.substring(idx + TOOL_CALL_MARKER.length()).trim();
-            int start = after.indexOf('{');
-            if (start < 0) return response;
-
-            int depth = 0, end = -1;
-            for (int i = start; i < after.length(); i++) {
-                char c = after.charAt(i);
-                if (c == '{') depth++;
-                else if (c == '}') {
-                    if (--depth == 0) {
-                        end = i;
-                        break;
-                    }
-                }
-            }
-            if (end < 0) return response;
-
-            String jsonObj = after.substring(start, end + 1);
-            JsonNode node = objectMapper.readTree(jsonObj);
-            String toolName = node.path("name").asText();
-            String arguments;
-
-            if (!toolName.isEmpty()) {
-                log.info("检测到标准工具调用格式，工具名: {}", toolName);
-                arguments = objectMapper.writeValueAsString(node.path("arguments"));
-            } else {
-                JsonNode actionNode = node.path("action");
-                if (actionNode.isMissingNode() || actionNode.asText().isEmpty()) {
-                    log.warn("无法确定工具调用格式，既没有 name 字段也没有 action 字段");
-                    return response;
-                }
-
-                log.info("检测到简化工具调用格式（vocabulary 模式），action: {}", actionNode.asText());
-                toolName = "vocabulary";
-                arguments = jsonObj;
-            }
-
-            String toolId = "call_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-
-            OpenAiChatMessage.ToolCall toolCall = OpenAiChatMessage.ToolCall.builder()
-                    .id(toolId)
-                    .type("function")
-                    .function(OpenAiChatMessage.FunctionCall.builder()
-                            .name(toolName)
-                            .arguments(arguments)
-                            .build())
-                    .build();
-
-            OpenAiChatMessage assistantMsg = OpenAiChatMessage.builder()
-                    .role("assistant")
-                    .toolCalls(Collections.singletonList(toolCall))
-                    .build();
-
-            log.info("Parsed prompt-based tool call: {}", toolName);
-
-            return OpenAiChatResponse.builder()
-                    .choices(Collections.singletonList(
-                            OpenAiChatResponse.Choice.builder()
-                                    .index(0)
-                                    .message(assistantMsg)
-                                    .finishReason("tool_calls")
-                                    .build()))
-                    .build();
-
-        } catch (Exception e) {
-            log.warn("Failed to parse tool call from model response", e);
-            return response;
-        }
+        return response;
     }
 
+    // 调用 LLM API（带重试机制），最多重试 3 次，仅对瞬时连接错误进行重试
     private OpenAiChatResponse callApi(OpenAiChatRequest request) {
         int maxRetries = 3;
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -682,6 +388,7 @@ public class LlmService {
         throw ChatException.badRequest("AI 服务调用失败：超过最大重试次数");
     }
 
+    // 实际执行 LLM API 调用（无重试），使用 Java HttpClient 发送 POST 请求
     private OpenAiChatResponse doCallApi(OpenAiChatRequest request) throws Exception {
         String json = objectMapper.writeValueAsString(request);
 
@@ -713,6 +420,8 @@ public class LlmService {
         return objectMapper.readValue(response.body(), OpenAiChatResponse.class);
     }
 
+    // 内部流式请求实现（使用默认模型），已废弃，推荐使用 chatStreamInternalWithModel
+    @Deprecated
     private Flux<String> chatStreamInternal(List<OpenAiChatMessage> messages) {
         log.info("调用 Chat Completions API 流式，模型: {}, 消息数: {}",
                 llmProperties.getModel(), messages.size());
@@ -728,7 +437,7 @@ public class LlmService {
                         .build();
 
                 String json = objectMapper.writeValueAsString(request);
-                log.info("流式请求 JSON: {}", JsonLogUtils.toLogString(objectMapper, request));
+                log.info("流式请求 JSON: {}", json);
 
                 java.net.http.HttpRequest httpRequest = java.net.http.HttpRequest.newBuilder()
                         .uri(java.net.URI.create(llmProperties.getBaseUrl() + "/v1/chat/completions"))
@@ -802,13 +511,5 @@ public class LlmService {
                 emitter.error(ChatException.badRequest("AI 流式服务调用失败: " + e.getMessage()));
             }
         }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
-    }
-
-    private void logRequest(OpenAiChatRequest request) {
-        try {
-            log.info("请求 JSON: {}", JsonLogUtils.toLogString(objectMapper, request));
-        } catch (Exception e) {
-            log.error("序列化请求失败: {}", e.getMessage());
-        }
     }
 }

@@ -17,7 +17,7 @@ import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
-import com.lingobot.infrastructure.mcp.service.McpService;
+import com.lingobot.infrastructure.tool.service.ToolService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,7 +34,7 @@ public class ChatServiceImpl implements ChatService {
     
     private final ConversationService conversationService;
     private final MessageRepository messageRepository;
-    private final McpService mcpService;
+    private final ToolService toolService;
     private final ToolLoopService toolLoopService;
     private final MessageHistoryService messageHistoryService;
     private final SseEmitterService sseEmitterService;
@@ -82,7 +82,7 @@ public class ChatServiceImpl implements ChatService {
         
         List<OpenAiTool> tools;
         if (forceMode != null) {
-            tools = mcpService.getOpenAiToolsForMode(forceMode);
+            tools = toolService.getOpenAiToolsForMode(forceMode);
         } else {
             tools = getToolsForRequest(request, mode);
         }
@@ -305,11 +305,11 @@ public class ChatServiceImpl implements ChatService {
     }
     
     private MessageDTO executeVocabularyFlow(ChatRequest request) {
-        return executeFlowInternal(request, "vocabulary", "vocabulary", true);
+        return executeFlowInternal(request, null, "vocabulary", true);
     }
     
     private SseEmitter executeVocabularyFlowStream(ChatRequest request) {
-        return executeFlowStreamInternal(request, "vocabulary", "vocabulary");
+        return executeFlowStreamInternal(request, null, "vocabulary");
     }
     
     private MessageDTO executeLoopFlow(ChatRequest request) {
@@ -322,9 +322,9 @@ public class ChatServiceImpl implements ChatService {
     
     private List<OpenAiTool> getToolsForRequest(ChatRequest request, String mode) {
         if (request.isMessageTypeVocabulary()) {
-            return mcpService.getOpenAiToolsForMode("vocabulary");
+            return toolService.getOpenAiTool("vocabulary", null, mode);
         }
-        return mcpService.getOpenAiToolsForMode(mode);
+        return toolService.getOpenAiToolsForMode(mode);
     }
     
     @Override
@@ -379,7 +379,7 @@ public class ChatServiceImpl implements ChatService {
 
         List<Message> remainingMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
         List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryUpToIndex(remainingMessages, remainingMessages.size());
-        List<OpenAiTool> tools = mcpService.getOpenAiTools();
+        List<OpenAiTool> tools = toolService.getOpenAiTools();
 
         String aiResponse = toolLoopService.executeToolLoop(conversationId, messages, tools, DEFAULT_MODE, "gpt");
 
@@ -451,7 +451,7 @@ public class ChatServiceImpl implements ChatService {
         List<Message> remainingMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
         List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryUpToIndexWithMode(
                 remainingMessages, remainingMessages.size(), learningMode, vocabularyCategory, vocabularyDifficulty);
-        List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode(mode);
+        List<OpenAiTool> tools = toolService.getOpenAiToolsForMode(mode);
         
         return sseEmitterService.createStreamEmitterWithTools(conversationId, messages, tools, mode, model);
     }
@@ -507,7 +507,7 @@ public class ChatServiceImpl implements ChatService {
         
         List<Message> remainingMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
         List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryUpToIndex(remainingMessages, remainingMessages.size());
-        List<OpenAiTool> tools = mcpService.getOpenAiTools();
+        List<OpenAiTool> tools = toolService.getOpenAiTools();
         
         String aiResponse = toolLoopService.executeToolLoop(request.getConversationId(), messages, tools, DEFAULT_MODE, "gpt");
         
@@ -565,7 +565,7 @@ public class ChatServiceImpl implements ChatService {
         
         List<Message> remainingMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
         List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryUpToIndex(remainingMessages, remainingMessages.size());
-        List<OpenAiTool> tools = mcpService.getOpenAiTools();
+        List<OpenAiTool> tools = toolService.getOpenAiTools();
         
         return sseEmitterService.createStreamEmitterWithTools(request.getConversationId(), messages, tools, DEFAULT_MODE, "gpt");
     }

@@ -1,7 +1,6 @@
 package com.lingobot.learning.vocabulary.graph;
 
-import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
-import com.lingobot.learning.vocabulary.dto.WordCardData;
+import com.lingobot.learning.vocabulary.card.dto.response.WordCardData;
 import com.lingobot.learning.vocabulary.graph.nodes.VocabularyRegenerateNodeActions;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -94,7 +93,6 @@ public class VocabularyRegenerateGraph {
             inputs.put("userId", userId);
             inputs.put("category", category);
             inputs.put("difficulty", difficulty);
-            inputs.put("intent", VocabularyGenerationIntent.REGENERATE);
             inputs.put("retryCount", 0);
             inputs.put("regeneratePosition", regeneratePosition);
             inputs.put("regenerateOldWord", oldWord);

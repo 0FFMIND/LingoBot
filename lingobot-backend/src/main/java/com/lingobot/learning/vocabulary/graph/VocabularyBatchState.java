@@ -5,10 +5,10 @@ import com.lingobot.learning.agent.dto.MemoryRecallPlan;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationConstraints;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryContext;
-import com.lingobot.learning.vocabulary.dto.ConversationOverviewDTO;
-import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
-import com.lingobot.learning.vocabulary.dto.VocabularyStatsDTO;
-import com.lingobot.learning.vocabulary.dto.WordCardBatchData;
+import com.lingobot.learning.vocabulary.card.dto.response.VocabularyCardDTO;
+import com.lingobot.learning.vocabulary.card.dto.response.WordCardBatchData;
+import com.lingobot.learning.vocabulary.common.dto.ConversationOverviewDTO;
+import com.lingobot.learning.vocabulary.progress.dto.response.VocabularyStatsDTO;
 import org.bsc.langgraph4j.state.AgentState;
 
 import java.util.ArrayList;
@@ -141,5 +141,15 @@ public class VocabularyBatchState extends AgentState {
     // 获取 Agent 生成的记忆抓取计划
     public MemoryRecallPlan getMemoryRecallPlan() {
         return value("memoryRecallPlan").map(MemoryRecallPlan.class::cast).orElse(null);
+    }
+
+    // 获取 Agent 推荐的学习意图
+    public String getRecommendedIntent() {
+        return value("recommendedIntent").map(String.class::cast).orElse(null);
+    }
+
+    // 获取最终确定的有效学习意图
+    public VocabularyGenerationIntent getEffectiveIntent() {
+        return value("effectiveIntent").map(VocabularyGenerationIntent.class::cast).orElse(null);
     }
 }

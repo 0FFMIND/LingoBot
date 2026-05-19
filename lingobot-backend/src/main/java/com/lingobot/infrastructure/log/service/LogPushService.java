@@ -1,5 +1,7 @@
 package com.lingobot.infrastructure.log.service;
 
+import com.lingobot.infrastructure.common.config.LogProperties;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -16,14 +18,15 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class LogPushService {
+
+    private final LogProperties logProperties;
 
     // 存储所有活跃的 SSE 连接，使用 CopyOnWriteArrayList 保证线程安全
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
     // 存储日志历史记录，用于新连接时发送历史日志
     private final List<String> logHistory = new ArrayList<>();
-    // 日志历史记录的最大数量，超过后移除最旧的日志
-    private static final int MAX_HISTORY_SIZE = 200;
 
     /**
      * 创建一个新的 SSE 连接。
@@ -145,7 +148,7 @@ public class LogPushService {
         // 将日志添加到历史记录，超出最大数量时移除最旧的
         synchronized (logHistory) {
             logHistory.add(logEntry);
-            if (logHistory.size() > MAX_HISTORY_SIZE) {
+            if (logHistory.size() > logProperties.getMaxHistorySize()) {
                 logHistory.remove(0);
             }
         }

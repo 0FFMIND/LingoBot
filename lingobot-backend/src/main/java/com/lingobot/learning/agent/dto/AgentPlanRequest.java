@@ -1,9 +1,13 @@
 package com.lingobot.learning.agent.dto;
 
+import com.lingobot.learning.vocabulary.common.dto.ConversationOverviewDTO;
+import com.lingobot.learning.vocabulary.progress.dto.response.VocabularyStatsDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
 
 /**
  * 词汇 Agent 规划请求 DTO。
@@ -12,16 +16,22 @@ import lombok.NoArgsConstructor;
  * - 会话标识（用于定位历史记忆上下文）
  * - 用户标识（用于获取用户偏好和个人记忆库）
  * - 学习意图（决定记忆抓取策略）
+ * - 轻量召回结果（用户学习概览、对话统计）
  * - 可选的用户消息和当前单词（用于 LLM 动态调整规划）
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class AgentPlanRequest {
+public class AgentPlanRequest implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     // 会话公开 ID，用于解析出内部 conversationId，为空则不限制会话范围
     private String conversationPublicId;
+
+    // 内部会话 ID（可选），如果已提供则直接使用，无需通过 conversationPublicId 解析
+    private Long conversationId;
 
     // 用户 ID，用于定位用户的词汇记忆库和偏好设置
     private Long userId;
@@ -34,4 +44,10 @@ public class AgentPlanRequest {
 
     // 当前学习的单词（可选），提供给 LLM 结合上下文调整记忆抓取策略
     private String currentWord;
+
+    // 轻量召回：用户词汇学习统计概览
+    private VocabularyStatsDTO learningOverview;
+
+    // 轻量召回：对话统计概览
+    private ConversationOverviewDTO conversationOverview;
 }

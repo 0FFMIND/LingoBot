@@ -114,4 +114,25 @@ public interface UserVocabularyRepository extends JpaRepository<UserVocabulary, 
             @Param("userId") Long userId,
             @Param("keyword") String keyword,
             Pageable pageable);
+
+    // 查询 L2 已掌握词汇（status = MASTERED 或 masteryScore >= 0.8），按掌握程度降序
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
+           "AND (uv.status = com.lingobot.learning.vocabulary.entity.VocabularyStatus.MASTERED " +
+           "OR uv.masteryScore >= 0.8)")
+    List<UserVocabulary> findL2MasteredByUserId(@Param("userId") Long userId, Pageable pageable);
+
+    // 查询 L2 复习中词汇（status = REVIEWING），按下次复习时间升序
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
+           "AND uv.status = com.lingobot.learning.vocabulary.entity.VocabularyStatus.REVIEWING")
+    List<UserVocabulary> findL2ReviewingByUserId(@Param("userId") Long userId, Pageable pageable);
+
+    // 查询 L2 学习中词汇（status = LEARNING），按更新时间降序
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
+           "AND uv.status = com.lingobot.learning.vocabulary.entity.VocabularyStatus.LEARNING")
+    List<UserVocabulary> findL2LearningByUserId(@Param("userId") Long userId, Pageable pageable);
+
+    // 查询 L2 薄弱词汇（masteryScore < 0.4 且 wrongCount >= 1），按掌握程度升序
+    @Query("SELECT uv FROM UserVocabulary uv WHERE uv.userId = :userId " +
+           "AND uv.masteryScore < 0.4 AND uv.wrongCount >= 1")
+    List<UserVocabulary> findL2WeakByUserId(@Param("userId") Long userId, Pageable pageable);
 }

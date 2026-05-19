@@ -6,16 +6,17 @@ import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.config.ConversationProperties;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.infrastructure.common.response.ApiResponse;
+import com.lingobot.infrastructure.common.response.ErrorCode;
 
-import com.lingobot.learning.vocabulary.dto.MeaningCheckStatusDTO;
-import com.lingobot.learning.vocabulary.dto.RegenerateCardAtPositionRequest;
-import com.lingobot.learning.vocabulary.dto.SentenceAnalysisStatusDTO;
-import com.lingobot.learning.vocabulary.dto.UpdateUserEnglishSentenceRequest;
-import com.lingobot.learning.vocabulary.dto.UpdateUserMeaningRequest;
-import com.lingobot.learning.vocabulary.dto.VocabularyBatchGenerationResult;
-import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
+import com.lingobot.learning.vocabulary.card.dto.request.RegenerateCardAtPositionRequest;
+import com.lingobot.learning.vocabulary.progress.dto.request.UpdateUserEnglishSentenceRequest;
+import com.lingobot.learning.vocabulary.progress.dto.request.UpdateUserMeaningRequest;
+import com.lingobot.learning.vocabulary.card.dto.response.VocabularyBatchGenerationResult;
+import com.lingobot.learning.vocabulary.card.dto.response.VocabularyCardDTO;
+import com.lingobot.learning.vocabulary.card.dto.status.MeaningCheckStatusDTO;
+import com.lingobot.learning.vocabulary.card.dto.status.SentenceAnalysisStatusDTO;
+import com.lingobot.learning.vocabulary.card.service.VocabularyCardService;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
-import com.lingobot.learning.vocabulary.service.VocabularyCardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -306,6 +307,12 @@ public class VocabularyCardController {
 
             VocabularyBatchGenerationResult result = vocabularyCardService.generateBatchCards(
                     conversationId, category, difficulty, batchSize);
+            if (result.getTotalCount() == 0) {
+                balanceService.cancelTransaction(transactionId);
+                log.warn("批量生成词汇卡失败，生成数量为0，返还余额: {}", cost);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR, "批量生成词汇卡失败，请稍后重试"));
+            }
             balanceService.confirmTransaction(transactionId);
             log.info("确认扣费: {}，批量生成词汇卡成功，共生成 {} 张", cost, result.getTotalCount());
             return ResponseEntity.status(HttpStatus.CREATED)

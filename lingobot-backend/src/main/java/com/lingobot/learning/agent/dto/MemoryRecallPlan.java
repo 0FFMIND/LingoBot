@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
+
 /**
  * 记忆抓取计划 DTO。
  *
@@ -22,7 +24,9 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class MemoryRecallPlan {
+public class MemoryRecallPlan implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     // L1 短期记忆：最近 7 天接触过的词，主要用于避免重复推荐
     private int l1RecentLimit;
@@ -45,6 +49,10 @@ public class MemoryRecallPlan {
     // L2 长期记忆：薄弱词（掌握度<40%，错误>=1），复习模式下优先级较高
     private int l2WeakLimit;
 
-    // LLM 生成的规划理由，解释为什么这样分配抓取数量
+    // LLM 推荐的学习意图（仅在 SMART_RECOMMEND 模式下由 Agent 决策返回）
+    // 可选值：new_word、review、hybrid
+    private String recommendedIntent;
+
+    // LLM 生成的规划理由，解释为什么选择这个模式和这样分配抓取数量
     private String reasoning;
 }

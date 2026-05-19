@@ -20,4 +20,8 @@ public interface VocabularyConversationDataService {
     void deleteByConversationId(Long conversationId);
 
     VocabularyConversationData updateLastViewedPosition(Long conversationId, Integer position);
+
+    String buildVocabularyHistoryForPrompt(Long conversationId);
+
+    String getCompactedSummary(Long conversationId);
 }

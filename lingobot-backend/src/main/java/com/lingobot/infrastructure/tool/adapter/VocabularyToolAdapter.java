@@ -1,10 +1,11 @@
 package com.lingobot.infrastructure.tool.adapter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.lingobot.infrastructure.tool.ToolCategory;
-import com.lingobot.infrastructure.tool.ToolHandler;
+import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
 import com.lingobot.infrastructure.tool.dto.ToolCall;
+import com.lingobot.infrastructure.tool.dto.ToolCategory;
 import com.lingobot.infrastructure.tool.dto.ToolDefinition;
+import com.lingobot.infrastructure.tool.dto.ToolHandler;
 import com.lingobot.infrastructure.tool.dto.ToolResult;
 import com.lingobot.learning.vocabulary.service.VocabularyToolService;
 import lombok.RequiredArgsConstructor;
@@ -12,26 +13,36 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
-import static com.lingobot.infrastructure.tool.ToolMode.AGENT;
-import static com.lingobot.infrastructure.tool.ToolMode.CHAT;
-import static com.lingobot.infrastructure.tool.ToolMode.VOCABULARY;
+import static com.lingobot.infrastructure.tool.dto.ToolMode.AGENT;
+import static com.lingobot.infrastructure.tool.dto.ToolMode.CHAT;
 
-// 词汇学习工具适配器
-// 作为工具系统与词汇业务的适配层，负责定义 schema、解析参数、转发调用
+/**
+ * 词汇学习工具适配器。
+ *
+ * 作为工具系统与词汇业务的适配层，负责定义 schema、解析参数、转发调用。
+ * 实现 ToolHandler 接口，将词汇学习相关的业务能力封装为可被 AI 调用的工具，
+ * 支持单词卡展示、释义检查、句子分析等多种操作。
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class VocabularyToolAdapter implements ToolHandler {
 
+    // 工具名称标识
     private static final String TOOL_NAME = "vocabulary";
+
+    // 支持的对话模式列表：普通聊天、Agent
     private static final List<String> SUPPORTED_MODES = List.of(
             CHAT,
-            AGENT,
-            VOCABULARY
+            AGENT
     );
 
+    // JSON 序列化工具
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // 词汇学习业务服务
     private final VocabularyToolService vocabularyToolService;
 
     @Override
@@ -49,7 +60,7 @@ public class VocabularyToolAdapter implements ToolHandler {
         return SUPPORTED_MODES;
     }
 
-    // 获取工具定义，描述工具的参数和功能
+    // 获取工具定义，描述工具的参数和功能，构建完整的 JSON Schema 供 AI 使用
     @Override
     public ToolDefinition getToolDefinition() {
         Map<String, ToolDefinition.Property> properties = new HashMap<>();
@@ -164,7 +175,7 @@ public class VocabularyToolAdapter implements ToolHandler {
                 .build();
     }
 
-    // 执行工具调用，根据 action 转发到对应业务方法
+    // 执行工具调用，根据 action 参数转发到对应业务方法处理
     @Override
     public ToolResult execute(ToolCall call) {
         Map<String, Object> args = call.getArguments();
@@ -219,7 +230,7 @@ public class VocabularyToolAdapter implements ToolHandler {
         }
     }
 
-    // 解析对话 ID
+    // 解析对话 ID，将字符串转换为 Long，解析失败返回 null
     private Long parseConversationId(String conversationIdStr) {
         if (conversationIdStr == null || conversationIdStr.isEmpty()) {
             return null;
@@ -230,5 +241,69 @@ public class VocabularyToolAdapter implements ToolHandler {
             log.warn("Invalid conversationId: {}", conversationIdStr);
             return null;
         }
+    }
+
+    // 窄化词汇工具的参数定义，根据操作类型仅保留必要的参数，约束 action 为固定值
+    @Override
+    public OpenAiTool narrowOpenAiTool(
+            OpenAiTool tool,
+            String action) {
+        OpenAiTool.Function function = tool.getFunction();
+        OpenAiTool.Parameters parameters = function.getParameters();
+        if (parameters == null || parameters.getProperties() == null) {
+            return tool;
+        }
+
+        List<String> allowedKeys = switch (action) {
+            case "check_meaning_accuracy" -> List.of(
+                    "action", "word", "user_meaning", "is_correct", "check_feedback");
+            case "analyze_sentence" -> List.of(
+                    "action", "word", "meaning_matches", "has_new_word", "feedback");
+            case "display_flashcard_batch" -> List.of(
+                    "action", "cards");
+            default -> List.of(
+                    "action", "word", "phonetic", "partOfSpeech", "meaning", "example", "exampleTranslation",
+                    "synonyms", "vocabularyCategory", "vocabularyDifficulty");
+        };
+
+        Map<String, OpenAiTool.Property> narrowedProperties = new HashMap<>();
+        for (String key : allowedKeys) {
+            OpenAiTool.Property property = parameters.getProperties().get(key);
+            if (property != null) {
+                narrowedProperties.put(key, property);
+            }
+        }
+
+        OpenAiTool.Property actionProperty = narrowedProperties.get("action");
+        if (actionProperty != null) {
+            narrowedProperties.put("action", OpenAiTool.Property.builder()
+                    .type(actionProperty.getType())
+                    .description("固定为 " + action)
+                    .enums(List.of(action))
+                    .build());
+        }
+
+        String description = switch (action) {
+            case "check_meaning_accuracy" -> "检查用户中文释义是否准确。";
+            case "analyze_sentence" -> "分析用户英文句子是否匹配中文例句，并是否正确使用当前新单词。";
+            case "display_flashcard_batch" -> "批量生成并展示多张新的英文单词卡。";
+            default -> "生成并展示一张新的英文单词卡。";
+        };
+
+        OpenAiTool.Parameters narrowedParameters =
+                OpenAiTool.Parameters.builder()
+                        .type(parameters.getType())
+                        .properties(narrowedProperties)
+                        .required(List.of("action"))
+                        .build();
+
+        return OpenAiTool.builder()
+                .type(tool.getType())
+                .function(OpenAiTool.Function.builder()
+                        .name(function.getName())
+                        .description(description)
+                        .parameters(narrowedParameters)
+                        .build())
+                .build();
     }
 }

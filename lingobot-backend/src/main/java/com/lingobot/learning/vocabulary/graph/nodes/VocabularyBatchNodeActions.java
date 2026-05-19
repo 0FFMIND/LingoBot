@@ -11,23 +11,25 @@ import com.lingobot.infrastructure.common.config.ConversationProperties;
 import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
-import com.lingobot.infrastructure.mcp.service.McpService;
+import com.lingobot.infrastructure.tool.service.ToolService;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationConstraints;
+import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryContext;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryEventType;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryPromptBuilder;
-import com.lingobot.learning.memory.vocabulary.VocabularyMemoryRecord;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryService;
-import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
-import com.lingobot.learning.vocabulary.dto.WordCardBatchData;
-import com.lingobot.learning.vocabulary.dto.WordCardData;
+import com.lingobot.learning.agent.dto.AgentPlanRequest;
+import com.lingobot.learning.agent.dto.AgentPlanResponse;
+import com.lingobot.learning.agent.service.VocabularyAgentService;
+import com.lingobot.learning.prompt.vocabulary.VocabularyCardGenerationPromptBuilder;
+import com.lingobot.learning.vocabulary.card.dto.response.VocabularyCardDTO;
+import com.lingobot.learning.vocabulary.card.dto.response.WordCardBatchData;
+import com.lingobot.learning.vocabulary.card.dto.response.WordCardData;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import com.lingobot.learning.vocabulary.entity.VocabularyWord;
 import com.lingobot.learning.vocabulary.graph.VocabularyBatchState;
+import com.lingobot.learning.vocabulary.progress.service.UserVocabularyService;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
-import com.lingobot.learning.agent.service.VocabularyAgentService;
-import com.lingobot.learning.vocabulary.service.UserVocabularyService;
-import com.lingobot.learning.prompt.vocabulary.VocabularyCardGenerationPromptBuilder;
 import com.lingobot.learning.vocabulary.service.VocabularyWordService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,8 +42,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * 批量单词卡片生成工作流节点动作集合。
@@ -71,13 +71,13 @@ public class VocabularyBatchNodeActions {
     private final UserPreferenceService userPreferenceService;
     private final VocabularyCardGenerationPromptBuilder vocabularyCardGenerationPromptBuilder;
     private final VocabularyMemoryPromptBuilder memoryPromptBuilder;
-    private final ToolService toolService;
     private final ToolLoopService toolLoopService;
     private final ConversationRepository conversationRepository;
     private final VocabularyCardRepository vocabularyCardRepository;
     private final VocabularyWordService vocabularyWordService;
     private final UserVocabularyService userVocabularyService;
     private final VocabularyAgentService vocabularyAgentService;
+    private final ToolService toolService;
     private final ObjectMapper objectMapper;
 
     // LIGHTWEIGHT_RECALL 节点：轻量召回用户学习概览和对话统计
@@ -121,69 +121,56 @@ public class VocabularyBatchNodeActions {
     }
 
     // AGENT_MEMORY_RECALL 节点：调用 Memory Agent 进行规划和记忆召回
+    // 产物：memoryRecallPlan、memoryContext、recommendedIntent
     public AsyncNodeAction<VocabularyBatchState> agentMemoryRecall() {
         return state -> CompletableFuture.supplyAsync(() -> {
-            log.info("执行 BATCH_AGENT_MEMORY_RECALL: conversationId={}, userId={}",
-                    state.getConversationId(), state.getUserId());
+            log.info("执行 BATCH_AGENT_MEMORY_RECALL: conversationId={}, userId={}, intent={}",
+                    state.getConversationId(), state.getUserId(), state.getIntent());
 
             Map<String, Object> updates = new HashMap<>();
 
             try {
-                // TODO: 调用 VocabularyAgentService 根据 intent 和 lightweight memory 构建查询计划
-                // 1. 构建 AgentPlanRequest（包含 intent、learningOverview、conversationOverview）
-                // 2. 调用 vocabularyAgentService.generateMemoryPlan() 或 planAndRecall()
-                // 3. 将结果 memoryContext、excludedWords、constraints、systemPrompt 放入 updates
+                String intentStr = state.getIntent() != null ? state.getIntent().name().toLowerCase() : "next_word";
 
-                log.info("Agent 记忆召回节点待实现，当前使用默认记忆召回逻辑");
+                AgentPlanRequest agentRequest = AgentPlanRequest.builder()
+                        .userId(state.getUserId())
+                        .conversationId(state.getConversationId())
+                        .intent(intentStr)
+                        .learningOverview(state.getLearningOverview())
+                        .conversationOverview(state.getConversationOverview())
+                        .build();
 
-                var memoryContext = vocabularyMemoryService.retrieveMemory(
-                        state.getUserId(),
-                        state.getConversationId(),
-                        state.getIntent(),
-                        null);
+                log.info("调用 Memory Agent: intent={}, learningOverview={}, conversationOverview={}",
+                        intentStr,
+                        state.getLearningOverview() != null ? "已提供" : "未提供",
+                        state.getConversationOverview() != null ? "已提供" : "未提供");
 
+                AgentPlanResponse agentResponse = vocabularyAgentService.planAndRecall(agentRequest);
+
+                updates.put("memoryRecallPlan", agentResponse.getPlan());
+
+                var memoryContext = agentResponse.getMemoryContext();
                 updates.put("memoryContext", memoryContext);
 
-                List<String> excludedWords = buildExcludedWords(memoryContext);
-                updates.put("excludedWords", excludedWords);
+                String recommendedIntentStr = agentResponse.getPlan().getRecommendedIntent();
+                updates.put("recommendedIntent", recommendedIntentStr);
 
-                log.info("批量记忆召回完成: 记忆条目数={}, 排除词数={}",
-                        memoryContext.totalMemoryItems(), excludedWords.size());
-
-                String category = state.getCategory();
-                String difficulty = state.getDifficulty();
-                Integer batchSize = state.getBatchSize();
-
-                var constraints = VocabularyGenerationConstraints.builder()
-                        .category(category)
-                        .difficulty(difficulty)
-                        .excludeWords(excludedWords)
-                        .build();
-                updates.put("constraints", constraints);
-
-                String systemPrompt = vocabularyCardGenerationPromptBuilder.getBatchFlashcardPrompt(
-                        category, difficulty, batchSize, state.getIntent());
-
-                String memoryPrompt = memoryPromptBuilder.buildPromptContext(memoryContext);
-                if (memoryPrompt != null && !memoryPrompt.isEmpty()) {
-                    systemPrompt = systemPrompt + "\n\n" + memoryPrompt;
-                }
-
-                updates.put("systemPrompt", systemPrompt);
-
-                log.info("记忆召回后系统提示词构建完成，长度={}", systemPrompt.length());
+                log.info("Agent 记忆召回完成: originalIntent={}, recommendedIntent={}, planReasoning={}, 记忆条目数={}",
+                        state.getIntent(),
+                        recommendedIntentStr,
+                        agentResponse.getPlan().getReasoning(),
+                        memoryContext.totalMemoryItems());
 
             } catch (Exception e) {
                 log.warn("Agent 记忆召回失败，使用空上下文", e);
                 updates.put("memoryContext", null);
-                updates.put("excludedWords", new ArrayList<String>());
             }
 
             return updates;
         });
     }
 
-    // MEMORY_RECALL 节点：召回用户记忆，构建排除词列表和系统提示词
+    // MEMORY_RECALL 节点：召回用户记忆，构建系统提示词
     @Deprecated
     public AsyncNodeAction<VocabularyBatchState> memoryRecall() {
         return state -> CompletableFuture.supplyAsync(() -> {
@@ -201,11 +188,7 @@ public class VocabularyBatchNodeActions {
 
                 updates.put("memoryContext", memoryContext);
 
-                List<String> excludedWords = buildExcludedWords(memoryContext);
-                updates.put("excludedWords", excludedWords);
-
-                log.info("批量记忆召回完成: 记忆条目数={}, 排除词数={}",
-                        memoryContext.totalMemoryItems(), excludedWords.size());
+                log.info("批量记忆召回完成: 记忆条目数={}", memoryContext.totalMemoryItems());
 
                 String category = state.getCategory();
                 String difficulty = state.getDifficulty();
@@ -215,7 +198,6 @@ public class VocabularyBatchNodeActions {
                 var constraints = VocabularyGenerationConstraints.builder()
                         .category(category)
                         .difficulty(difficulty)
-                        .excludeWords(excludedWords)
                         .build();
                 updates.put("constraints", constraints);
 
@@ -236,14 +218,14 @@ public class VocabularyBatchNodeActions {
             } catch (Exception e) {
                 log.warn("批量记忆召回失败，使用空上下文", e);
                 updates.put("memoryContext", null);
-                updates.put("excludedWords", new ArrayList<String>());
             }
 
             return updates;
         });
     }
 
-    // PLANNING 节点：确定生成参数（分类、难度、模型、批量大小）
+    // PLANNING 节点：汇总所有信息，确定最终生成参数
+    // 产物：effectiveIntent、constraints、systemPrompt
     public AsyncNodeAction<VocabularyBatchState> planning() {
         return state -> CompletableFuture.supplyAsync(() -> {
             log.info("执行 BATCH_PLANNING: conversationId={}", state.getConversationId());
@@ -255,12 +237,10 @@ public class VocabularyBatchNodeActions {
             String model = state.getModel();
             Integer batchSize = state.getBatchSize();
 
-            // 批量大小为空时使用默认值
             if (batchSize == null || batchSize <= 0) {
                 batchSize = conversationProperties.getVocabularyDefaultBatchSize();
             }
 
-            // 优先使用用户偏好设置
             if (state.getUserId() != null) {
                 UserPreferenceDTO preference = userPreferenceService.getOrCreatePreference(state.getUserId());
 
@@ -275,7 +255,6 @@ public class VocabularyBatchNodeActions {
                 }
             }
 
-            // 使用默认值兜底
             category = (category == null || category.isBlank()) ? DEFAULT_VOCABULARY_CATEGORY : category.toLowerCase();
             difficulty = (difficulty == null || difficulty.isBlank()) ? DEFAULT_VOCABULARY_DIFFICULTY : difficulty.toLowerCase();
             model = (model == null || model.isBlank()) ? DEFAULT_MODEL : model.toLowerCase();
@@ -285,8 +264,29 @@ public class VocabularyBatchNodeActions {
             updates.put("model", model);
             updates.put("batchSize", batchSize);
 
-            log.info("批量规划完成: category={}, difficulty={}, model={}, batchSize={}, intent={}",
-                    category, difficulty, model, batchSize, state.getIntent());
+            VocabularyGenerationIntent effectiveIntent = parseEffectiveIntent(state.getRecommendedIntent(), state.getIntent());
+            updates.put("effectiveIntent", effectiveIntent);
+
+            var constraints = VocabularyGenerationConstraints.builder()
+                    .category(category)
+                    .difficulty(difficulty)
+                    .build();
+            updates.put("constraints", constraints);
+
+            String systemPrompt = vocabularyCardGenerationPromptBuilder.getBatchFlashcardPrompt(
+                    category, difficulty, batchSize, effectiveIntent);
+
+            if (state.getMemoryContext() != null) {
+                String memoryPrompt = memoryPromptBuilder.buildPromptContext(state.getMemoryContext());
+                if (memoryPrompt != null && !memoryPrompt.isEmpty()) {
+                    systemPrompt = systemPrompt + "\n\n" + memoryPrompt;
+                }
+            }
+
+            updates.put("systemPrompt", systemPrompt);
+
+            log.info("批量规划完成: category={}, difficulty={}, model={}, batchSize={}, effectiveIntent={}",
+                    category, difficulty, model, batchSize, effectiveIntent);
             return updates;
         });
     }
@@ -303,7 +303,7 @@ public class VocabularyBatchNodeActions {
                 List<OpenAiChatMessage> messages = new ArrayList<>();
                 messages.add(OpenAiChatMessage.createTextMessage("system", state.getSystemPrompt()));
 
-                List<OpenAiTool> tools = mcpService.getOpenAiToolsForMode("vocabulary", "display_flashcard_batch");
+                List<OpenAiTool> tools = toolService.getOpenAiTool("vocabulary", "display_flashcard_batch");
 
                 if (tools == null || tools.isEmpty()) {
                     updates.put("generationError", "无可用的批量词汇生成工具");
@@ -442,20 +442,7 @@ public class VocabularyBatchNodeActions {
         });
     }
 
-    // 从记忆上下文中构建排除词列表
-    private List<String> buildExcludedWords(VocabularyMemoryContext context) {
-        return Stream.of(
-                        context.getConversationRecentCards().stream(),
-                        context.getRecentWords().stream(),
-                        context.getRegeneratedWords().stream()
-                )
-                .flatMap(s -> s)
-                .map(VocabularyMemoryRecord::getWord)
-                .filter(word -> word != null && !word.isBlank())
-                .map(String::toLowerCase)
-                .distinct()
-                .collect(Collectors.toList());
-    }
+
 
     // 解析AI返回的工具调用结果为批量单词卡片数据
     private WordCardBatchData parseWordCardBatchData(String toolResultText, VocabularyBatchState state) throws Exception {
@@ -511,6 +498,19 @@ public class VocabularyBatchNodeActions {
     // 判断是否需要重试（校验失败且未超过最大重试次数）
     public boolean shouldRetry(VocabularyBatchState state) {
         return !state.isValid() && state.getRetryCount() < MAX_RETRIES;
+    }
+
+    // 解析 Agent 推荐的意图为 VocabularyGenerationIntent
+    private VocabularyGenerationIntent parseEffectiveIntent(String recommendedIntent, VocabularyGenerationIntent fallback) {
+        if (recommendedIntent == null) {
+            return fallback != null ? fallback : VocabularyGenerationIntent.HYBRID;
+        }
+        return switch (recommendedIntent) {
+            case "new_word" -> VocabularyGenerationIntent.NEW_WORD;
+            case "review" -> VocabularyGenerationIntent.REVIEW;
+            case "hybrid" -> VocabularyGenerationIntent.HYBRID;
+            default -> fallback != null ? fallback : VocabularyGenerationIntent.HYBRID;
+        };
     }
 
     // 批量创建单词卡片并持久化到数据库（事务内执行）

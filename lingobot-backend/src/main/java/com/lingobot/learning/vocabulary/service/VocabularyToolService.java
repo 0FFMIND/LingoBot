@@ -1,7 +1,9 @@
 package com.lingobot.learning.vocabulary.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lingobot.learning.vocabulary.card.service.VocabularyStateService;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
+import com.lingobot.learning.vocabulary.progress.service.UserVocabularyService;
 import com.lingobot.learning.vocabulary.repository.VocabularyCardRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

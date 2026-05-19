@@ -3,6 +3,7 @@ package com.lingobot.learning.memory.vocabulary;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.config.LlmProperties;
+import com.lingobot.learning.chat.service.MessageHistoryService;
 import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversationData;
 import com.lingobot.learning.conversation.vocabulary.repository.VocabularyConversationDataRepository;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,6 +36,8 @@ public class VocabularyCompactService {
     private final LlmService llmService;
     private final LlmProperties llmProperties;
     private final VocabularyCompactPromptBuilder vocabularyCompactPromptBuilder;
+    private final VocabularyMemoryPromptBuilder vocabularyMemoryPromptBuilder;
+    private final MessageHistoryService messageHistoryService;
 
     private static final int RECENT_CARDS_TO_KEEP = 3;
 
@@ -74,13 +78,10 @@ public class VocabularyCompactService {
         Long transactionId = balanceService.freezeBalance(cost, "context", "compact", "AI压缩对话历史", conversationId);
 
         try {
-            int completedCardsBeforeTokens = calculateCompletedCardsTokens(completedCards);
+            int beforeCharacters = messageHistoryService.calculateContextLength(conversationId, "vocabulary");
+            int beforeTokens = beforeCharacters / 4;
 
             String compactedSummary = callLlmToCompact(cardsToCompact, learningData.getVocabularyCompactedSummary());
-            int summaryTokens = compactedSummary.length() / 4;
-            int recentCardsTokens = calculateCompletedCardsTokens(recentCards);
-            int afterTokens = summaryTokens + recentCardsTokens;
-            int savedTokens = Math.max(0, completedCardsBeforeTokens - afterTokens);
 
             learningData.setVocabularyCompactedSummary(compactedSummary);
             learningData.setVocabularyCompactedCardCount(
@@ -94,13 +95,17 @@ public class VocabularyCompactService {
             learningData.setVocabularyLastCompactedPosition(lastCompactedCard.getPosition());
             learningDataRepository.save(learningData);
 
+            int afterCharacters = messageHistoryService.calculateContextLength(conversationId, "vocabulary");
+            int afterTokens = afterCharacters / 4;
+            int savedTokens = Math.max(0, beforeTokens - afterTokens);
+
             balanceService.confirmTransaction(transactionId);
             log.info("Compact completed: conversationId={}, compactedCards={}, recentCards={}, beforeTokens={}, afterTokens={}, savedTokens={}",
-                    conversationId, cardsToCompact.size(), recentCards.size(), completedCardsBeforeTokens, afterTokens, savedTokens);
+                    conversationId, cardsToCompact.size(), recentCards.size(), beforeTokens, afterTokens, savedTokens);
 
             Map<String, Object> result = new HashMap<>();
             result.put("executed", true);
-            result.put("beforeTokens", completedCardsBeforeTokens);
+            result.put("beforeTokens", beforeTokens);
             result.put("afterTokens", afterTokens);
             result.put("savedTokens", savedTokens);
             result.put("compactedCardsCount", cardsToCompact.size());
@@ -115,34 +120,15 @@ public class VocabularyCompactService {
         }
     }
 
-    private int calculateCompletedCardsTokens(List<VocabularyCard> cards) {
-        if (cards == null || cards.isEmpty()) {
-            return 0;
-        }
-        int totalTokens = 0;
-        for (VocabularyCard card : cards) {
-            StringBuilder sb = new StringBuilder();
-            appendValue(sb, card.getWord());
-            appendValue(sb, card.getMeaning());
-            appendValue(sb, card.getPhonetic());
-            appendValue(sb, card.getPartOfSpeech());
-            appendValue(sb, card.getExample());
-            appendValue(sb, card.getExampleTranslation());
-            appendValue(sb, card.getUserMeaningGuess());
-            appendValue(sb, card.getMeaningCheckResult());
-            appendValue(sb, card.getUserEnglishSentence());
-            appendValue(sb, card.getSentenceAnalysis());
-            totalTokens += sb.length() / 4;
-        }
-        return totalTokens;
-    }
-
     private String callLlmToCompact(List<VocabularyCard> cardsToCompact, String existingSummary) {
         if (cardsToCompact == null || cardsToCompact.isEmpty()) {
             return existingSummary != null ? existingSummary : "";
         }
 
-        String vocabularyHistory = buildVocabularyHistory(cardsToCompact);
+        List<VocabularyMemoryRecord> records = cardsToCompact.stream()
+                .map(this::toMemoryRecord)
+                .collect(Collectors.toList());
+        String vocabularyHistory = vocabularyMemoryPromptBuilder.formatConversationCards(records);
 
         List<OpenAiChatMessage> messages = new ArrayList<>();
         messages.add(OpenAiChatMessage.createTextMessage("system", vocabularyCompactPromptBuilder.buildCompactSystemPrompt()));
@@ -155,53 +141,82 @@ public class VocabularyCompactService {
         return compactedSummary;
     }
 
-    private String buildVocabularyHistory(List<VocabularyCard> cards) {
-        if (cards == null || cards.isEmpty()) {
-            return "";
-        }
+    private VocabularyMemoryRecord toMemoryRecord(VocabularyCard card) {
+        VocabularyMemoryEventType eventType = Boolean.TRUE.equals(card.getIsRegenerated())
+                ? VocabularyMemoryEventType.REGENERATED
+                : VocabularyMemoryEventType.SEEN;
 
-        StringBuilder sb = new StringBuilder();
-        for (VocabularyCard card : cards) {
-            sb.append("### 词卡 ").append(card.getPosition() != null ? card.getPosition() + 1 : "")
-                    .append(": ").append(card.getWord() != null ? card.getWord() : "").append("\n");
+        String userAnswer = null;
+        String aiFeedback = null;
+        VocabularyMemoryInteractionType interactionType = VocabularyMemoryInteractionType.NONE;
+        String meaningCheckUserAnswer = null;
+        String meaningCheckAiFeedback = null;
+        Boolean meaningCheckIsCorrect = null;
+        String sentenceAnalysisUserAnswer = null;
+        String sentenceAnalysisAiFeedback = null;
+        Boolean sentenceAnalysisIsCorrect = null;
 
-            appendLine(sb, "音标", card.getPhonetic());
-            appendLine(sb, "词性", card.getPartOfSpeech());
-            appendLine(sb, "释义", card.getMeaning());
-            appendLine(sb, "类别", card.getCategory());
-            appendLine(sb, "难度", card.getDifficulty());
-            appendLine(sb, "状态", Boolean.TRUE.equals(card.getIsCompleted()) ? "已完成" : "未完成");
+        boolean hasMeaningCheck = Boolean.TRUE.equals(card.getMeaningCheckCompleted());
+        boolean hasSentenceAnalysis = Boolean.TRUE.equals(card.getSentenceAnalysisCompleted());
 
-            if (Boolean.TRUE.equals(card.getIsRegenerated())) {
-                sb.append("- 重新生成：是，表示用户对该词卡不满意或已替换\n");
+        if (hasMeaningCheck) {
+            if (card.getUserMeaningGuess() != null && !card.getUserMeaningGuess().isEmpty()) {
+                meaningCheckUserAnswer = card.getUserMeaningGuess();
             }
-
-            appendLine(sb, "释义检查用户答案", card.getUserMeaningGuess());
+            if (card.getMeaningCheckResult() != null && !card.getMeaningCheckResult().isEmpty()) {
+                meaningCheckAiFeedback = card.getMeaningCheckResult();
+            }
+            meaningCheckIsCorrect = card.getMeaningIsCorrect();
             if (card.getMeaningIsCorrect() != null) {
-                appendLine(sb, "释义检查结果", Boolean.TRUE.equals(card.getMeaningIsCorrect()) ? "正确" : "错误");
+                eventType = card.getMeaningIsCorrect()
+                        ? VocabularyMemoryEventType.CORRECT
+                        : VocabularyMemoryEventType.WRONG;
             }
-            appendLine(sb, "释义检查反馈", card.getMeaningCheckResult());
+            userAnswer = meaningCheckUserAnswer;
+            aiFeedback = meaningCheckAiFeedback;
+            interactionType = VocabularyMemoryInteractionType.MEANING_CHECK;
+        }
 
-            appendLine(sb, "造句用户答案", card.getUserEnglishSentence());
-            if (card.getSentenceMeaningMatches() != null) {
-                appendLine(sb, "造句语义结果", Boolean.TRUE.equals(card.getSentenceMeaningMatches()) ? "匹配" : "不匹配");
+        if (hasSentenceAnalysis) {
+            if (card.getUserEnglishSentence() != null && !card.getUserEnglishSentence().isEmpty()) {
+                sentenceAnalysisUserAnswer = card.getUserEnglishSentence();
             }
-            appendLine(sb, "造句反馈", card.getSentenceAnalysis());
-
-            sb.append("\n");
+            if (card.getSentenceAnalysis() != null && !card.getSentenceAnalysis().isEmpty()) {
+                sentenceAnalysisAiFeedback = card.getSentenceAnalysis();
+            }
+            sentenceAnalysisIsCorrect = card.getSentenceMeaningMatches();
+            if (card.getSentenceMeaningMatches() != null && !hasMeaningCheck) {
+                eventType = card.getSentenceMeaningMatches()
+                        ? VocabularyMemoryEventType.CORRECT
+                        : VocabularyMemoryEventType.WRONG;
+            }
+            if (!hasMeaningCheck) {
+                userAnswer = sentenceAnalysisUserAnswer;
+                aiFeedback = sentenceAnalysisAiFeedback;
+                interactionType = VocabularyMemoryInteractionType.SENTENCE_ANALYSIS;
+            }
         }
-        return sb.toString();
-    }
 
-    private void appendValue(StringBuilder sb, String value) {
-        if (value != null && !value.isBlank()) {
-            sb.append(value);
-        }
-    }
-
-    private void appendLine(StringBuilder sb, String label, String value) {
-        if (value != null && !value.isBlank()) {
-            sb.append("- ").append(label).append("：").append(value).append("\n");
-        }
+        return VocabularyMemoryRecord.builder()
+                .word(card.getWord())
+                .meaning(card.getMeaning())
+                .partOfSpeech(card.getPartOfSpeech())
+                .reviewCount(0)
+                .isMastered(false)
+                .eventType(eventType)
+                .eventTimestamp(LocalDateTime.now())
+                .position(card.getPosition())
+                .regenerationIndex(card.getRegenerationIndex())
+                .isRegenerated(card.getIsRegenerated())
+                .userAnswer(userAnswer)
+                .aiFeedback(aiFeedback)
+                .interactionType(interactionType)
+                .meaningCheckUserAnswer(meaningCheckUserAnswer)
+                .meaningCheckAiFeedback(meaningCheckAiFeedback)
+                .meaningCheckIsCorrect(meaningCheckIsCorrect)
+                .sentenceAnalysisUserAnswer(sentenceAnalysisUserAnswer)
+                .sentenceAnalysisAiFeedback(sentenceAnalysisAiFeedback)
+                .sentenceAnalysisIsCorrect(sentenceAnalysisIsCorrect)
+                .build();
     }
 }

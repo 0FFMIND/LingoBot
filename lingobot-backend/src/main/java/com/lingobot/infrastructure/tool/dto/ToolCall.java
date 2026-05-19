@@ -19,24 +19,15 @@ import java.util.Map;
 @AllArgsConstructor
 public class ToolCall {
 
-    /**
-     * 调用唯一标识，用于匹配调用请求与响应结果。
-     */
+    // 调用唯一标识，用于匹配调用请求与响应结果
     private String id;
 
-    /**
-     * 被调用的工具名称，需与 ToolDefinition.name 完全一致。
-     */
+    // 被调用的工具名称，需与 ToolDefinition.name 完全一致
     private String name;
 
-    /**
-     * 工具调用参数，键为参数名，值为参数值。
-     * 需符合 ToolDefinition 中定义的参数 schema。
-     */
+    // 工具调用参数，键为参数名，值为参数值，需符合 ToolDefinition 中定义的参数 schema
     private Map<String, Object> arguments;
 
-    /**
-     * 关联的对话 ID，用于工具执行时获取对话上下文。
-     */
+    // 关联的对话 ID，用于工具执行时获取对话上下文
     private String conversationId;
 }

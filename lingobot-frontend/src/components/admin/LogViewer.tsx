@@ -32,6 +32,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
   const [showFormatted, setShowFormatted] = useState(true);
   const [filters, setFilters] = useState<Set<LogFilter>>(new Set(['request', 'response', 'other']));
   const [isDevEnv, setIsDevEnv] = useState<boolean | null>(null);
+  const [maxLogs, setMaxLogs] = useState<number>(1000);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pendingResponseHeaderRef = useRef<LogEntry | null>(null);
   const isConnectingRef = useRef(false);
@@ -195,8 +196,8 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
         pendingResponseHeaderRef.current = null;
         setLogs(prev => {
           const newLogs = [...prev, mergedLog];
-          if (newLogs.length > 100) {
-            return newLogs.slice(newLogs.length - 100);
+          if (newLogs.length > maxLogs) {
+            return newLogs.slice(newLogs.length - maxLogs);
           }
           return newLogs;
         });
@@ -205,8 +206,8 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
 
       setLogs(prev => {
         const newLogs = [...prev, logEntry];
-        if (newLogs.length > 100) {
-          return newLogs.slice(newLogs.length - 100);
+        if (newLogs.length > maxLogs) {
+          return newLogs.slice(newLogs.length - maxLogs);
         }
         return newLogs;
       });
@@ -277,17 +278,24 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
 
     const init = async () => {
       try {
-        const response = await fetch('/api/logs/dev-check');
-        const isDev = await response.json();
+        const [devResponse, configResponse] = await Promise.all([
+          fetch('/api/logs/dev-check'),
+          fetch('/api/logs/config')
+        ]);
+        const isDev = await devResponse.json();
+        const config = await configResponse.json();
         if (cancelled) return;
         setIsDevEnv(isDev);
+        if (config.maxHistorySize) {
+          setMaxLogs(config.maxHistorySize);
+        }
         if (isDev) {
           addLog('INFO', 'LogViewer', '开发环境模式，无需登录即可查看日志');
         }
         connectToLogStream(isDev);
       } catch (error) {
         if (cancelled) return;
-        console.error('⚠️ [LogViewer] 检查开发环境失败:', error);
+        console.error('⚠️ [LogViewer] 初始化失败:', error);
         setIsDevEnv(false);
       }
     };

@@ -2,7 +2,10 @@ package com.lingobot.infrastructure.tool.service;
 
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
 import com.lingobot.infrastructure.tool.dto.ToolCall;
+import com.lingobot.infrastructure.tool.dto.ToolCategory;
 import com.lingobot.infrastructure.tool.dto.ToolDefinition;
+import com.lingobot.infrastructure.tool.dto.ToolHandler;
+import com.lingobot.infrastructure.tool.dto.ToolMode;
 import com.lingobot.infrastructure.tool.dto.ToolResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -15,28 +18,36 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// 工具服务
-// 提供工具列表查询、工具调用、格式转换等功能
+/**
+ * 工具服务。
+ *
+ * 提供工具列表查询、工具调用、格式转换等功能。
+ * 作为工具系统的门面服务，封装 ToolRegistry 的调用，
+ * 并提供将内部 ToolDefinition 转换为 OpenAI Function Calling 格式的能力。
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ToolService {
 
+    // 工具注册表
     private final ToolRegistry toolRegistry;
+
+    // JSON 序列化工具
     private final ObjectMapper objectMapper;
 
-    // 初始化方法，应用启动时执行
+    // 初始化方法，应用启动时执行，打印启动日志
     @PostConstruct
     public void init() {
         log.info("Tool Service initialized");
     }
 
-    // 获取所有工具列表
+    // 获取所有工具列表，返回通用格式的工具定义
     public List<ToolDefinition> listTools() {
         return toolRegistry.getAllTools();
     }
 
-    // 获取 OpenAI 格式的工具列表
+    // 获取 OpenAI 格式的工具列表，将所有工具转换为 OpenAI Function Calling 格式
     public List<OpenAiTool> getOpenAiTools() {
         List<ToolDefinition> toolDefinitions = toolRegistry.getAllTools();
         List<OpenAiTool> openAiTools = new ArrayList<>();
@@ -58,31 +69,46 @@ public class ToolService {
             openAiTools.add(convertToOpenAiTool(toolDefinition));
         }
 
-        log.info("Converted {} tools for mode '{}' to OpenAI format", openAiTools.size(), mode);
+        log.info("Converted {} tools to OpenAI format for mode: {}", openAiTools.size(), mode);
         return openAiTools;
     }
 
-    // 根据模式和词汇操作类型获取 OpenAI 格式的工具列表
-    public List<OpenAiTool> getOpenAiToolsForMode(String mode, String vocabularyAction) {
-        List<OpenAiTool> tools = getOpenAiToolsForMode(mode);
-        if (!"vocabulary".equals(mode) || vocabularyAction == null || vocabularyAction.isBlank()) {
-            return tools;
-        }
-
-        return tools.stream()
-                .map(tool -> "vocabulary".equals(tool.getFunction().getName())
-                        ? narrowVocabularyTool(tool, vocabularyAction)
-                        : tool)
-                .toList();
+    // 获取指定名称的工具，根据动作窄化参数定义
+    public List<OpenAiTool> getOpenAiTool(String toolName, String action) {
+        return getOpenAiTool(toolName, action, ToolMode.CHAT);
     }
 
-    // 调用指定的工具
+    // 获取指定名称的工具，根据动作窄化参数定义，指定模式
+    public List<OpenAiTool> getOpenAiTool(String toolName, String action, String mode) {
+        ToolHandler handler = toolRegistry.getToolHandler(toolName);
+        if (handler == null || !isVisibleForMode(handler, mode)) {
+            return List.of();
+        }
+
+        OpenAiTool tool = convertToOpenAiTool(handler.getToolDefinition());
+        if (action != null && !action.isEmpty()) {
+            tool = handler.narrowOpenAiTool(tool, action);
+        }
+
+        return List.of(tool);
+    }
+
+    private boolean isVisibleForMode(ToolHandler handler, String mode) {
+        if (ToolMode.AGENT.equals(mode)) {
+            return true;
+        }
+        return (ToolCategory.ONE_TIME.equals(handler.getCategory())
+                || ToolCategory.ALL.equals(handler.getCategory()))
+                && handler.supportsMode(mode);
+    }
+
+    // 调用指定的工具，转发给 ToolRegistry 执行
     public ToolResult callTool(ToolCall call) {
         log.info("Calling tool: {}, id: {}", call.getName(), call.getId());
         return toolRegistry.executeTool(call);
     }
 
-    // 将工具定义转换为 OpenAI 格式
+    // 将工具定义转换为 OpenAI 格式，适配 Function Calling 协议的参数结构
     private OpenAiTool convertToOpenAiTool(ToolDefinition toolDefinition) {
         OpenAiTool.Function.FunctionBuilder functionBuilder = OpenAiTool.Function.builder()
                 .name(toolDefinition.getName())
@@ -113,70 +139,7 @@ public class ToolService {
                 .build();
     }
 
-    // 窄化词汇工具的参数定义
-    private OpenAiTool narrowVocabularyTool(
-            OpenAiTool tool,
-            String action) {
-        OpenAiTool.Function function = tool.getFunction();
-        OpenAiTool.Parameters parameters = function.getParameters();
-        if (parameters == null || parameters.getProperties() == null) {
-            return tool;
-        }
-
-        List<String> allowedKeys = switch (action) {
-            case "check_meaning_accuracy" -> List.of(
-                    "action", "word", "user_meaning", "is_correct", "check_feedback");
-            case "analyze_sentence" -> List.of(
-                    "action", "word", "meaning_matches", "has_new_word", "feedback");
-            case "display_flashcard_batch" -> List.of(
-                    "action", "cards");
-            default -> List.of(
-                    "action", "word", "phonetic", "partOfSpeech", "meaning", "example", "exampleTranslation",
-                    "synonyms", "vocabularyCategory", "vocabularyDifficulty");
-        };
-
-        Map<String, OpenAiTool.Property> narrowedProperties = new HashMap<>();
-        for (String key : allowedKeys) {
-            OpenAiTool.Property property = parameters.getProperties().get(key);
-            if (property != null) {
-                narrowedProperties.put(key, property);
-            }
-        }
-
-        OpenAiTool.Property actionProperty = narrowedProperties.get("action");
-        if (actionProperty != null) {
-            narrowedProperties.put("action", OpenAiTool.Property.builder()
-                    .type(actionProperty.getType())
-                    .description("固定为 " + action)
-                    .enums(List.of(action))
-                    .build());
-        }
-
-        String description = switch (action) {
-            case "check_meaning_accuracy" -> "检查用户中文释义是否准确。";
-            case "analyze_sentence" -> "分析用户英文句子是否匹配中文例句，并是否正确使用当前新单词。";
-            case "display_flashcard_batch" -> "批量生成并展示多张新的英文单词卡。";
-            default -> "生成并展示一张新的英文单词卡。";
-        };
-
-        OpenAiTool.Parameters narrowedParameters =
-                OpenAiTool.Parameters.builder()
-                        .type(parameters.getType())
-                        .properties(narrowedProperties)
-                        .required(List.of("action"))
-                        .build();
-
-        return OpenAiTool.builder()
-                .type(tool.getType())
-                .function(OpenAiTool.Function.builder()
-                        .name(function.getName())
-                        .description(description)
-                        .parameters(narrowedParameters)
-                        .build())
-                .build();
-    }
-
-    // 将工具属性定义转换为 OpenAI 格式
+    // 将工具属性定义转换为 OpenAI 格式，处理类型、描述、枚举和数组元素
     private OpenAiTool.Property convertProperty(ToolDefinition.Property property) {
         OpenAiTool.Property.PropertyBuilder builder = OpenAiTool.Property.builder()
                 .type(property.getType())

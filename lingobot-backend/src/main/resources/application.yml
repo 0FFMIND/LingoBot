@@ -92,3 +92,8 @@ conversation:
   default-conversation-list-size: ${CONVERSATION_LIST_SIZE:20}  # 会话列表默认返回的最近会话数量
   vocabulary-window-size: ${VOCABULARY_WINDOW_SIZE:10}  # 词汇卡片窗口召回数量
   vocabulary-default-batch-size: ${VOCABULARY_DEFAULT_BATCH_SIZE:10}  # 批量生成词汇卡的默认数量
+  vocabulary-max-tokens: ${VOCABULARY_MAX_TOKENS:100000}  # 词汇模式下的最大 token 数，默认 100,000
+  chat-max-tokens: ${CHAT_MAX_TOKENS:100000}  # 聊天模式下的最大 token 数，默认 100,000
+
+log:
+  max-history-size: ${LOG_MAX_HISTORY_SIZE:1000}  # 日志历史记录最大数量，默认 1000

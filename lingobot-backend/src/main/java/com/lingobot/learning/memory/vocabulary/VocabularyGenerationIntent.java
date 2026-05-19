@@ -1,10 +1,8 @@
 package com.lingobot.learning.memory.vocabulary;
 
 public enum VocabularyGenerationIntent {
-    NEXT_WORD,
-    REGENERATE,
     NEW_WORD,
     REVIEW,
-    SMART_RECOMMEND,
-    HYBRID
+    HYBRID,
+    SMART_RECOMMEND
 }

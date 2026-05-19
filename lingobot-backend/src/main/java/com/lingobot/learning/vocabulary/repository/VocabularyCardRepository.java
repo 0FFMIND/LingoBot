@@ -1,6 +1,6 @@
 package com.lingobot.learning.vocabulary.repository;
 
-import com.lingobot.learning.vocabulary.dto.ConversationOverviewDTO;
+import com.lingobot.learning.vocabulary.common.dto.ConversationOverviewDTO;
 import com.lingobot.learning.vocabulary.entity.VocabularyCard;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.domain.Pageable;

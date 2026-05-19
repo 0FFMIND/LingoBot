@@ -53,7 +53,12 @@
       "PowerShell(Get-PSDrive C | Select-Object @{N='FreeGB';E={[math]::Round\\($_.Free/1GB,2\\)}}, @{N='UsedGB';E={[math]::Round\\($_.Used/1GB,2\\)}})",
       "PowerShell($d = Get-PSDrive C; Write-Host \"Free: $\\([math]::Round\\($d.Free/1GB,2\\)\\) GB  Used: $\\([math]::Round\\($d.Used/1GB,2\\)\\) GB\")",
       "PowerShell(pip cache purge 2>&1)",
-      "PowerShell($d = Get-PSDrive C; Write-Host \"C 盘空闲: $\\([math]::Round\\($d.Free/1GB,2\\)\\) GB\")"
+      "PowerShell($d = Get-PSDrive C; Write-Host \"C 盘空闲: $\\([math]::Round\\($d.Free/1GB,2\\)\\) GB\")",
+      "Bash(grep -E \"\\\\.\\(java|ts|tsx|js|jsx|yml|yaml|xml|sql|json|md\\)$\")",
+      "Bash(grep -E \"\\\\.\\(java\\)$\")",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js|jsx\\)$\")",
+      "Bash(grep -E \"\\\\.\\(yml|yaml|xml|sql\\)$\")",
+      "Bash(grep -E \"\\\\.\\(java|ts|tsx|js|jsx|yml|yaml|xml|sql\\)$\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\ALIENWARE\\Downloads\\�½��ļ��� (2)\\lingobot-backend\\src\\main\\java\\com",

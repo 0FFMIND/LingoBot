@@ -26,12 +26,7 @@ public class ToolDefinition {
     private String description;
     private ToolArguments arguments;
 
-    /**
-     * 工具参数定义。
-     *
-     * 采用 JSON Schema 风格描述参数结构，
-     * 包含参数类型、属性定义和必填字段列表。
-     */
+    // 工具参数定义，采用 JSON Schema 风格描述参数结构，包含参数类型、属性定义和必填字段列表
     @Data
     @Builder
     @NoArgsConstructor
@@ -42,12 +37,7 @@ public class ToolDefinition {
         private List<String> required;
     }
 
-    /**
-     * 参数属性定义。
-     *
-     * 描述单个参数的类型、说明、枚举值（如果有），
-     * 数组类型还需包含元素定义。
-     */
+    // 参数属性定义，描述单个参数的类型、说明、枚举值（如果有），数组类型还需包含元素定义
     @Data
     @Builder
     @NoArgsConstructor
@@ -59,11 +49,7 @@ public class ToolDefinition {
         private Items items;
     }
 
-    /**
-     * 数组类型参数的元素定义。
-     *
-     * 当参数类型为 array 时使用，描述数组元素的类型和枚举约束。
-     */
+    // 数组类型参数的元素定义，当参数类型为 array 时使用，描述数组元素的类型和枚举约束
     @Data
     @Builder
     @NoArgsConstructor

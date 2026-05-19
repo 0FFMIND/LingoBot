@@ -3,6 +3,8 @@ package com.lingobot.learning.conversation.common.service.impl;
 import com.lingobot.core.conversation.dto.ConversationDTO;
 import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.MessageRepository;
+import com.lingobot.infrastructure.common.config.ConversationProperties;
+import com.lingobot.learning.chat.service.MessageHistoryService;
 import com.lingobot.learning.conversation.chat.entity.ChatConversationData;
 import com.lingobot.learning.conversation.chat.service.ChatConversationDataService;
 import com.lingobot.learning.conversation.common.dto.ContextStatusDTO;
@@ -27,8 +29,10 @@ public class LearningConversationAggregateServiceImpl implements LearningConvers
     private final VocabularyConversationDataService vocabularyConversationDataService;
     private final MessageRepository messageRepository;
     private final VocabularyCardRepository vocabularyCardRepository;
+    private final MessageHistoryService messageHistoryService;
+    private final ConversationProperties conversationProperties;
 
-    private static final int MAX_CHARACTERS_THRESHOLD = 5000;
+    private static final int TOKENS_TO_CHARACTERS_RATIO = 4;
     private static final int WORD_CARD_THRESHOLD = 10;
 
     @Override
@@ -66,28 +70,33 @@ public class LearningConversationAggregateServiceImpl implements LearningConvers
 
         Optional<VocabularyConversationData> vocabData = vocabularyConversationDataService.getByConversationId(conversationId);
         boolean vocabularyMode = vocabData.isPresent();
+        String learningMode = vocabularyMode ? "vocabulary" : "chat";
 
-        List<Message> messages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
-        int currentCharacters = calculateTotalCharacters(messages);
-        int currentTokens = calculateTotalTokens(messages);
+        int maxTokens = vocabularyMode
+                ? conversationProperties.getVocabularyMaxTokens()
+                : conversationProperties.getChatMaxTokens();
+        int maxCharacters = maxTokens * TOKENS_TO_CHARACTERS_RATIO;
+
+        int currentCharacters = messageHistoryService.calculateContextLength(conversationId, learningMode);
+        int currentTokens = currentCharacters / TOKENS_TO_CHARACTERS_RATIO;
 
         long wordCardsTotal = vocabularyCardRepository.countActiveCardsByConversationId(conversationId);
         long completedCardsCount = vocabularyCardRepository.countCompletedCardsByConversationId(conversationId);
 
-        boolean shouldCompact = currentCharacters >= MAX_CHARACTERS_THRESHOLD;
+        boolean shouldCompact = currentCharacters >= maxCharacters;
 
         String compactReason = null;
         if (shouldCompact) {
-            compactReason = String.format("对话内容已达 %d 字符，超过阈值 %d 字符，建议压缩以释放空间",
-                    currentCharacters, MAX_CHARACTERS_THRESHOLD);
+            compactReason = String.format("对话内容已达 %d 字符（约 %d tokens），超过阈值 %d 字符，建议压缩以释放空间",
+                    currentCharacters, currentTokens, maxCharacters);
         }
 
         int compactedCount = vocabData.map(VocabularyConversationData::getVocabularyCompactedCardCount).orElse(0);
 
         return ContextStatusDTO.builder()
                 .currentTokens(currentTokens)
-                .maxTokens(MAX_CHARACTERS_THRESHOLD * 2)
-                .tokenRatio(Math.min((double) currentCharacters / MAX_CHARACTERS_THRESHOLD, 1.0))
+                .maxTokens(maxTokens)
+                .tokenRatio(Math.min((double) currentCharacters / maxCharacters, 1.0))
                 .wordCardsTotal((int) wordCardsTotal)
                 .wordCardsCompleted((int) completedCardsCount)
                 .wordCardsSinceCompact((int) completedCardsCount)
@@ -96,40 +105,5 @@ public class LearningConversationAggregateServiceImpl implements LearningConvers
                 .compactReason(compactReason)
                 .compactedCount(compactedCount)
                 .build();
-    }
-
-    private int calculateTotalCharacters(List<Message> messages) {
-        int total = 0;
-        for (Message message : messages) {
-            if (message.getContent() != null) {
-                total += message.getContent().length();
-            }
-        }
-        return total;
-    }
-
-    private int calculateTotalTokens(List<Message> messages) {
-        int totalTokens = 0;
-        int promptTokens = 0;
-        int completionTokens = 0;
-
-        for (Message message : messages) {
-            if (message.getTotalTokens() != null) {
-                totalTokens += message.getTotalTokens();
-            } else {
-                int messageTokens = 0;
-                if (message.getPromptTokens() != null) {
-                    promptTokens += message.getPromptTokens();
-                    messageTokens += message.getPromptTokens();
-                }
-                if (message.getCompletionTokens() != null) {
-                    completionTokens += message.getCompletionTokens();
-                    messageTokens += message.getCompletionTokens();
-                }
-                totalTokens += messageTokens;
-            }
-        }
-
-        return totalTokens;
     }
 }

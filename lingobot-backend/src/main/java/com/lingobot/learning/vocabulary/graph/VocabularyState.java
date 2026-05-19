@@ -4,8 +4,8 @@ import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationConstraints;
 import com.lingobot.learning.memory.vocabulary.VocabularyGenerationIntent;
 import com.lingobot.learning.memory.vocabulary.VocabularyMemoryContext;
-import com.lingobot.learning.vocabulary.dto.VocabularyCardDTO;
-import com.lingobot.learning.vocabulary.dto.WordCardData;
+import com.lingobot.learning.vocabulary.card.dto.response.VocabularyCardDTO;
+import com.lingobot.learning.vocabulary.card.dto.response.WordCardData;
 import org.bsc.langgraph4j.state.AgentState;
 
 import java.util.ArrayList;
