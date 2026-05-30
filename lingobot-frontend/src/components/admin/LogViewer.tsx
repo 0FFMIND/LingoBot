@@ -32,7 +32,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
   const [showFormatted, setShowFormatted] = useState(true);
   const [filters, setFilters] = useState<Set<LogFilter>>(new Set(['request', 'response', 'other']));
   const [isDevEnv, setIsDevEnv] = useState<boolean | null>(null);
-  const [maxLogs, setMaxLogs] = useState<number>(1000);
+  const maxLogsRef = useRef<number>(0);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pendingResponseHeaderRef = useRef<LogEntry | null>(null);
   const isConnectingRef = useRef(false);
@@ -196,8 +196,8 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
         pendingResponseHeaderRef.current = null;
         setLogs(prev => {
           const newLogs = [...prev, mergedLog];
-          if (newLogs.length > maxLogs) {
-            return newLogs.slice(newLogs.length - maxLogs);
+          if (maxLogsRef.current > 0 && newLogs.length > maxLogsRef.current) {
+            return newLogs.slice(newLogs.length - maxLogsRef.current);
           }
           return newLogs;
         });
@@ -206,8 +206,8 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
 
       setLogs(prev => {
         const newLogs = [...prev, logEntry];
-        if (newLogs.length > maxLogs) {
-          return newLogs.slice(newLogs.length - maxLogs);
+        if (maxLogsRef.current > 0 && newLogs.length > maxLogsRef.current) {
+          return newLogs.slice(newLogs.length - maxLogsRef.current);
         }
         return newLogs;
       });
@@ -287,7 +287,7 @@ const LogViewer: React.FC<LogViewerProps> = ({ fullPage = false }) => {
         if (cancelled) return;
         setIsDevEnv(isDev);
         if (config.maxHistorySize) {
-          setMaxLogs(config.maxHistorySize);
+          maxLogsRef.current = config.maxHistorySize;
         }
         if (isDev) {
           addLog('INFO', 'LogViewer', '开发环境模式，无需登录即可查看日志');

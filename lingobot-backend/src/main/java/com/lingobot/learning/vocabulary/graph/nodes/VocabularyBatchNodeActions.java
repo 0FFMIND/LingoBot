@@ -264,7 +264,12 @@ public class VocabularyBatchNodeActions {
             updates.put("model", model);
             updates.put("batchSize", batchSize);
 
-            VocabularyGenerationIntent effectiveIntent = parseEffectiveIntent(state.getRecommendedIntent(), state.getIntent());
+            VocabularyGenerationIntent effectiveIntent;
+            if (state.getIntent() == VocabularyGenerationIntent.SMART_RECOMMEND) {
+                effectiveIntent = VocabularyGenerationIntent.SMART_RECOMMEND;
+            } else {
+                effectiveIntent = parseEffectiveIntent(state.getRecommendedIntent(), state.getIntent());
+            }
             updates.put("effectiveIntent", effectiveIntent);
 
             var constraints = VocabularyGenerationConstraints.builder()
@@ -273,8 +278,9 @@ public class VocabularyBatchNodeActions {
                     .build();
             updates.put("constraints", constraints);
 
+            String planReasoning = state.getMemoryRecallPlan() != null ? state.getMemoryRecallPlan().getReasoning() : null;
             String systemPrompt = vocabularyCardGenerationPromptBuilder.getBatchFlashcardPrompt(
-                    category, difficulty, batchSize, effectiveIntent);
+                    category, difficulty, batchSize, effectiveIntent, state.getRecommendedIntent(), planReasoning);
 
             if (state.getMemoryContext() != null) {
                 String memoryPrompt = memoryPromptBuilder.buildPromptContext(state.getMemoryContext());

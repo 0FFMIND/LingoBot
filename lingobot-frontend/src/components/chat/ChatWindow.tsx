@@ -367,17 +367,19 @@ const ChatWindow: React.FC = () => {
     )
   }
 
-  const getVocabularyPriorityText = () => {
+  const getVocabularyPriorityInfo = () => {
     const intent = getCurrentVocabularyIntent()
     switch (intent) {
       case 'review':
-        return '◎ 复习优先'
+        return { text: '◎ 复习优先', color: '#1e40af', bgColor: '#dbeafe' }
       case 'new_word':
-        return '◎ 新单词优先'
+        return { text: '◎ 新单词优先', color: '#166534', bgColor: '#dcfce7' }
       case 'hybrid':
-        return '◎ 混合优先'
+        return { text: '◎ 混合优先', color: '#5b21b6', bgColor: '#ede9fe' }
+      case 'smart_recommend':
+        return { text: '◎ 智能推荐', color: '#92400e', bgColor: '#fef3c7' }
       default:
-        return '◎ 复习优先'
+        return { text: '◎ 复习优先', color: '#166534', bgColor: '#dcfce7' }
     }
   }
 
@@ -386,6 +388,7 @@ const ChatWindow: React.FC = () => {
     const index = currentVocabularyCard?.currentIndex ?? 0
     const current = total > 0 ? index + 1 : 0
     const progress = total > 0 ? Math.min(100, Math.max(0, (current / total) * 100)) : 0
+    const priorityInfo = getVocabularyPriorityInfo()
 
     return (
       <div className="vocabulary-progress-strip">
@@ -397,7 +400,12 @@ const ChatWindow: React.FC = () => {
             <div className="vocabulary-progress-fill" style={{ width: `${progress}%` }} />
           </div>
         </div>
-        <span className="vocabulary-review-priority">{getVocabularyPriorityText()}</span>
+        <span
+          className="vocabulary-review-priority"
+          style={{ backgroundColor: priorityInfo.bgColor, color: priorityInfo.color }}
+        >
+          {priorityInfo.text}
+        </span>
       </div>
     )
   }

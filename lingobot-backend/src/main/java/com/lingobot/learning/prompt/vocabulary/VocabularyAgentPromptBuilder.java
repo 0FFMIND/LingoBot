@@ -72,7 +72,7 @@ public class VocabularyAgentPromptBuilder {
             
             规则说明：
             1. 先根据用户学习状态判断最合适的学习模式：
-               - 待复习词多或薄弱词多 → review（优先复习）
+               - 待复习词多或薄弱词多或新词多 → review（优先复习）
                - 已掌握词多且待复习词少 → new_word（优先学新词）
                - 两者均衡 → hybrid（混合模式）
                然后在 recommendedIntent 字段返回你选择的模式（new_word/review/hybrid）
@@ -122,16 +122,7 @@ public class VocabularyAgentPromptBuilder {
             sb.append("用户最新消息: ").append(userMessage).append("\n\n");
         }
 
-        sb.append("启发式建议的抓取数量:\n");
-        sb.append("- L1_RECENT: ").append(heuristicPlan.getL1RecentLimit()).append("\n");
-        sb.append("- L1_WRONG: ").append(heuristicPlan.getL1WrongLimit()).append("\n");
-        sb.append("- L1_REGENERATED: ").append(heuristicPlan.getL1RegeneratedLimit()).append("\n");
-        sb.append("- L2_MASTERED: ").append(heuristicPlan.getL2MasteredLimit()).append("\n");
-        sb.append("- L2_REVIEWING: ").append(heuristicPlan.getL2ReviewingLimit()).append("\n");
-        sb.append("- L2_LEARNING: ").append(heuristicPlan.getL2LearningLimit()).append("\n");
-        sb.append("- L2_WEAK: ").append(heuristicPlan.getL2WeakLimit()).append("\n\n");
-        sb.append("启发式理由: ").append(heuristicPlan.getReasoning()).append("\n\n");
-        sb.append("请根据用户意图和学习状态调整抓取数量，输出JSON格式的计划。");
+        sb.append("如果无法根据学习状态判断某个层级的抓取数量，该层级默认使用 10。\n");
 
         return sb.toString();
     }

@@ -341,6 +341,33 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       } catch (e) {
         console.error('保存学习模式到后端失败:', e)
       }
+    } else if (currentConversation) {
+      const publicId = currentConversation.publicId
+
+      set(s => ({
+        selectedVocabularyIntent: intent,
+        showVocabularySubMode: false,
+        conversations: s.conversations.map(c =>
+          c.publicId === publicId ? { ...c, vocabularyIntent: intent } : c
+        ),
+        currentConversation: { ...currentConversation, vocabularyIntent: intent },
+      }))
+
+      try {
+        const updated = await conversationApi.updateVocabularyIntent(publicId, intent)
+        if (updated) {
+          set(s => ({
+            conversations: s.conversations.map(c =>
+              c.publicId === publicId ? { ...c, ...updated, vocabularyIntent: intent } : c
+            ),
+            currentConversation: s.currentConversation?.publicId === publicId
+              ? { ...s.currentConversation, ...updated, vocabularyIntent: intent }
+              : s.currentConversation,
+          }))
+        }
+      } catch (e) {
+        console.error('更新词汇学习意图到后端失败:', e)
+      }
     }
   },
 

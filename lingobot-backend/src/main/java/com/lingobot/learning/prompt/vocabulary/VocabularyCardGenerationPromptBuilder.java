@@ -14,6 +14,11 @@ public class VocabularyCardGenerationPromptBuilder {
     }
 
     public String getBatchFlashcardPrompt(String vocabularyCategory, String vocabularyDifficulty, int cardCount, VocabularyGenerationIntent intent) {
+        return getBatchFlashcardPrompt(vocabularyCategory, vocabularyDifficulty, cardCount, intent, null, null);
+    }
+
+    public String getBatchFlashcardPrompt(String vocabularyCategory, String vocabularyDifficulty, int cardCount,
+                                          VocabularyGenerationIntent intent, String recommendedIntent, String reasoning) {
         StringBuilder prompt = new StringBuilder();
         
         String learningModeDescription = switch (intent) {
@@ -37,6 +42,21 @@ public class VocabularyCardGenerationPromptBuilder {
                     重点：50%% 是需要复习的单词，50%% 是新单词。
                     如果复习单词不足，可以用新单词补充。
                     """.formatted(cardCount);
+            case SMART_RECOMMEND -> {
+                String mode = switch (recommendedIntent) {
+                    case "new_word" -> "学习新单词";
+                    case "review" -> "复习单词";
+                    case "hybrid" -> "混合模式";
+                    default -> "混合模式";
+                };
+                yield """
+                        你是一名专业的英语词汇教师。
+                        当前任务：生成 %d 张英文单词卡。
+                        学习模式：智能推荐
+                        推荐学习模式：%s
+                        重点：%s
+                        """.formatted(cardCount, mode, reasoning != null && !reasoning.isBlank() ? reasoning : "根据用户学习状态自动选择最合适的内容。");
+            }
             default -> """
                     你是一名专业的英语词汇教师。
                     当前任务：生成 %d 张新的英文单词卡。
