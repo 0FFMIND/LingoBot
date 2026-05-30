@@ -47,7 +47,6 @@ interface ChatStore {
   retryMessage: (request: RetryMessageRequest) => Promise<void>
   retryMessageWithModel: (request: RetryMessageRequest) => Promise<void>
   editMessage: (request: EditMessageRequest) => Promise<void>
-  editAudioMessage: (request: ChatRequest, userMessageId: number) => Promise<void>
   setMode: (mode: 'chat' | 'agent') => void
   manualCompact: (conversationPublicId: string) => Promise<void>
   clearCompactResult: (conversationPublicId: string) => void
@@ -313,7 +312,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     const updatedMessages = messages.slice(0, userMessageIndex + 1).map(m =>
-      m.id === request.userMessageId ? { ...m, content: request.newContent } : m
+      m.id === request.userMessageId
+        ? {
+            ...m,
+            content: request.newContent,
+            audioData: request.audioData ?? m.audioData,
+            audioFormat: request.audioFormat ?? m.audioFormat,
+            audioDuration: request.audioDuration ?? m.audioDuration,
+            imageData: request.imageData ?? m.imageData,
+            imageFormat: request.imageFormat ?? m.imageFormat,
+            messageType: request.audioData ? 'audio' : (request.imageData ? 'image' : m.messageType),
+          }
+        : m
     )
     set({ loading: true, streamingContent: '', agentStatus: { thinking: '', toolCalls: [] }, messages: updatedMessages })
 
@@ -328,60 +338,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       await chatApi.editMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
-    } catch (error) {
-      console.error('编辑消息失败:', error)
-      set({ messages, streamingContent: '', loading: false })
-      alert('编辑消息失败')
-    }
-  },
-
-  editAudioMessage: async (request: ChatRequest, userMessageId: number) => {
-    const { messages } = get()
-    const userMessageIndex = messages.findIndex(m => m.id === userMessageId)
-
-    if (userMessageIndex === -1) {
-      alert('找不到要编辑的消息')
-      return
-    }
-
-    if (messages[userMessageIndex].role !== 'user') {
-      alert('只能编辑用户消息')
-      return
-    }
-
-    const userMessage = messages[userMessageIndex]
-    const updatedMessages = messages.slice(0, userMessageIndex + 1).map(m =>
-      m.id === userMessageId
-        ? {
-            ...m,
-            content: request.content,
-            audioData: request.audioData || m.audioData,
-            audioFormat: request.audioFormat || m.audioFormat,
-            audioDuration: request.audioDuration || m.audioDuration,
-          }
-        : m
-    )
-    set({ loading: true, streamingContent: '', agentStatus: { thinking: '', toolCalls: [] }, messages: updatedMessages })
-
-    const finalRequest: ChatRequest = {
-      ...request,
-      messageType: request.audioData ? 'audio' : (userMessage.audioData ? 'audio' : 'text'),
-      audioData: request.audioData || userMessage.audioData,
-      audioFormat: request.audioFormat || userMessage.audioFormat,
-      audioDuration: request.audioDuration || userMessage.audioDuration,
-    }
-
-    const { onChunk, onFinal, onThinking, onToolCall, onToolResult } =
-      makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
-
-    const onError = (error: string) => {
-      console.error('编辑消息错误:', error)
-      set({ messages, streamingContent: '', loading: false, agentStatus: { thinking: '', toolCalls: [] } })
-      alert('编辑消息失败: ' + error)
-    }
-
-    try {
-      await chatApi.sendMessageStream(finalRequest, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
     } catch (error) {
       console.error('编辑消息失败:', error)
       set({ messages, streamingContent: '', loading: false })

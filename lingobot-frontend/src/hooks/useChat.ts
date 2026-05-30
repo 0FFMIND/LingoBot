@@ -52,6 +52,67 @@ export interface SendMessageOptions {
   vocabularyDifficulty?: VocabularyDifficulty;
 }
 
+interface StreamCallbacks {
+  onChunk: (chunk: string) => void;
+  onDone: (message: MessageDTO) => void;
+  onError: (error: string) => void;
+  onThinking: (content: string) => void;
+  onToolCall: (toolName: string, toolId: string) => void;
+  onToolResult: (toolName: string, toolId: string, success: boolean, result: string, error?: string) => void;
+}
+
+function useStreamCallbacks(
+  setStreamingContent: React.Dispatch<React.SetStateAction<string>>,
+  setAgentStatus: React.Dispatch<React.SetStateAction<AgentStatus>>,
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
+  recordTokensFromMessage: (message: MessageDTO | undefined, convPublicId: string | null) => void,
+  convPublicId: string | null,
+  loadMessages: () => Promise<void>,
+  fallbackMessages: MessageDTO[] | null,
+): StreamCallbacks {
+  return {
+    onChunk: (chunk) => {
+      setStreamingContent((prev) => prev + chunk);
+    },
+    onDone: (finalMessage) => {
+      recordTokensFromMessage(finalMessage, convPublicId);
+      loadMessages();
+      setStreamingContent('');
+      setAgentStatus({ thinking: '', toolCalls: [] });
+      setLoading(false);
+    },
+    onError: (error) => {
+      console.error('流式消息错误:', error);
+      setStreamingContent('');
+      setAgentStatus({ thinking: '', toolCalls: [] });
+      setLoading(false);
+      alert('操作失败: ' + error);
+    },
+    onThinking: (thinking) => {
+      setAgentStatus((prev) => ({ ...prev, thinking }));
+    },
+    onToolCall: (toolName, toolId) => {
+      setAgentStatus((prev) => ({
+        ...prev,
+        thinking: '',
+        toolCalls: [...prev.toolCalls, { toolName, toolId, status: 'calling' as const }],
+      }));
+    },
+    onToolResult: (_toolName, toolId, success, result, error) => {
+      setAgentStatus((prev) => ({
+        ...prev,
+        toolCalls: prev.toolCalls.map((tc) =>
+          tc.toolId === toolId
+            ? { ...tc, status: (success ? 'success' : 'error') as 'success' | 'error', result, error }
+            : tc
+        ),
+      }));
+    },
+  };
+}
+
+const RESET_AGENT_STATUS: AgentStatus = { thinking: '', toolCalls: [] };
+
 export function useChat(
   conversationPublicId: string | null,
   isAuthenticated: boolean,
@@ -66,10 +127,7 @@ export function useChat(
   const [messages, setMessages] = useState<MessageDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
-  const [agentStatus, setAgentStatus] = useState<AgentStatus>({
-    thinking: '',
-    toolCalls: [],
-  });
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>(RESET_AGENT_STATUS);
 
   const { mode, model, learningMode, vocabularyCategory, vocabularyDifficulty } = options;
 
@@ -78,7 +136,6 @@ export function useChat(
 
     const { promptTokens, completionTokens, totalTokens } = message;
     if (promptTokens !== undefined || completionTokens !== undefined || totalTokens !== undefined) {
-      console.log('🔢 记录 Token 用量:', { convPublicId, promptTokens, completionTokens, totalTokens });
       useTokenUsageStore.getState().recordTokenUsage(
         convPublicId,
         promptTokens || 0,
@@ -110,7 +167,7 @@ export function useChat(
   const sendMessageNonStream = useCallback(async (request: ChatRequest) => {
     setLoading(true);
     setStreamingContent('');
-    setAgentStatus({ thinking: '', toolCalls: [] });
+    setAgentStatus(RESET_AGENT_STATUS);
 
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
@@ -130,16 +187,15 @@ export function useChat(
 
     try {
       const response = await chatService.sendMessage(request);
-      console.log('✅ 非流式消息响应:', response);
       recordTokensFromMessage(response, request.conversationPublicId || null);
       loadMessages();
       setLoading(false);
-      setAgentStatus({ thinking: '', toolCalls: [] });
+      setAgentStatus(RESET_AGENT_STATUS);
     } catch (error) {
       console.error('非流式消息错误:', error);
       setMessages((prev) => prev.slice(0, -1));
       setLoading(false);
-      setAgentStatus({ thinking: '', toolCalls: [] });
+      setAgentStatus(RESET_AGENT_STATUS);
       alert('发送消息失败: ' + (error instanceof Error ? error.message : '未知错误'));
     }
   }, [messages, loadMessages, recordTokensFromMessage]);
@@ -147,7 +203,7 @@ export function useChat(
   const sendMessageStream = useCallback(async (request: ChatRequest) => {
     setLoading(true);
     setStreamingContent('');
-    setAgentStatus({ thinking: '', toolCalls: [] });
+    setAgentStatus(RESET_AGENT_STATUS);
 
     const tempUserMessage: MessageDTO = {
       id: Date.now(),
@@ -165,59 +221,23 @@ export function useChat(
 
     setMessages([...messages, tempUserMessage]);
 
+    const callbacks = useStreamCallbacks(
+      setStreamingContent, setAgentStatus, setLoading, recordTokensFromMessage,
+      request.conversationPublicId || null, loadMessages, null,
+    );
+
     try {
       await chatService.sendMessageStream(
-        request,
-        (chunk) => {
-          setStreamingContent((prev) => prev + chunk);
-        },
-        (finalMessage) => {
-          recordTokensFromMessage(finalMessage, request.conversationPublicId || null);
-          loadMessages();
-          setStreamingContent('');
-          setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
-        },
+        request, callbacks.onChunk, callbacks.onDone,
         (error) => {
           console.error('流式消息错误:', error);
           setMessages((prev) => prev.slice(0, -1));
           setStreamingContent('');
           setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
+          setAgentStatus(RESET_AGENT_STATUS);
           alert('发送消息失败: ' + error);
         },
-        (thinking) => {
-          setAgentStatus((prev) => ({ ...prev, thinking }));
-        },
-        (toolName, toolId) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            thinking: '',
-            toolCalls: [
-              ...prev.toolCalls,
-              {
-                toolName,
-                toolId,
-                status: 'calling',
-              },
-            ],
-          }));
-        },
-        (_toolName, toolId, success, result, error) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            toolCalls: prev.toolCalls.map((tc) =>
-              tc.toolId === toolId
-                ? {
-                    ...tc,
-                    status: success ? 'success' : 'error',
-                    result,
-                    error,
-                  }
-                : tc
-            ),
-          }));
-        }
+        callbacks.onThinking, callbacks.onToolCall, callbacks.onToolResult,
       );
     } catch (error) {
       console.error('发送消息失败:', error);
@@ -240,7 +260,6 @@ export function useChat(
 
     const shouldUseNonStream = learningMode === 'vocabulary';
     if (shouldUseNonStream) {
-      console.log('📚 词汇学习模式：使用非流式接口');
       await sendMessageNonStream(request);
     } else {
       await sendMessageStream(request);
@@ -293,33 +312,37 @@ export function useChat(
       currentWord,
     };
 
-    console.log('📚 词汇学习意图消息：使用非流式接口，intent:', intent);
     await sendMessageNonStream(request);
   }, [isAuthenticated, conversationPublicId, loading, createBaseRequest, sendMessageNonStream]);
+
+  const startStreamWithRollback = useCallback(async (
+    streamFn: () => Promise<void>,
+    rollbackMsgs: MessageDTO[],
+  ) => {
+    setLoading(true);
+    setStreamingContent('');
+    setAgentStatus(RESET_AGENT_STATUS);
+
+    try {
+      await streamFn();
+    } catch (error) {
+      console.error('操作失败:', error);
+      setMessages(rollbackMsgs);
+      setStreamingContent('');
+      setLoading(false);
+      alert('操作失败');
+    }
+  }, []);
 
   const retryMessage = useCallback(async (assistantMessageId: number) => {
     if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const assistantMessageIndex = messages.findIndex((m) => m.id === assistantMessageId);
-    
-    if (assistantMessageIndex === -1) {
-      alert('找不到要重试的消息');
-      return;
-    }
+    if (assistantMessageIndex === -1) { alert('找不到要重试的消息'); return; }
+    if (messages[assistantMessageIndex].role !== 'assistant') { alert('只能重试AI助手的消息'); return; }
 
-    const assistantMessage = messages[assistantMessageIndex];
-    
-    if (assistantMessage.role !== 'assistant') {
-      alert('只能重试AI助手的消息');
-      return;
-    }
-
-    setLoading(true);
-    setStreamingContent('');
-    setAgentStatus({ thinking: '', toolCalls: [] });
-
-    const updatedMessages = messages.slice(0, assistantMessageIndex);
-    setMessages(updatedMessages);
+    const rollbackMsgs = [...messages];
+    setMessages(messages.slice(0, assistantMessageIndex));
 
     const request: RetryMessageRequest = {
       conversationPublicId,
@@ -331,92 +354,37 @@ export function useChat(
       vocabularyDifficulty,
     };
 
-    try {
-      await chatService.retryMessageStream(
-        request,
-        (chunk) => {
-          setStreamingContent((prev) => prev + chunk);
-        },
-        (finalMessage) => {
-          recordTokensFromMessage(finalMessage, conversationPublicId);
-          loadMessages();
-          setStreamingContent('');
-          setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
-        },
+    const callbacks = useStreamCallbacks(
+      setStreamingContent, setAgentStatus, setLoading, recordTokensFromMessage,
+      conversationPublicId, loadMessages, rollbackMsgs,
+    );
+
+    startStreamWithRollback(
+      () => chatService.retryMessageStream(
+        request, callbacks.onChunk, callbacks.onDone,
         (error) => {
           console.error('重试消息错误:', error);
-          setMessages(messages);
+          setMessages(rollbackMsgs);
           setStreamingContent('');
           setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
+          setAgentStatus(RESET_AGENT_STATUS);
           alert('重试消息失败: ' + error);
         },
-        (thinking) => {
-          setAgentStatus((prev) => ({ ...prev, thinking }));
-        },
-        (toolName, toolId) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            thinking: '',
-            toolCalls: [
-              ...prev.toolCalls,
-              {
-                toolName,
-                toolId,
-                status: 'calling',
-              },
-            ],
-          }));
-        },
-        (_toolName, toolId, success, result, error) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            toolCalls: prev.toolCalls.map((tc) =>
-              tc.toolId === toolId
-                ? {
-                    ...tc,
-                    status: success ? 'success' : 'error',
-                    result,
-                    error,
-                  }
-                : tc
-            ),
-          }));
-        }
-      );
-    } catch (error) {
-      console.error('重试消息失败:', error);
-      setMessages(messages);
-      setStreamingContent('');
-      setLoading(false);
-      alert('重试消息失败');
-    }
-  }, [isAuthenticated, conversationPublicId, loading, messages, model, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
+        callbacks.onThinking, callbacks.onToolCall, callbacks.onToolResult,
+      ),
+      rollbackMsgs,
+    );
+  }, [isAuthenticated, conversationPublicId, loading, messages, model, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
 
   const retryMessageWithModel = useCallback(async (assistantMessageId: number, targetModel: string) => {
     if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const assistantMessageIndex = messages.findIndex((m) => m.id === assistantMessageId);
-    
-    if (assistantMessageIndex === -1) {
-      alert('找不到要重试的消息');
-      return;
-    }
+    if (assistantMessageIndex === -1) { alert('找不到要重试的消息'); return; }
+    if (messages[assistantMessageIndex].role !== 'assistant') { alert('只能重试AI助手的消息'); return; }
 
-    const assistantMessage = messages[assistantMessageIndex];
-    
-    if (assistantMessage.role !== 'assistant') {
-      alert('只能重试AI助手的消息');
-      return;
-    }
-
-    setLoading(true);
-    setStreamingContent('');
-    setAgentStatus({ thinking: '', toolCalls: [] });
-
-    const updatedMessages = messages.slice(0, assistantMessageIndex);
-    setMessages(updatedMessages);
+    const rollbackMsgs = [...messages];
+    setMessages(messages.slice(0, assistantMessageIndex));
 
     const request: RetryMessageRequest = {
       conversationPublicId,
@@ -428,167 +396,73 @@ export function useChat(
       vocabularyDifficulty,
     };
 
-    try {
-      await chatService.retryMessageStream(
-        request,
-        (chunk) => {
-          setStreamingContent((prev) => prev + chunk);
-        },
-        (finalMessage) => {
-          recordTokensFromMessage(finalMessage, conversationPublicId);
-          loadMessages();
-          setStreamingContent('');
-          setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
-        },
+    const callbacks = useStreamCallbacks(
+      setStreamingContent, setAgentStatus, setLoading, recordTokensFromMessage,
+      conversationPublicId, loadMessages, rollbackMsgs,
+    );
+
+    startStreamWithRollback(
+      () => chatService.retryMessageStream(
+        request, callbacks.onChunk, callbacks.onDone,
         (error) => {
           console.error('重试消息错误:', error);
-          setMessages(messages);
+          setMessages(rollbackMsgs);
           setStreamingContent('');
           setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
+          setAgentStatus(RESET_AGENT_STATUS);
           alert('重试消息失败: ' + error);
         },
-        (thinking) => {
-          setAgentStatus((prev) => ({ ...prev, thinking }));
-        },
-        (toolName, toolId) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            thinking: '',
-            toolCalls: [
-              ...prev.toolCalls,
-              {
-                toolName,
-                toolId,
-                status: 'calling',
-              },
-            ],
-          }));
-        },
-        (_toolName, toolId, success, result, error) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            toolCalls: prev.toolCalls.map((tc) =>
-              tc.toolId === toolId
-                ? {
-                    ...tc,
-                    status: success ? 'success' : 'error',
-                    result,
-                    error,
-                  }
-                : tc
-            ),
-          }));
-        }
-      );
-    } catch (error) {
-      console.error('重试消息失败:', error);
-      setMessages(messages);
-      setStreamingContent('');
-      setLoading(false);
-      alert('重试消息失败');
-    }
-  }, [isAuthenticated, conversationPublicId, loading, messages, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage]);
+        callbacks.onThinking, callbacks.onToolCall, callbacks.onToolResult,
+      ),
+      rollbackMsgs,
+    );
+  }, [isAuthenticated, conversationPublicId, loading, messages, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
 
   const editMessage = useCallback(async (userMessageId: number, newContent: string) => {
     if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const userMessageIndex = messages.findIndex((m) => m.id === userMessageId);
-    
-    if (userMessageIndex === -1) {
-      alert('找不到要编辑的消息');
-      return;
-    }
+    if (userMessageIndex === -1) { alert('找不到要编辑的消息'); return; }
+    if (messages[userMessageIndex].role !== 'user') { alert('只能编辑用户消息'); return; }
+    if (newContent.trim() === messages[userMessageIndex].content.trim()) return;
 
-    const userMessage = messages[userMessageIndex];
-    
-    if (userMessage.role !== 'user') {
-      alert('只能编辑用户消息');
-      return;
-    }
-
-    if (newContent.trim() === userMessage.content.trim()) {
-      return;
-    }
-
-    setLoading(true);
-    setStreamingContent('');
-    setAgentStatus({ thinking: '', toolCalls: [] });
-
-    const updatedMessages = messages.slice(0, userMessageIndex + 1).map(m => 
+    const rollbackMsgs = [...messages];
+    setMessages(messages.slice(0, userMessageIndex + 1).map(m =>
       m.id === userMessageId ? { ...m, content: newContent } : m
-    );
-    setMessages(updatedMessages);
+    ));
 
     const request: EditMessageRequest = {
       conversationPublicId,
       userMessageId,
       newContent,
+      mode,
+      model,
+      learningMode,
+      vocabularyCategory,
+      vocabularyDifficulty,
     };
 
-    try {
-      await chatService.editMessageStream(
-        request,
-        (chunk) => {
-          setStreamingContent((prev) => prev + chunk);
-        },
-        (finalMessage) => {
-          recordTokensFromMessage(finalMessage, conversationPublicId);
-          loadMessages();
-          setStreamingContent('');
-          setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
-        },
+    const callbacks = useStreamCallbacks(
+      setStreamingContent, setAgentStatus, setLoading, recordTokensFromMessage,
+      conversationPublicId, loadMessages, rollbackMsgs,
+    );
+
+    startStreamWithRollback(
+      () => chatService.editMessageStream(
+        request, callbacks.onChunk, callbacks.onDone,
         (error) => {
           console.error('编辑消息错误:', error);
-          setMessages(messages);
+          setMessages(rollbackMsgs);
           setStreamingContent('');
           setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
+          setAgentStatus(RESET_AGENT_STATUS);
           alert('编辑消息失败: ' + error);
         },
-        (thinking) => {
-          setAgentStatus((prev) => ({ ...prev, thinking }));
-        },
-        (toolName, toolId) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            thinking: '',
-            toolCalls: [
-              ...prev.toolCalls,
-              {
-                toolName,
-                toolId,
-                status: 'calling',
-              },
-            ],
-          }));
-        },
-        (_toolName, toolId, success, result, error) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            toolCalls: prev.toolCalls.map((tc) =>
-              tc.toolId === toolId
-                ? {
-                    ...tc,
-                    status: success ? 'success' : 'error',
-                    result,
-                    error,
-                  }
-                : tc
-            ),
-          }));
-        }
-      );
-    } catch (error) {
-      console.error('编辑消息失败:', error);
-      setMessages(messages);
-      setStreamingContent('');
-      setLoading(false);
-      alert('编辑消息失败');
-    }
-  }, [isAuthenticated, conversationPublicId, loading, messages, loadMessages, recordTokensFromMessage]);
+        callbacks.onThinking, callbacks.onToolCall, callbacks.onToolResult,
+      ),
+      rollbackMsgs,
+    );
+  }, [isAuthenticated, conversationPublicId, loading, messages, mode, model, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
 
   const editAudioMessage = useCallback(async (
     userMessageId: number, 
@@ -600,39 +474,20 @@ export function useChat(
     if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const userMessageIndex = messages.findIndex((m) => m.id === userMessageId);
-    
-    if (userMessageIndex === -1) {
-      alert('找不到要编辑的消息');
-      return;
-    }
+    if (userMessageIndex === -1) { alert('找不到要编辑的消息'); return; }
+    if (messages[userMessageIndex].role !== 'user') { alert('只能编辑用户消息'); return; }
 
     const userMessage = messages[userMessageIndex];
-    
-    if (userMessage.role !== 'user') {
-      alert('只能编辑用户消息');
-      return;
-    }
-
     const finalAudioData = audioData || userMessage.audioData;
     const finalAudioFormat = audioFormat || userMessage.audioFormat;
     const finalAudioDuration = audioDuration || userMessage.audioDuration;
 
-    setLoading(true);
-    setStreamingContent('');
-    setAgentStatus({ thinking: '', toolCalls: [] });
-
-    const updatedMessages = messages.slice(0, userMessageIndex + 1).map(m => 
-      m.id === userMessageId 
-        ? { 
-            ...m, 
-            content: newContent,
-            audioData: finalAudioData,
-            audioFormat: finalAudioFormat,
-            audioDuration: finalAudioDuration,
-          } 
+    const rollbackMsgs = [...messages];
+    setMessages(messages.slice(0, userMessageIndex + 1).map(m =>
+      m.id === userMessageId
+        ? { ...m, content: newContent, audioData: finalAudioData, audioFormat: finalAudioFormat, audioDuration: finalAudioDuration }
         : m
-    );
-    setMessages(updatedMessages);
+    ));
 
     const request: ChatRequest = {
       conversationPublicId,
@@ -644,68 +499,27 @@ export function useChat(
       audioDuration: finalAudioDuration,
     };
 
-    try {
-      await chatService.sendMessageStream(
-        request,
-        (chunk) => {
-          setStreamingContent((prev) => prev + chunk);
-        },
-        (finalMessage) => {
-          recordTokensFromMessage(finalMessage, request.conversationPublicId || null);
-          loadMessages();
-          setStreamingContent('');
-          setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
-        },
+    const callbacks = useStreamCallbacks(
+      setStreamingContent, setAgentStatus, setLoading, recordTokensFromMessage,
+      request.conversationPublicId || null, loadMessages, rollbackMsgs,
+    );
+
+    startStreamWithRollback(
+      () => chatService.sendMessageStream(
+        request, callbacks.onChunk, callbacks.onDone,
         (error) => {
           console.error('编辑消息错误:', error);
-          setMessages(messages);
+          setMessages(rollbackMsgs);
           setStreamingContent('');
           setLoading(false);
-          setAgentStatus({ thinking: '', toolCalls: [] });
+          setAgentStatus(RESET_AGENT_STATUS);
           alert('编辑消息失败: ' + error);
         },
-        (thinking) => {
-          setAgentStatus((prev) => ({ ...prev, thinking }));
-        },
-        (toolName, toolId) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            thinking: '',
-            toolCalls: [
-              ...prev.toolCalls,
-              {
-                toolName,
-                toolId,
-                status: 'calling',
-              },
-            ],
-          }));
-        },
-        (_toolName, toolId, success, result, error) => {
-          setAgentStatus((prev) => ({
-            ...prev,
-            toolCalls: prev.toolCalls.map((tc) =>
-              tc.toolId === toolId
-                ? {
-                    ...tc,
-                    status: success ? 'success' : 'error',
-                    result,
-                    error,
-                  }
-                : tc
-            ),
-          }));
-        }
-      );
-    } catch (error) {
-      console.error('编辑消息失败:', error);
-      setMessages(messages);
-      setStreamingContent('');
-      setLoading(false);
-      alert('编辑消息失败');
-    }
-  }, [isAuthenticated, conversationPublicId, loading, messages, createBaseRequest, loadMessages, recordTokensFromMessage]);
+        callbacks.onThinking, callbacks.onToolCall, callbacks.onToolResult,
+      ),
+      rollbackMsgs,
+    );
+  }, [isAuthenticated, conversationPublicId, loading, messages, createBaseRequest, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
 
   return {
     messages,

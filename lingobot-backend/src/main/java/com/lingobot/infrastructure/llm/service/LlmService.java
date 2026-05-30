@@ -104,6 +104,39 @@ public class LlmService {
         chatStream(model, messages).doOnNext(onChunk).doOnComplete(onComplete).doOnError(onError).subscribe();
     }
 
+    // 转换消息列表中所有音频消息的格式，确保发给 LLM 的音频都是支持的格式
+    public List<OpenAiChatMessage> convertAllAudioMessages(List<OpenAiChatMessage> messages) {
+        return messages.stream().map(msg -> {
+            if (!"user".equals(msg.getRole()) || !msg.hasAudioContent()) {
+                return msg;
+            }
+
+            String originalFormat = msg.getAudioFormat();
+            String originalAudioData = msg.getAudioData();
+            if (originalFormat == null || originalAudioData == null) {
+                return msg;
+            }
+
+            AudioConversionService.ConversionResult conversionResult =
+                    audioConversionService.convertIfNeeded(originalAudioData, originalFormat);
+
+            String convertedAudioData = conversionResult.base64Audio();
+            String convertedFormat = conversionResult.format();
+
+            if (!convertedFormat.equals(normalizeAudioFormat(originalFormat))) {
+                log.info("历史音频格式已转换: {} -> {}", originalFormat, convertedFormat);
+            }
+
+            String textContent = extractTextContent(msg.getContent());
+            return OpenAiChatMessage.createAudioMessage(
+                    msg.getRole(),
+                    textContent,
+                    convertedAudioData,
+                    convertedFormat
+            );
+        }).toList();
+    }
+
     // 带音频输入的流式聊天（使用默认模型）
     public Flux<String> chatStreamWithAudio(
             List<OpenAiChatMessage> messages,
@@ -123,6 +156,8 @@ public class LlmService {
             log.warn("音频功能未启用，使用文本模式");
             return chatStream(model, messages);
         }
+
+        List<OpenAiChatMessage> messagesWithConvertedHistory = convertAllAudioMessages(messages);
 
         AudioConversionService.ConversionResult conversionResult =
                 audioConversionService.convertIfNeeded(audioData, audioFormat);
@@ -156,7 +191,7 @@ public class LlmService {
                 config.getInputPricePerMillion(),
                 config.getOutputPricePerMillion());
 
-        List<OpenAiChatMessage> sendMessages = prepareAudioMessages(messages, finalAudioData, finalFormat);
+        List<OpenAiChatMessage> sendMessages = prepareAudioMessages(messagesWithConvertedHistory, finalAudioData, finalFormat);
 
         return chatStreamInternalWithModel(sendMessages, fullModelName);
     }
@@ -420,96 +455,4 @@ public class LlmService {
         return objectMapper.readValue(response.body(), OpenAiChatResponse.class);
     }
 
-    // 内部流式请求实现（使用默认模型），已废弃，推荐使用 chatStreamInternalWithModel
-    @Deprecated
-    private Flux<String> chatStreamInternal(List<OpenAiChatMessage> messages) {
-        log.info("调用 Chat Completions API 流式，模型: {}, 消息数: {}",
-                llmProperties.getModel(), messages.size());
-
-        return Flux.<String>create(emitter -> {
-            try {
-                OpenAiChatRequest request = OpenAiChatRequest.builder()
-                        .model(llmProperties.getModel())
-                        .messages(messages)
-                        .temperature(llmProperties.getTemperature())
-                        .maxTokens(llmProperties.getMaxTokens())
-                        .stream(true)
-                        .build();
-
-                String json = objectMapper.writeValueAsString(request);
-                log.info("流式请求 JSON: {}", json);
-
-                java.net.http.HttpRequest httpRequest = java.net.http.HttpRequest.newBuilder()
-                        .uri(java.net.URI.create(llmProperties.getBaseUrl() + "/v1/chat/completions"))
-                        .header("Content-Type", "application/json")
-                        .header("Accept", "text/event-stream, application/json")
-                        .header("Authorization", "Bearer " + llmProperties.getApiKey())
-                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(json, java.nio.charset.StandardCharsets.UTF_8))
-                        .timeout(Duration.ofMillis(llmProperties.getTimeout()))
-                        .build();
-
-                HttpClient.Builder clientBuilder = HttpClient.newBuilder()
-                        .version(HttpClient.Version.HTTP_1_1)
-                        .connectTimeout(Duration.ofSeconds(30));
-
-                HttpClient httpClient = clientBuilder.build();
-
-                java.net.http.HttpResponse<java.io.InputStream> response =
-                        httpClient.send(httpRequest, java.net.http.HttpResponse.BodyHandlers.ofInputStream());
-
-                if (response.statusCode() >= 400) {
-                    byte[] body = response.body().readAllBytes();
-                    String bodyStr = new String(body, java.nio.charset.StandardCharsets.UTF_8);
-                    log.error("流式 API 错误 {}: {}", response.statusCode(), bodyStr);
-                    emitter.error(ChatException.badRequest("API错误 " + response.statusCode() + ": " + bodyStr));
-                    return;
-                }
-
-                boolean hasContent = false;
-                StringBuilder fullResponse = new StringBuilder();
-                try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                        new java.io.InputStreamReader(response.body(), java.nio.charset.StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        String data = line.startsWith("data:") ? line.substring(5).trim() : line.trim();
-                        if (data.isEmpty() || data.equals("[DONE]")) continue;
-                        if (!data.startsWith("{")) continue;
-                        try {
-                            JsonNode node = objectMapper.readTree(data);
-                            JsonNode choices = node.path("choices");
-                            if (choices.isArray() && choices.size() > 0) {
-                                JsonNode content = choices.get(0).path("delta").path("content");
-                                if (!content.isMissingNode() && !content.isNull()) {
-                                    String text = content.asText();
-                                    if (!text.isEmpty()) {
-                                        emitter.next(text);
-                                        fullResponse.append(text);
-                                        hasContent = true;
-                                    }
-                                }
-                            }
-                        } catch (Exception e) {
-                            log.debug("跳过非JSON格式: {}", data);
-                        }
-                    }
-                }
-
-                if (!hasContent) {
-                    emitter.error(ChatException.badRequest(
-                            "API 未返回内容，请检查模型: " + llmProperties.getModel() + " 和密钥"));
-                    return;
-                }
-
-                log.info("响应完整 JSON: ");
-                log.info(fullResponse.toString());
-                emitter.complete();
-
-            } catch (ChatException e) {
-                emitter.error(e);
-            } catch (Exception e) {
-                log.error("流式 API 调用失败", e);
-                emitter.error(ChatException.badRequest("AI 流式服务调用失败: " + e.getMessage()));
-            }
-        }).subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
-    }
 }

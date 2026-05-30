@@ -17,24 +17,23 @@ import { ModeSelectorGrid, learningFeatures } from './LearningModeSelector'
 import UserAudioMessage from './media/UserAudioMessage'
 import VocabularyFlashcard, { isVocabularyJson } from '../vocabulary/VocabularyFlashcard'
 
-const modelConfig = {
-  qwen: {
-    label: 'Qwen 3.5',
-    icon: '🌊',
-    description: '阿里通义千问，支持图片输入',
-    supportsImage: true,
-    supportsAudio: false,
-    disabledReason: '不支持语音输入',
-  },
-  xiaomi: {
-    label: 'XiaoMi Omni',
-    icon: '🔮',
-    description: '小米AI模型，支持多模态',
-    supportsImage: true,
-    supportsAudio: true,
-    disabledReason: '',
-  },
-}
+const modelConfig = Object.fromEntries(
+  MODELS.map(m => [m.model, {
+    label: m.label,
+    icon: m.icon,
+    description: m.description,
+    supportsImage: m.supportsImage,
+    supportsAudio: m.supportsAudio,
+    disabledReason: m.supportsAudio ? '' : '不支持语音输入',
+  }])
+) as Record<ModelType, {
+  label: string
+  icon: string
+  description: string
+  supportsImage: boolean
+  supportsAudio: boolean
+  disabledReason: string
+}>
 
 const ChatWindow: React.FC = () => {
   // Store hooks
@@ -64,7 +63,6 @@ const ChatWindow: React.FC = () => {
     retryMessage,
     retryMessageWithModel,
     editMessage,
-    editAudioMessage,
   } = useChatStore()
   const {
     currentVocabularyCard,
@@ -102,6 +100,8 @@ const ChatWindow: React.FC = () => {
   const [editContent, setEditContent] = useState('')
   const [showModeMenu, setShowModeMenu] = useState(false)
   const [isVoiceRecording, setIsVoiceRecording] = useState(false)
+  const [isEditRecording, setIsEditRecording] = useState(false)
+  const [pendingAudioMessage, setPendingAudioMessage] = useState<{ audioData: string; audioFormat: string; duration: number } | null>(null)
   const [selectedImage, setSelectedImage] = useState<{ data: string; format: string; preview: string } | null>(null)
   const [expandedRetryMessageId, setExpandedRetryMessageId] = useState<number | null>(null)
   const [editingAudioMessageId, setEditingAudioMessageId] = useState<number | null>(null)
@@ -478,6 +478,26 @@ const ChatWindow: React.FC = () => {
     }
   }, [learningMode, isAuthenticated, currentConversation?.publicId, currentVocabularyCard, vocabularyCardLoading, loading, vocabularyCategory, vocabularyDifficulty])
 
+  useEffect(() => {
+    if (!loading && pendingAudioMessage && currentConversation && !disabled) {
+      const { audioData, audioFormat, duration } = pendingAudioMessage
+      setPendingAudioMessage(null)
+      sendAudioMessage({
+        conversationPublicId: currentConversation.publicId,
+        content: '',
+        mode,
+        model: activeRequestModel,
+        learningMode,
+        messageType: 'audio',
+        audioData,
+        audioFormat,
+        audioDuration: duration,
+        vocabularyCategory,
+        vocabularyDifficulty,
+      })
+    }
+  }, [loading, pendingAudioMessage, currentConversation, disabled, mode, activeRequestModel, learningMode, vocabularyCategory, vocabularyDifficulty, sendAudioMessage])
+
   const handleSend = useCallback(() => {
     if (!isAuthenticated) {
       setShowAuthModal(true)
@@ -502,13 +522,14 @@ const ChatWindow: React.FC = () => {
       setInputValue('')
     } else if (inputValue.trim() && !loading && !disabled && !isVoiceRecording) {
       if (learningMode === 'vocabulary') {
-        // vocabulary mode uses sendVocabularyMessage via handleSendWithIntent pattern
         sendMessage({
           conversationPublicId: currentConversation.publicId,
           content: inputValue.trim(),
           mode,
           model: fullVocabularyModel,
           learningMode,
+          messageType: 'vocabulary',
+          executionMode: 'onetime',
           vocabularyCategory,
           vocabularyDifficulty,
         })
@@ -546,6 +567,9 @@ const ChatWindow: React.FC = () => {
         vocabularyCategory,
         vocabularyDifficulty,
       })
+    } else if (loading) {
+      setPendingAudioMessage({ audioData, audioFormat, duration })
+      alert('AI 正在回复中，语音已保存，将在 AI 回复完成后自动发送')
     }
     setIsVoiceRecording(false)
   }, [loading, disabled, currentConversation, mode, activeRequestModel, learningMode, vocabularyCategory, vocabularyDifficulty, sendAudioMessage])
@@ -658,6 +682,7 @@ const ChatWindow: React.FC = () => {
     setEditAudioData(null)
     setEditAudioFormat(null)
     setEditAudioDuration(null)
+    setIsEditRecording(false)
   }
 
   const saveEdit = (message: any) => {
@@ -676,6 +701,11 @@ const ChatWindow: React.FC = () => {
         conversationPublicId: currentConversation.publicId,
         userMessageId: message.id,
         newContent: editContent.trim(),
+        mode,
+        model: activeRequestModel,
+        learningMode,
+        vocabularyCategory,
+        vocabularyDifficulty,
       })
     }
     setEditingMessageId(null)
@@ -686,12 +716,14 @@ const ChatWindow: React.FC = () => {
     setEditAudioData(audioData)
     setEditAudioFormat(audioFormat)
     setEditAudioDuration(duration)
+    setIsEditRecording(false)
   }, [])
 
   const handleEditAudioCancel = useCallback(() => {
     setEditAudioData(null)
     setEditAudioFormat(null)
     setEditAudioDuration(null)
+    setIsEditRecording(false)
   }, [])
 
   const saveAudioEdit = (message: any) => {
@@ -705,21 +737,21 @@ const ChatWindow: React.FC = () => {
         return
       }
 
-      editAudioMessage(
-        {
-          conversationPublicId: currentConversation.publicId,
-          content: editContent.trim(),
-          mode,
-          model: activeRequestModel,
-          learningMode,
-          audioData: editAudioData || undefined,
-          audioFormat: editAudioFormat || undefined,
-          audioDuration: editAudioDuration || undefined,
-          vocabularyCategory,
-          vocabularyDifficulty,
-        },
-        message.id
-      )
+      editMessage({
+        conversationPublicId: currentConversation.publicId,
+        userMessageId: message.id,
+        newContent: editContent.trim(),
+        mode,
+        model: activeRequestModel,
+        learningMode,
+        vocabularyCategory,
+        vocabularyDifficulty,
+        ...(hasNewAudio && {
+          audioData: editAudioData,
+          audioFormat: editAudioFormat || 'webm',
+          audioDuration: editAudioDuration || 0,
+        }),
+      })
     }
     cancelAudioEdit()
   }
@@ -1086,7 +1118,7 @@ const ChatWindow: React.FC = () => {
                           <div className="audio-re-record-section-english">
                             <button
                               className="re-record-button-english"
-                              onClick={() => setIsVoiceRecording(true)}
+                              onClick={() => setIsEditRecording(true)}
                               disabled={loading || disabled}
                               title="重新录音"
                             >
@@ -1095,7 +1127,7 @@ const ChatWindow: React.FC = () => {
                           </div>
                         )}
 
-                        {isVoiceRecording && (
+                        {isEditRecording && (
                           <VoiceRecorder
                             onRecordingComplete={handleEditAudioRecordingComplete}
                             onCancel={handleEditAudioCancel}

@@ -167,7 +167,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const handleStopAndSend = useCallback(() => {
     if (!mediaRecorderRef.current || !isRecording) return;
 
-    const finalDuration = duration;
+    const finalDuration = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
     const originalOnStop = mediaRecorderRef.current.onstop;
     mediaRecorderRef.current.onstop = () => {
@@ -209,7 +209,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     };
 
     stopRecordingInternal();
-  }, [duration, isRecording, onRecordingComplete, stopRecordingInternal]);
+  }, [isRecording, onRecordingComplete, stopRecordingInternal]);
 
   const handleCancel = useCallback(() => {
     if (isRecording) {

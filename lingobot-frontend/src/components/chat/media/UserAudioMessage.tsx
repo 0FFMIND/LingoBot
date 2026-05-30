@@ -14,6 +14,8 @@ const UserAudioMessage: React.FC<UserAudioMessageProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(audioDuration || 0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const audioUrl = `data:audio/${audioFormat};base64,${audioData}`;
@@ -21,6 +23,11 @@ const UserAudioMessage: React.FC<UserAudioMessageProps> = ({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+
+    setIsPlaying(false);
+    setProgress(0);
+    setIsLoading(true);
+    setError(null);
 
     const handleTimeUpdate = () => {
       if (audio.duration) {
@@ -30,6 +37,8 @@ const UserAudioMessage: React.FC<UserAudioMessageProps> = ({
 
     const handleLoadedMetadata = () => {
       setDuration(audio.duration);
+      setIsLoading(false);
+      setError(null);
     };
 
     const handleEnded = () => {
@@ -37,27 +46,38 @@ const UserAudioMessage: React.FC<UserAudioMessageProps> = ({
       setProgress(0);
     };
 
+    const handleError = () => {
+      setError('音频加载失败');
+      setIsLoading(false);
+    };
+
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
     };
   }, [audioUrl]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || isLoading || !!error) return;
 
     if (isPlaying) {
       audio.pause();
+      setIsPlaying(false);
     } else {
-      audio.play().catch(e => console.error('播放失败:', e));
+      audio.play().catch(e => {
+        setError(`播放失败: ${e.message}`);
+        setIsPlaying(false);
+      });
+      setIsPlaying(true);
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -85,8 +105,9 @@ const UserAudioMessage: React.FC<UserAudioMessageProps> = ({
           className="audio-play-btn-english"
           onClick={togglePlay}
           title={isPlaying ? '暂停' : '播放'}
+          disabled={isLoading || !!error}
         >
-          {isPlaying ? '⏸️' : '▶️'}
+          {isLoading ? '⏳' : error ? '❌' : (isPlaying ? '⏸️' : '▶️')}
         </button>
         <div
           className="audio-progress-container-english"
@@ -101,6 +122,11 @@ const UserAudioMessage: React.FC<UserAudioMessageProps> = ({
         </div>
         <span className="audio-duration-english">{formatTime(duration)}</span>
       </div>
+      {error && (
+        <div className="audio-error-message-english" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>
+          {error}
+        </div>
+      )}
     </div>
   );
 };

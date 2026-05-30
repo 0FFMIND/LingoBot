@@ -14,14 +14,6 @@ public interface ChatService {
     
     SseEmitter sendMessageStream(ChatRequest request);
     
-    MessageDTO sendOnetimeMessage(ChatRequest request);
-    
-    SseEmitter sendOnetimeMessageStream(ChatRequest request);
-    
-    MessageDTO sendVocabularyMessage(ChatRequest request);
-    
-    SseEmitter sendVocabularyMessageStream(ChatRequest request);
-    
     List<MessageDTO> getMessagesByConversationId(Long conversationId);
     
     MessageDTO retryMessage(Long conversationId, Long assistantMessageId);

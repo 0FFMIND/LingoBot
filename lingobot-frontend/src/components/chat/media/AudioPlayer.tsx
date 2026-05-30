@@ -17,6 +17,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ attachment }) => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    setIsPlaying(false);
+    setProgress(0);
+    setIsLoading(true);
+    setError(null);
+
     const handleTimeUpdate = () => {
       if (audio.duration) {
         setProgress((audio.currentTime / audio.duration) * 100);

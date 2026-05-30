@@ -21,6 +21,21 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class AsyncConfig implements AsyncConfigurer {
 
     // 配置词义检查专用线程池，核心线程数 2，最大线程数 5，队列容量 20
+    @Bean(name = "sseExecutor")
+    public ThreadPoolTaskExecutor sseExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(50);
+        executor.setThreadNamePrefix("sse-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+        log.info("Async executor 'sseExecutor' initialized with corePoolSize=4, maxPoolSize=10");
+        return executor;
+    }
+
     @Bean(name = "meaningCheckExecutor")
     public ThreadPoolTaskExecutor meaningCheckExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

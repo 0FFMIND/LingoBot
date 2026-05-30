@@ -3,6 +3,7 @@ package com.lingobot.learning.chat.service;
 import com.lingobot.core.conversation.dto.MessageDTO;
 import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.MessageRepository;
+import com.lingobot.learning.chat.dto.HistoryBuildRequest;
 import com.lingobot.learning.conversation.vocabulary.service.VocabularyConversationDataService;
 import com.lingobot.learning.prompt.chat.ChatPromptBuilder;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
@@ -23,75 +24,58 @@ public class MessageHistoryService {
     private final ChatPromptBuilder chatPromptBuilder;
     private final VocabularyConversationDataService vocabularyConversationDataService;
     
-    public List<OpenAiChatMessage> buildConversationHistoryWithMode(Long conversationId, String learningMode) {
-        return buildConversationHistoryWithMode(conversationId, learningMode, null, null);
-    }
-
-    public List<OpenAiChatMessage> buildConversationHistoryWithMode(Long conversationId, String learningMode, 
-                                                                     String vocabularyCategory, String vocabularyDifficulty) {
-        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
-        log.info("=== 构建对话历史 ===");
-        log.info("Conversation ID: {}, Learning Mode: {}, Category: {}, Difficulty: {}", 
-                conversationId, learningMode, vocabularyCategory, vocabularyDifficulty);
-        log.info("数据库中消息总数: {}", allMessages.size());
+    public List<OpenAiChatMessage> buildConversationHistory(HistoryBuildRequest request) {
+        List<Message> allMessages;
+        Long conversationId = request.getConversationId();
+        String learningMode = request.getLearningModeOrDefault();
         
-        for (int i = 0; i < allMessages.size(); i++) {
-            Message msg = allMessages.get(i);
-            log.info("消息 {}: role={}, content={}", i, msg.getRole(), 
-                    msg.getContent().length() > 50 ? msg.getContent().substring(0, 50) + "..." : msg.getContent());
+        if (request.getMessages() != null) {
+            allMessages = request.getMessages();
+        } else if (conversationId != null) {
+            allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
+            log.info("=== 构建对话历史 ===");
+            log.info("Conversation ID: {}, Learning Mode: {}, Category: {}, Difficulty: {}", 
+                    conversationId, learningMode, 
+                    request.getVocabularyCategory(), request.getVocabularyDifficulty());
+            log.info("数据库中消息总数: {}", allMessages.size());
+            
+            for (int i = 0; i < allMessages.size(); i++) {
+                Message msg = allMessages.get(i);
+                log.info("消息 {}: role={}, content={}", i, msg.getRole(), 
+                        msg.getContent().length() > 50 ? msg.getContent().substring(0, 50) + "..." : msg.getContent());
+            }
+        } else {
+            throw new IllegalArgumentException("必须提供 messages 或 conversationId");
         }
         
-        List<OpenAiChatMessage> result = buildConversationHistoryUpToIndexWithMode(allMessages, allMessages.size(), 
-                learningMode, vocabularyCategory, vocabularyDifficulty, conversationId);
+        int endIndex = request.getEndIndex() != null ? request.getEndIndex() : allMessages.size();
         
-        log.info("=== 发送给 AI 的完整对话历史 ===");
-        for (int i = 0; i < result.size(); i++) {
-            OpenAiChatMessage msg = result.get(i);
-            String contentStr = msg.getContentAsString();
-            log.info("消息 {}: role={}, content={}", i, msg.getRole(), 
-                    contentStr != null && contentStr.length() > 50 ? contentStr.substring(0, 50) + "..." : contentStr);
+        List<OpenAiChatMessage> result = buildConversationHistoryInternal(
+                allMessages, endIndex, learningMode, 
+                request.getVocabularyCategory(), 
+                request.getVocabularyDifficulty(), 
+                conversationId);
+        
+        if (conversationId != null) {
+            log.info("=== 发送给 AI 的完整对话历史 ===");
+            for (int i = 0; i < result.size(); i++) {
+                OpenAiChatMessage msg = result.get(i);
+                String contentStr = msg.getContentAsString();
+                log.info("消息 {}: role={}, content={}", i, msg.getRole(), 
+                        contentStr != null && contentStr.length() > 50 ? contentStr.substring(0, 50) + "..." : contentStr);
+            }
         }
         
         return result;
     }
     
-    public List<OpenAiChatMessage> buildConversationHistoryUpToIndex(List<Message> allMessages, int endIndex) {
-        return buildConversationHistoryUpToIndexWithMode(allMessages, endIndex, "chat", null, null, null);
-    }
-    
-    public List<OpenAiChatMessage> buildConversationHistoryUpToIndexWithMode(List<Message> allMessages, int endIndex, String learningMode) {
-        return buildConversationHistoryUpToIndexWithMode(allMessages, endIndex, learningMode, null, null, null);
-    }
-
-    public List<OpenAiChatMessage> buildConversationHistoryUpToIndexWithMode(List<Message> allMessages, int endIndex, 
-                                                                             String learningMode, String vocabularyCategory, 
-                                                                             String vocabularyDifficulty) {
-        return buildConversationHistoryUpToIndexWithMode(allMessages, endIndex, learningMode, vocabularyCategory, vocabularyDifficulty, null);
-    }
-
-    public List<OpenAiChatMessage> buildConversationHistoryUpToIndexWithMode(List<Message> allMessages, int endIndex, 
-                                                                             String learningMode, String vocabularyCategory, 
-                                                                             String vocabularyDifficulty, Long conversationId) {
+    private List<OpenAiChatMessage> buildConversationHistoryInternal(List<Message> allMessages, int endIndex,
+                                                                      String learningMode, String vocabularyCategory,
+                                                                      String vocabularyDifficulty, Long conversationId) {
         List<OpenAiChatMessage> messages = new ArrayList<>();
         
-        String systemPrompt = chatPromptBuilder.getSystemPrompt(learningMode);
+        String systemPrompt = buildSystemPrompt(learningMode, conversationId);
         if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            if ("vocabulary".equals(learningMode) && conversationId != null) {
-                String vocabularyHistoryInfo = vocabularyConversationDataService.buildVocabularyHistoryForPrompt(conversationId);
-                if (vocabularyHistoryInfo != null && !vocabularyHistoryInfo.isEmpty()) {
-                    systemPrompt = systemPrompt + vocabularyHistoryInfo;
-                    log.info("已添加词汇历史信息到 System Prompt，conversationId: {}", conversationId);
-                }
-            }
-            
-            if (conversationId != null) {
-                String compactedSummary = vocabularyConversationDataService.getCompactedSummary(conversationId);
-                if (compactedSummary != null && !compactedSummary.isEmpty()) {
-                    systemPrompt = systemPrompt + "\n\n## 历史对话摘要\n" + compactedSummary;
-                    log.info("已添加压缩对话摘要到 System Prompt，conversationId: {}", conversationId);
-                }
-            }
-            
             messages.add(OpenAiChatMessage.createTextMessage("system", systemPrompt));
             log.info("已添加 System Prompt 用于模式: {}, Category: {}, Difficulty: {}",
                     learningMode, vocabularyCategory, vocabularyDifficulty);
@@ -99,10 +83,28 @@ public class MessageHistoryService {
         
         for (int i = 0; i < endIndex; i++) {
             Message msg = allMessages.get(i);
-            messages.add(OpenAiChatMessage.builder()
-                    .role(msg.getRole())
-                    .content(msg.getContent())
-                    .build());
+            OpenAiChatMessage chatMsg;
+            if (msg.getAudioData() != null && !msg.getAudioData().isEmpty()) {
+                chatMsg = OpenAiChatMessage.createAudioMessage(
+                        msg.getRole(),
+                        msg.getContent(),
+                        msg.getAudioData(),
+                        msg.getAudioFormat()
+                );
+            } else if (msg.getImageData() != null && !msg.getImageData().isEmpty()) {
+                chatMsg = OpenAiChatMessage.createImageMessage(
+                        msg.getRole(),
+                        msg.getContent(),
+                        msg.getImageData(),
+                        msg.getImageFormat()
+                );
+            } else {
+                chatMsg = OpenAiChatMessage.builder()
+                        .role(msg.getRole())
+                        .content(msg.getContent())
+                        .build();
+            }
+            messages.add(chatMsg);
         }
         
         log.info("构建对话历史，共 {} 条消息（包含 System Prompt）", messages.size());
@@ -110,43 +112,45 @@ public class MessageHistoryService {
         return messages;
     }
     
-    public int calculateContextLength(Long conversationId, String learningMode) {
-        return calculateContextLength(conversationId, learningMode, null, null);
-    }
-
-    public int calculateContextLength(Long conversationId, String learningMode,
-                                       String vocabularyCategory, String vocabularyDifficulty) {
-        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
-        int totalLength = 0;
-
+    private String buildSystemPrompt(String learningMode, Long conversationId) {
         String systemPrompt = chatPromptBuilder.getSystemPrompt(learningMode);
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            if ("vocabulary".equals(learningMode) && conversationId != null) {
-                String vocabularyHistoryInfo = vocabularyConversationDataService.buildVocabularyHistoryForPrompt(conversationId);
-                if (vocabularyHistoryInfo != null && !vocabularyHistoryInfo.isEmpty()) {
-                    systemPrompt = systemPrompt + vocabularyHistoryInfo;
-                }
-            }
-
-            if (conversationId != null) {
-                String compactedSummary = vocabularyConversationDataService.getCompactedSummary(conversationId);
-                if (compactedSummary != null && !compactedSummary.isEmpty()) {
-                    systemPrompt = systemPrompt + "\n\n## 历史对话摘要\n" + compactedSummary;
-                }
-            }
-
-            totalLength += systemPrompt.length();
+        if (systemPrompt == null || systemPrompt.isEmpty()) {
+            return null;
         }
-
-        for (Message msg : allMessages) {
-            if (msg.getContent() != null) {
-                totalLength += msg.getContent().length();
+        
+        if ("vocabulary".equals(learningMode) && conversationId != null) {
+            String vocabularyHistoryInfo = vocabularyConversationDataService.buildVocabularyHistoryForPrompt(conversationId);
+            if (vocabularyHistoryInfo != null && !vocabularyHistoryInfo.isEmpty()) {
+                systemPrompt = systemPrompt + vocabularyHistoryInfo;
+                log.info("已添加词汇历史信息到 System Prompt，conversationId: {}", conversationId);
             }
         }
-
+        
+        if (conversationId != null) {
+            String compactedSummary = vocabularyConversationDataService.getCompactedSummary(conversationId);
+            if (compactedSummary != null && !compactedSummary.isEmpty()) {
+                systemPrompt = systemPrompt + "\n\n## 历史对话摘要\n" + compactedSummary;
+                log.info("已添加压缩对话摘要到 System Prompt，conversationId: {}", conversationId);
+            }
+        }
+        
+        return systemPrompt;
+    }
+    
+    public int calculateContextLength(HistoryBuildRequest request) {
+        List<OpenAiChatMessage> messages = buildConversationHistory(request);
+        
+        int totalLength = 0;
+        for (OpenAiChatMessage msg : messages) {
+            String content = msg.getContentAsString();
+            if (content != null) {
+                totalLength += content.length();
+            }
+        }
+        
         return totalLength;
     }
-
+    
     public List<MessageDTO> getMessagesByConversationId(Long conversationId) {
         List<Message> latestMessagesDesc = messageRepository.findTop10ByConversationIdOrderByTimestampDesc(conversationId);
         List<Message> messagesAsc = new ArrayList<>(latestMessagesDesc);
@@ -176,5 +180,78 @@ public class MessageHistoryService {
                 .completionTokens(message.getCompletionTokens())
                 .totalTokens(message.getTotalTokens())
                 .build();
+    }
+    
+    @Deprecated
+    public List<OpenAiChatMessage> buildConversationHistoryWithMode(Long conversationId, String learningMode) {
+        return buildConversationHistory(HistoryBuildRequest.forConversation(conversationId, learningMode));
+    }
+    
+    @Deprecated
+    public List<OpenAiChatMessage> buildConversationHistoryWithMode(Long conversationId, String learningMode, 
+                                                                     String vocabularyCategory, String vocabularyDifficulty) {
+        return buildConversationHistory(HistoryBuildRequest.builder()
+                .conversationId(conversationId)
+                .learningMode(learningMode)
+                .vocabularyCategory(vocabularyCategory)
+                .vocabularyDifficulty(vocabularyDifficulty)
+                .build());
+    }
+    
+    @Deprecated
+    public List<OpenAiChatMessage> buildConversationHistoryUpToIndex(List<Message> allMessages, int endIndex) {
+        return buildConversationHistory(HistoryBuildRequest.forMessages(allMessages, endIndex));
+    }
+    
+    @Deprecated
+    public List<OpenAiChatMessage> buildConversationHistoryUpToIndexWithMode(List<Message> allMessages, int endIndex, String learningMode) {
+        return buildConversationHistory(HistoryBuildRequest.builder()
+                .messages(allMessages)
+                .endIndex(endIndex)
+                .learningMode(learningMode)
+                .build());
+    }
+    
+    @Deprecated
+    public List<OpenAiChatMessage> buildConversationHistoryUpToIndexWithMode(List<Message> allMessages, int endIndex, 
+                                                                             String learningMode, String vocabularyCategory, 
+                                                                             String vocabularyDifficulty) {
+        return buildConversationHistory(HistoryBuildRequest.builder()
+                .messages(allMessages)
+                .endIndex(endIndex)
+                .learningMode(learningMode)
+                .vocabularyCategory(vocabularyCategory)
+                .vocabularyDifficulty(vocabularyDifficulty)
+                .build());
+    }
+    
+    @Deprecated
+    public List<OpenAiChatMessage> buildConversationHistoryUpToIndexWithMode(List<Message> allMessages, int endIndex, 
+                                                                             String learningMode, String vocabularyCategory, 
+                                                                             String vocabularyDifficulty, Long conversationId) {
+        return buildConversationHistory(HistoryBuildRequest.builder()
+                .conversationId(conversationId)
+                .messages(allMessages)
+                .endIndex(endIndex)
+                .learningMode(learningMode)
+                .vocabularyCategory(vocabularyCategory)
+                .vocabularyDifficulty(vocabularyDifficulty)
+                .build());
+    }
+    
+    @Deprecated
+    public int calculateContextLength(Long conversationId, String learningMode) {
+        return calculateContextLength(HistoryBuildRequest.forConversation(conversationId, learningMode));
+    }
+    
+    @Deprecated
+    public int calculateContextLength(Long conversationId, String learningMode,
+                                       String vocabularyCategory, String vocabularyDifficulty) {
+        return calculateContextLength(HistoryBuildRequest.builder()
+                .conversationId(conversationId)
+                .learningMode(learningMode)
+                .vocabularyCategory(vocabularyCategory)
+                .vocabularyDifficulty(vocabularyDifficulty)
+                .build());
     }
 }

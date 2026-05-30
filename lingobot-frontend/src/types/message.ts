@@ -70,6 +70,16 @@ export interface EditMessageRequest {
   conversationPublicId?: string;
   userMessageId: number;
   newContent: string;
+  mode?: 'chat' | 'agent';
+  model?: string;
+  learningMode?: string;
+  vocabularyCategory?: string;
+  vocabularyDifficulty?: string;
+  audioData?: string;
+  audioFormat?: string;
+  audioDuration?: number;
+  imageData?: string;
+  imageFormat?: string;
 }
 
 export interface RetryMessageRequest {

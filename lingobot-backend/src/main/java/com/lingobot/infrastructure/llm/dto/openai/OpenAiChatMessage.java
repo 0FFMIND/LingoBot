@@ -239,6 +239,40 @@ public class OpenAiChatMessage {
         return false;
     }
 
+    // 从消息内容中提取音频数据（Base64）
+    @JsonIgnore
+    public String getAudioData() {
+        if (content instanceof List<?>) {
+            List<?> list = (List<?>) content;
+            for (Object item : list) {
+                if (item instanceof ContentPart) {
+                    ContentPart part = (ContentPart) item;
+                    if ("input_audio".equals(part.getType()) && part.getInputAudio() != null) {
+                        return part.getInputAudio().getData();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    // 从消息内容中提取音频格式
+    @JsonIgnore
+    public String getAudioFormat() {
+        if (content instanceof List<?>) {
+            List<?> list = (List<?>) content;
+            for (Object item : list) {
+                if (item instanceof ContentPart) {
+                    ContentPart part = (ContentPart) item;
+                    if ("input_audio".equals(part.getType()) && part.getInputAudio() != null) {
+                        return part.getInputAudio().getFormat();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     // 检查消息是否包含图片内容
     public boolean hasImageContent() {
         if (content instanceof List<?>) {

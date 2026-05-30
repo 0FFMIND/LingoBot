@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
@@ -285,79 +286,75 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
 
     @Override
     public List<VocabularyMemoryRecord> retrieveL1Recent(Long userId, int limit) {
-        if (userId == null) return new ArrayList<>();
-        List<VocabularyMemoryRecord> records = getL1Records(L1_RECENT_PREFIX + userId, RECENT_TTL_DAYS);
-        return records.stream().limit(limit).collect(Collectors.toList());
+        return retrieveL1(userId, L1_RECENT_PREFIX, RECENT_TTL_DAYS, limit);
     }
 
     @Override
     public List<VocabularyMemoryRecord> retrieveL1Wrong(Long userId, int limit) {
-        if (userId == null) return new ArrayList<>();
-        List<VocabularyMemoryRecord> records = getL1Records(L1_WRONG_PREFIX + userId, WRONG_TTL_DAYS);
-        return records.stream().limit(limit).collect(Collectors.toList());
+        return retrieveL1(userId, L1_WRONG_PREFIX, WRONG_TTL_DAYS, limit);
     }
 
     @Override
     public List<VocabularyMemoryRecord> retrieveL1Regenerated(Long userId, int limit) {
+        return retrieveL1(userId, L1_REGENERATED_PREFIX, REGENERATED_TTL_DAYS, limit);
+    }
+
+    private List<VocabularyMemoryRecord> retrieveL1(Long userId, String prefix, long ttlDays, int limit) {
         if (userId == null) return new ArrayList<>();
-        List<VocabularyMemoryRecord> records = getL1Records(L1_REGENERATED_PREFIX + userId, REGENERATED_TTL_DAYS);
+        List<VocabularyMemoryRecord> records = getL1Records(prefix + userId, ttlDays);
         return records.stream().limit(limit).collect(Collectors.toList());
     }
 
     @Override
     public List<VocabularyMemoryRecord> retrieveL2Mastered(Long userId, int limit) {
-        if (userId == null || limit <= 0) return new ArrayList<>();
-        PageRequest pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "masteryScore"));
-        List<UserVocabulary> userVocabularies = userVocabularyRepository.findL2MasteredByUserId(userId, pageable);
-        return userVocabularies.stream()
-                .map(this::toMemoryRecord)
-                .peek(record -> {
-                    if (record.getSourceTiers() == null) record.setSourceTiers(new ArrayList<>());
-                    record.getSourceTiers().add(VocabularyMemoryTier.L2_MASTERED);
-                })
-                .collect(Collectors.toList());
+        return retrieveL2(userId, limit,
+                Sort.by(Sort.Direction.DESC, "masteryScore"),
+                userVocabularyRepository::findL2MasteredByUserId,
+                VocabularyMemoryTier.L2_MASTERED);
     }
 
     @Override
     public List<VocabularyMemoryRecord> retrieveL2Reviewing(Long userId, int limit) {
-        if (userId == null || limit <= 0) return new ArrayList<>();
-        PageRequest pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "nextReviewAt"));
-        List<UserVocabulary> userVocabularies = userVocabularyRepository.findL2ReviewingByUserId(userId, pageable);
-        return userVocabularies.stream()
-                .map(this::toMemoryRecord)
-                .peek(record -> {
-                    if (record.getSourceTiers() == null) record.setSourceTiers(new ArrayList<>());
-                    record.getSourceTiers().add(VocabularyMemoryTier.L2_REVIEWING);
-                })
-                .collect(Collectors.toList());
+        return retrieveL2(userId, limit,
+                Sort.by(Sort.Direction.ASC, "nextReviewAt"),
+                userVocabularyRepository::findL2ReviewingByUserId,
+                VocabularyMemoryTier.L2_REVIEWING);
     }
 
     @Override
     public List<VocabularyMemoryRecord> retrieveL2Learning(Long userId, int limit) {
-        if (userId == null || limit <= 0) return new ArrayList<>();
-        PageRequest pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "updatedAt"));
-        List<UserVocabulary> userVocabularies = userVocabularyRepository.findL2LearningByUserId(userId, pageable);
-        return userVocabularies.stream()
-                .map(this::toMemoryRecord)
-                .peek(record -> {
-                    if (record.getSourceTiers() == null) record.setSourceTiers(new ArrayList<>());
-                    record.getSourceTiers().add(VocabularyMemoryTier.L2_LEARNING);
-                })
-                .collect(Collectors.toList());
+        return retrieveL2(userId, limit,
+                Sort.by(Sort.Direction.DESC, "updatedAt"),
+                userVocabularyRepository::findL2LearningByUserId,
+                VocabularyMemoryTier.L2_LEARNING);
     }
 
     @Override
     public List<VocabularyMemoryRecord> retrieveL2Weak(Long userId, int limit) {
+        return retrieveL2(userId, limit,
+                Sort.by(Sort.Direction.ASC, "masteryScore"),
+                userVocabularyRepository::findL2WeakByUserId,
+                VocabularyMemoryTier.L2_WEAK);
+    }
+
+    private List<VocabularyMemoryRecord> retrieveL2(Long userId, int limit, Sort sort,
+                                                     L2QueryFunction queryFunction,
+                                                     VocabularyMemoryTier tier) {
         if (userId == null || limit <= 0) return new ArrayList<>();
-        PageRequest pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.ASC, "masteryScore"));
-        List<UserVocabulary> userVocabularies = userVocabularyRepository.findL2WeakByUserId(userId, pageable);
+        PageRequest pageable = PageRequest.of(0, limit, sort);
+        List<UserVocabulary> userVocabularies = queryFunction.query(userId, pageable);
         return userVocabularies.stream()
                 .map(this::toMemoryRecord)
                 .peek(record -> {
                     if (record.getSourceTiers() == null) record.setSourceTiers(new ArrayList<>());
-                    record.getSourceTiers().add(VocabularyMemoryTier.L2_WEAK);
+                    record.getSourceTiers().add(tier);
                 })
                 .collect(Collectors.toList());
+    }
+
+    @FunctionalInterface
+    private interface L2QueryFunction {
+        List<UserVocabulary> query(Long userId, Pageable pageable);
     }
 
     @Override

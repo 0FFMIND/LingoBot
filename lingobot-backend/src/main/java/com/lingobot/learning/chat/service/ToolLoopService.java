@@ -4,7 +4,7 @@ import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatResponse;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
-import com.lingobot.infrastructure.llm.service.ModelRouterService;
+import com.lingobot.infrastructure.llm.service.LlmService;
 import com.lingobot.infrastructure.tool.dto.ToolCall;
 import com.lingobot.infrastructure.tool.dto.ToolResult;
 import com.lingobot.infrastructure.tool.service.ToolService;
@@ -26,7 +26,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ToolLoopService {
     
-    private final ModelRouterService modelRouterService;
+    private final LlmService llmService;
     private final ToolService toolService;
     private final ObjectMapper objectMapper;
     
@@ -41,7 +41,7 @@ public class ToolLoopService {
         while (toolCallCount < MAX_TOOL_CALLS) {
             log.info("=== Chat iteration {} with model {} ===", toolCallCount, model);
 
-            OpenAiChatResponse response = modelRouterService.chatWithTools(model, currentMessages, tools);
+            OpenAiChatResponse response = llmService.chatWithTools(model, currentMessages, tools);
 
             if (response.getChoices() == null || response.getChoices().isEmpty()) {
                 throw ChatException.badRequest("AI 返回空响应");
@@ -99,7 +99,7 @@ public class ToolLoopService {
         while (retryCount < MAX_ONE_TIME_TOOL_CALLS) {
             log.info("=== One-time tool call attempt {} with model {} ===", retryCount + 1, model);
 
-            OpenAiChatResponse response = modelRouterService.chatWithTools(model, currentMessages, tools);
+            OpenAiChatResponse response = llmService.chatWithTools(model, currentMessages, tools);
 
             if (response.getUsage() != null) {
                 if (response.getUsage().getPromptTokens() != null) {

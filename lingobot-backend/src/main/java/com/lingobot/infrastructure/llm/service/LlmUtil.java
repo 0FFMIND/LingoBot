@@ -106,16 +106,25 @@ public class LlmUtil {
         return "png";
     }
 
-    // 准备带音频的消息列表，将纯文本 user 消息转换为包含音频内容的多模态消息
+    // 准备带音频的消息列表，将音频内容仅附加（或替换）到最后一条 user 消息
     public static List<OpenAiChatMessage> prepareAudioMessages(
             List<OpenAiChatMessage> messages,
             String audioData,
             String audioFormat) {
 
         List<OpenAiChatMessage> result = new ArrayList<>();
+        int lastUserIndex = -1;
 
-        for (OpenAiChatMessage msg : messages) {
-            if ("user".equals(msg.getRole()) && !msg.hasAudioContent()) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            if ("user".equals(messages.get(i).getRole())) {
+                lastUserIndex = i;
+                break;
+            }
+        }
+
+        for (int i = 0; i < messages.size(); i++) {
+            OpenAiChatMessage msg = messages.get(i);
+            if (i == lastUserIndex && "user".equals(msg.getRole())) {
                 String textContent = extractTextContent(msg.getContent());
                 OpenAiChatMessage audioMessage = OpenAiChatMessage.createAudioMessage(
                         "user",
@@ -132,16 +141,25 @@ public class LlmUtil {
         return result;
     }
 
-    // 准备带图片的消息列表，将纯文本 user 消息转换为包含图片内容的多模态消息
+    // 准备带图片的消息列表，将图片内容仅附加到最后一条 user 消息
     public static List<OpenAiChatMessage> prepareImageMessages(
             List<OpenAiChatMessage> messages,
             String imageData,
             String imageFormat) {
 
         List<OpenAiChatMessage> result = new ArrayList<>();
+        int lastUserIndex = -1;
 
-        for (OpenAiChatMessage msg : messages) {
-            if ("user".equals(msg.getRole()) && !msg.hasImageContent()) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            if ("user".equals(messages.get(i).getRole())) {
+                lastUserIndex = i;
+                break;
+            }
+        }
+
+        for (int i = 0; i < messages.size(); i++) {
+            OpenAiChatMessage msg = messages.get(i);
+            if (i == lastUserIndex && "user".equals(msg.getRole()) && !msg.hasImageContent()) {
                 String textContent = extractTextContent(msg.getContent());
                 OpenAiChatMessage imageMessage = OpenAiChatMessage.createImageMessage(
                         "user",
@@ -158,7 +176,7 @@ public class LlmUtil {
         return result;
     }
 
-    // 准备混合多模态消息列表（音频+图片），将纯文本 user 消息转换为同时包含音频和图片的多模态消息
+    // 准备混合多模态消息列表（音频+图片），将媒体内容仅附加到最后一条 user 消息
     public static List<OpenAiChatMessage> prepareMultiModalMessages(
             List<OpenAiChatMessage> messages,
             String audioData,
@@ -167,9 +185,18 @@ public class LlmUtil {
             String imageFormat) {
 
         List<OpenAiChatMessage> result = new ArrayList<>();
+        int lastUserIndex = -1;
 
-        for (OpenAiChatMessage msg : messages) {
-            if ("user".equals(msg.getRole()) && !msg.hasAudioContent() && !msg.hasImageContent()) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            if ("user".equals(messages.get(i).getRole())) {
+                lastUserIndex = i;
+                break;
+            }
+        }
+
+        for (int i = 0; i < messages.size(); i++) {
+            OpenAiChatMessage msg = messages.get(i);
+            if (i == lastUserIndex && "user".equals(msg.getRole()) && !msg.hasAudioContent() && !msg.hasImageContent()) {
                 String textContent = extractTextContent(msg.getContent());
                 OpenAiChatMessage multiModalMessage = OpenAiChatMessage.createMultiModalMessage(
                         "user",
