@@ -2,12 +2,11 @@ package com.lingobot.learning.chat.service.impl;
 
 import com.lingobot.learning.chat.service.MemoryCompactService;
 import com.lingobot.learning.conversation.vocabulary.service.VocabularyConversationDataService;
+import com.lingobot.learning.memory.vocabulary.VocabularyCompactResult;
 import com.lingobot.learning.memory.vocabulary.VocabularyCompactService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-import java.util.Map;
 
 @Slf4j
 @Service
@@ -23,7 +22,7 @@ public class MemoryCompactServiceImpl implements MemoryCompactService {
 
         boolean isVocabularyMode = vocabularyConversationDataService.getByConversationId(conversationId).isPresent();
         if (!isVocabularyMode) {
-            return new CompactResult(false, "对话学习数据不存在", 0, 0);
+            return new CompactResult(false, "对话学习数据不存在", 0, 0, 0, 0, 0, 0, 0);
         }
 
         log.info("检测到 vocabulary 模式，调用 vocabulary compact 逻辑");
@@ -32,20 +31,26 @@ public class MemoryCompactServiceImpl implements MemoryCompactService {
 
     private CompactResult executeVocabularyCompact(Long conversationId) {
         try {
-            Map<String, Object> result = vocabularyCompactService.executeCompact(conversationId);
-            
-            Boolean executed = (Boolean) result.get("executed");
-            if (Boolean.TRUE.equals(executed)) {
-                int beforeTokens = result.get("beforeTokens") != null ? ((Number) result.get("beforeTokens")).intValue() : 0;
-                int afterTokens = result.get("afterTokens") != null ? ((Number) result.get("afterTokens")).intValue() : 0;
-                return new CompactResult(true, "vocabulary 压缩成功", beforeTokens, afterTokens);
+            VocabularyCompactResult result = vocabularyCompactService.executeCompact(conversationId);
+
+            if (result.isExecuted()) {
+                return new CompactResult(
+                    true,
+                    "vocabulary 压缩成功",
+                    result.getBeforeTokens(),
+                    result.getAfterTokens(),
+                    result.getCompactedCardsCount(),
+                    result.getCompactedCardsCount(),
+                    result.getRecentCardsCount(),
+                    result.getTotalCompactedCards(),
+                    1
+                );
             } else {
-                String reason = result.get("reason") != null ? result.get("reason").toString() : "压缩未执行";
-                return new CompactResult(false, reason, 0, 0);
+                return new CompactResult(false, result.getReason(), 0, 0, 0, 0, 0, 0, 0);
             }
         } catch (Exception e) {
             log.error("Vocabulary compact 执行失败", e);
-            return new CompactResult(false, "压缩执行失败: " + e.getMessage(), 0, 0);
+            return new CompactResult(false, "压缩执行失败: " + e.getMessage(), 0, 0, 0, 0, 0, 0, 0);
         }
     }
 }

@@ -12,10 +12,8 @@ export interface VocabularyData {
   userEnglishSentence?: string
   sentenceAnalysis?: string
   synonyms?: string[]
-  antonyms?: string[]
   vocabularyCategory?: string
   vocabularyDifficulty?: string
-  level?: string
   message?: string
   correct?: boolean
   user_answer?: string
@@ -70,7 +68,10 @@ export const isVocabularyJson = (content: string): VocabularyData | null => {
     if (parsed.action === 'check_meaning_accuracy' && parsed.word) {
       return parsed as VocabularyData
     }
-    if (parsed.action && parsed.word && parsed.phonetic) {
+    if (parsed.action === 'analyze_sentence' && parsed.current_word) {
+      return parsed as VocabularyData
+    }
+    if (parsed.action && (parsed.word || parsed.current_word)) {
       return parsed as VocabularyData
     }
     return null

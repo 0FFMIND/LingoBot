@@ -279,6 +279,26 @@ public class VocabularyCardServiceImpl implements VocabularyCardService {
             }
         }
 
+        // 如果找不到 currentPosition，找到最接近的有效位置（不超过 currentPosition 的最大位置）
+        if (currentIndex < 0 && currentPosition != null) {
+            int closestIndex = -1;
+            int closestPosition = -1;
+            for (int i = 0; i < cardDTOs.size(); i++) {
+                int pos = cardDTOs.get(i).getPosition();
+                if (pos <= currentPosition && pos > closestPosition) {
+                    closestPosition = pos;
+                    closestIndex = i;
+                }
+            }
+            if (closestIndex >= 0) {
+                currentIndex = closestIndex;
+                log.debug("currentPosition {} 不存在，使用最接近的位置 {}", currentPosition, closestPosition);
+            } else {
+                // 如果所有位置都大于 currentPosition，使用第一张卡片
+                currentIndex = -1;
+            }
+        }
+
         int nextIndex = 0;
         if (currentIndex >= 0) {
             nextIndex = currentIndex + 1;

@@ -42,8 +42,7 @@ public class SentenceAnalysisService {
     private final VocabularyMemoryService vocabularyMemoryService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
-
-    private static final String DEFAULT_MODEL = LlmProperties.MODEL_QWEN_FLASH;
+    private final LlmProperties llmProperties;
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
@@ -98,7 +97,7 @@ public class SentenceAnalysisService {
             Long vocabularyWordId = learningContext.getVocabularyWordId();
             Long userId = learningContext.getUserId();
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
-                    null, messages, tools, DEFAULT_MODEL);
+                    null, messages, tools, llmProperties.getModel());
             persistSentenceAnalysisResult(cardId, conversationId, vocabularyWordId, userId, userEnglishSentence, result);
             log.info("Sentence analysis completed for cardId={}", cardId);
         } catch (Exception e) {

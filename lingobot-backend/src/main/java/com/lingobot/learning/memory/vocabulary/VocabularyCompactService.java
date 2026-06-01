@@ -3,6 +3,7 @@ package com.lingobot.learning.memory.vocabulary;
 import com.lingobot.core.user.balance.service.BalanceService;
 import com.lingobot.infrastructure.common.config.ApiConfigProperties;
 import com.lingobot.infrastructure.common.config.LlmProperties;
+import com.lingobot.learning.chat.dto.HistoryBuildRequest;
 import com.lingobot.learning.chat.service.MessageHistoryService;
 import com.lingobot.learning.conversation.vocabulary.entity.VocabularyConversationData;
 import com.lingobot.learning.conversation.vocabulary.repository.VocabularyConversationDataRepository;
@@ -19,9 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -42,7 +41,7 @@ public class VocabularyCompactService {
     private static final int RECENT_CARDS_TO_KEEP = 3;
 
     @Transactional
-    public Map<String, Object> executeCompact(Long conversationId) {
+    public VocabularyCompactResult executeCompact(Long conversationId) {
         VocabularyConversationData learningData = learningDataRepository.findByConversationId(conversationId)
                 .orElseGet(() -> VocabularyConversationData.builder()
                         .conversationId(conversationId)
@@ -54,11 +53,8 @@ public class VocabularyCompactService {
                 .toList();
 
         if (completedCards.size() <= RECENT_CARDS_TO_KEEP) {
-            Map<String, Object> result = new HashMap<>();
-            result.put("executed", false);
-            result.put("reason", String.format("至少需要 %d 张已完成的单词卡片才能压缩，当前只有 %d 张",
+            return VocabularyCompactResult.notExecuted(String.format("至少需要 %d 张已完成的单词卡片才能压缩，当前只有 %d 张",
                     RECENT_CARDS_TO_KEEP + 1, completedCards.size()));
-            return result;
         }
 
         List<VocabularyCard> cardsToCompact = completedCards.subList(0, completedCards.size() - RECENT_CARDS_TO_KEEP);
@@ -68,17 +64,15 @@ public class VocabularyCompactService {
         );
 
         if (cardsToCompact.isEmpty()) {
-            Map<String, Object> result = new HashMap<>();
-            result.put("executed", false);
-            result.put("reason", "没有可压缩的单词卡片");
-            return result;
+            return VocabularyCompactResult.notExecuted("没有可压缩的单词卡片");
         }
 
         BigDecimal cost = BigDecimal.valueOf(apiConfigProperties.getCost("context", "compact"));
         Long transactionId = balanceService.freezeBalance(cost, "context", "compact", "AI压缩对话历史", conversationId);
 
         try {
-            int beforeCharacters = messageHistoryService.calculateContextLength(conversationId, "vocabulary");
+            int beforeCharacters = messageHistoryService.calculateContextLength(
+                    HistoryBuildRequest.forConversation(conversationId, "vocabulary"));
             int beforeTokens = beforeCharacters / 4;
 
             String compactedSummary = callLlmToCompact(cardsToCompact, learningData.getVocabularyCompactedSummary());
@@ -95,7 +89,8 @@ public class VocabularyCompactService {
             learningData.setVocabularyLastCompactedPosition(lastCompactedCard.getPosition());
             learningDataRepository.save(learningData);
 
-            int afterCharacters = messageHistoryService.calculateContextLength(conversationId, "vocabulary");
+            int afterCharacters = messageHistoryService.calculateContextLength(
+                    HistoryBuildRequest.forConversation(conversationId, "vocabulary"));
             int afterTokens = afterCharacters / 4;
             int savedTokens = Math.max(0, beforeTokens - afterTokens);
 
@@ -103,15 +98,16 @@ public class VocabularyCompactService {
             log.info("Compact completed: conversationId={}, compactedCards={}, recentCards={}, beforeTokens={}, afterTokens={}, savedTokens={}",
                     conversationId, cardsToCompact.size(), recentCards.size(), beforeTokens, afterTokens, savedTokens);
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("executed", true);
-            result.put("beforeTokens", beforeTokens);
-            result.put("afterTokens", afterTokens);
-            result.put("savedTokens", savedTokens);
-            result.put("compactedCardsCount", cardsToCompact.size());
-            result.put("recentCardsCount", recentCards.size());
-            result.put("totalCompactedCards", learningData.getVocabularyCompactedCardCount());
-            return result;
+            return new VocabularyCompactResult(
+                    true,
+                    "vocabulary 压缩成功",
+                    beforeTokens,
+                    afterTokens,
+                    savedTokens,
+                    cardsToCompact.size(),
+                    recentCards.size(),
+                    learningData.getVocabularyCompactedCardCount()
+            );
 
         } catch (Exception e) {
             balanceService.cancelTransaction(transactionId);

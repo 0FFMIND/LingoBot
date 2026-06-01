@@ -22,26 +22,31 @@ export interface AgentStatus {
   }>;
 }
 
+export const MESSAGE_PAGE_SIZE = 20;
+
 export interface UseChatResult {
   messages: MessageDTO[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMoreMessages: boolean;
   streamingContent: string;
   agentStatus: AgentStatus;
   sendMessage: (content: string, options?: SendMessageOptions) => Promise<void>;
   sendAudioMessage: (audioData: string, audioFormat: string, duration: number) => Promise<void>;
   sendImageMessage: (content: string, imageData: string, imageFormat: string) => Promise<void>;
   sendMessageWithIntent: (content: string, intent: string, currentWord: string) => Promise<void>;
-  retryMessage: (assistantMessageId: number) => Promise<void>;
-  retryMessageWithModel: (assistantMessageId: number, targetModel: string) => Promise<void>;
-  editMessage: (userMessageId: number, newContent: string) => Promise<void>;
+  retryMessage: (assistantMessageId: number) => void;
+  retryMessageWithModel: (assistantMessageId: number, targetModel: string) => void;
+  editMessage: (userMessageId: number, newContent: string) => void;
   editAudioMessage: (
     userMessageId: number, 
     newContent: string, 
     audioData?: string, 
     audioFormat?: string, 
     audioDuration?: number
-  ) => Promise<void>;
+  ) => void;
   loadMessages: () => Promise<void>;
+  loadMoreMessages: () => Promise<void>;
 }
 
 export interface SendMessageOptions {
@@ -126,6 +131,9 @@ export function useChat(
 ): UseChatResult {
   const [messages, setMessages] = useState<MessageDTO[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [nextPageToLoad, setNextPageToLoad] = useState(0);
   const [streamingContent, setStreamingContent] = useState('');
   const [agentStatus, setAgentStatus] = useState<AgentStatus>(RESET_AGENT_STATUS);
 
@@ -149,12 +157,31 @@ export function useChat(
     if (!isAuthenticated || !conversationPublicId) return;
     
     try {
-      const data = await chatService.getMessages(conversationPublicId);
-      setMessages(data);
+      const pageResult = await chatService.getMessages(conversationPublicId, 0, MESSAGE_PAGE_SIZE);
+      setMessages(pageResult.content);
+      setHasMoreMessages(pageResult.hasNext);
+      setNextPageToLoad(1);
     } catch (error) {
       console.error('加载消息失败:', error);
     }
   }, [isAuthenticated, conversationPublicId]);
+
+  const loadMoreMessages = useCallback(async () => {
+    if (!isAuthenticated || !conversationPublicId || loadingMore || !hasMoreMessages) return;
+    
+    setLoadingMore(true);
+    try {
+      const pageResult = await chatService.getMessages(conversationPublicId, nextPageToLoad, MESSAGE_PAGE_SIZE);
+      
+      setMessages((prev) => [...pageResult.content, ...prev]);
+      setHasMoreMessages(pageResult.hasNext);
+      setNextPageToLoad((prev) => prev + 1);
+    } catch (error) {
+      console.error('加载更多消息失败:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [isAuthenticated, conversationPublicId, loadingMore, hasMoreMessages, nextPageToLoad]);
 
   const createBaseRequest = useCallback((): Partial<ChatRequest> => ({
     mode,
@@ -227,7 +254,7 @@ export function useChat(
     );
 
     try {
-      await chatService.sendMessageStream(
+      chatService.sendMessageStream(
         request, callbacks.onChunk, callbacks.onDone,
         (error) => {
           console.error('流式消息错误:', error);
@@ -244,6 +271,7 @@ export function useChat(
       setMessages((prev) => prev.slice(0, -1));
       setStreamingContent('');
       setLoading(false);
+      setAgentStatus(RESET_AGENT_STATUS);
       alert('发送消息失败');
     }
   }, [messages, loadMessages, recordTokensFromMessage]);
@@ -315,8 +343,8 @@ export function useChat(
     await sendMessageNonStream(request);
   }, [isAuthenticated, conversationPublicId, loading, createBaseRequest, sendMessageNonStream]);
 
-  const startStreamWithRollback = useCallback(async (
-    streamFn: () => Promise<void>,
+  const startStreamWithRollback = useCallback((
+    streamFn: () => void,
     rollbackMsgs: MessageDTO[],
   ) => {
     setLoading(true);
@@ -324,17 +352,18 @@ export function useChat(
     setAgentStatus(RESET_AGENT_STATUS);
 
     try {
-      await streamFn();
+      streamFn();
     } catch (error) {
       console.error('操作失败:', error);
       setMessages(rollbackMsgs);
       setStreamingContent('');
       setLoading(false);
+      setAgentStatus(RESET_AGENT_STATUS);
       alert('操作失败');
     }
   }, []);
 
-  const retryMessage = useCallback(async (assistantMessageId: number) => {
+  const retryMessage = useCallback((assistantMessageId: number) => {
     if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const assistantMessageIndex = messages.findIndex((m) => m.id === assistantMessageId);
@@ -376,7 +405,7 @@ export function useChat(
     );
   }, [isAuthenticated, conversationPublicId, loading, messages, model, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
 
-  const retryMessageWithModel = useCallback(async (assistantMessageId: number, targetModel: string) => {
+  const retryMessageWithModel = useCallback((assistantMessageId: number, targetModel: string) => {
     if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const assistantMessageIndex = messages.findIndex((m) => m.id === assistantMessageId);
@@ -418,7 +447,7 @@ export function useChat(
     );
   }, [isAuthenticated, conversationPublicId, loading, messages, mode, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
 
-  const editMessage = useCallback(async (userMessageId: number, newContent: string) => {
+  const editMessage = useCallback((userMessageId: number, newContent: string) => {
     if (!isAuthenticated || !conversationPublicId || loading) return;
 
     const userMessageIndex = messages.findIndex((m) => m.id === userMessageId);
@@ -464,7 +493,7 @@ export function useChat(
     );
   }, [isAuthenticated, conversationPublicId, loading, messages, mode, model, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
 
-  const editAudioMessage = useCallback(async (
+  const editAudioMessage = useCallback((
     userMessageId: number, 
     newContent: string, 
     audioData?: string, 
@@ -489,11 +518,15 @@ export function useChat(
         : m
     ));
 
-    const request: ChatRequest = {
+    const request: EditMessageRequest = {
       conversationPublicId,
-      content: newContent,
-      ...createBaseRequest(),
-      messageType: finalAudioData ? 'audio' : 'text',
+      userMessageId,
+      newContent,
+      mode,
+      model,
+      learningMode,
+      vocabularyCategory,
+      vocabularyDifficulty,
       audioData: finalAudioData,
       audioFormat: finalAudioFormat,
       audioDuration: finalAudioDuration,
@@ -501,11 +534,11 @@ export function useChat(
 
     const callbacks = useStreamCallbacks(
       setStreamingContent, setAgentStatus, setLoading, recordTokensFromMessage,
-      request.conversationPublicId || null, loadMessages, rollbackMsgs,
+      conversationPublicId, loadMessages, rollbackMsgs,
     );
 
     startStreamWithRollback(
-      () => chatService.sendMessageStream(
+      () => chatService.editMessageStream(
         request, callbacks.onChunk, callbacks.onDone,
         (error) => {
           console.error('编辑消息错误:', error);
@@ -519,11 +552,13 @@ export function useChat(
       ),
       rollbackMsgs,
     );
-  }, [isAuthenticated, conversationPublicId, loading, messages, createBaseRequest, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
+  }, [isAuthenticated, conversationPublicId, loading, messages, mode, model, learningMode, vocabularyCategory, vocabularyDifficulty, loadMessages, recordTokensFromMessage, startStreamWithRollback]);
 
   return {
     messages,
     loading,
+    loadingMore,
+    hasMoreMessages,
     streamingContent,
     agentStatus,
     sendMessage,
@@ -535,5 +570,6 @@ export function useChat(
     editMessage,
     editAudioMessage,
     loadMessages,
+    loadMoreMessages,
   };
 }

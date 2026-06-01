@@ -43,8 +43,7 @@ public class MeaningCheckService {
     private final VocabularyMemoryService vocabularyMemoryService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate stringRedisTemplate;
-
-    private static final String DEFAULT_MODEL = LlmProperties.MODEL_QWEN_FLASH;
+    private final LlmProperties llmProperties;
     private static final String CACHE_KEY_CARD = "vocabulary:card:";
     private static final String CACHE_KEY_CARDS_LIST = "vocabulary:cards:";
     private static final String CACHE_KEY_CARDS_COUNT = "vocabulary:count:";
@@ -91,7 +90,7 @@ public class MeaningCheckService {
             }
 
             ToolLoopService.ToolLoopResult result = toolLoopService.executeOneTimeToolCall(
-                    null, messages, tools, DEFAULT_MODEL);
+                    null, messages, tools, llmProperties.getModel());
             persistMeaningCheckResult(cardId, resolvedConversationId, vocabularyWordId, userId, userMeaning, result);
             log.info("Meaning check completed for cardId={}", cardId);
         } catch (Exception e) {

@@ -4,6 +4,7 @@ import com.lingobot.core.conversation.dto.ConversationDTO;
 import com.lingobot.core.conversation.entity.Message;
 import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.infrastructure.common.config.ConversationProperties;
+import com.lingobot.learning.chat.dto.HistoryBuildRequest;
 import com.lingobot.learning.chat.service.MessageHistoryService;
 import com.lingobot.learning.conversation.chat.entity.ChatConversationData;
 import com.lingobot.learning.conversation.chat.service.ChatConversationDataService;
@@ -77,7 +78,8 @@ public class LearningConversationAggregateServiceImpl implements LearningConvers
                 : conversationProperties.getChatMaxTokens();
         int maxCharacters = maxTokens * TOKENS_TO_CHARACTERS_RATIO;
 
-        int currentCharacters = messageHistoryService.calculateContextLength(conversationId, learningMode);
+        int currentCharacters = messageHistoryService.calculateContextLength(
+                HistoryBuildRequest.forConversation(conversationId, learningMode));
         int currentTokens = currentCharacters / TOKENS_TO_CHARACTERS_RATIO;
 
         long wordCardsTotal = vocabularyCardRepository.countActiveCardsByConversationId(conversationId);

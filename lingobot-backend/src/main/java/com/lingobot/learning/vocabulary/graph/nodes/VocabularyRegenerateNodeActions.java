@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.user.preference.dto.UserPreferenceDTO;
 import com.lingobot.core.user.preference.service.UserPreferenceService;
+import com.lingobot.infrastructure.common.config.LlmProperties;
 import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
@@ -46,10 +47,10 @@ public class VocabularyRegenerateNodeActions {
 
     private static final String DEFAULT_VOCABULARY_CATEGORY = "cefr";
     private static final String DEFAULT_VOCABULARY_DIFFICULTY = "b2";
-    private static final String DEFAULT_MODEL = "qwen/qwen3.5-flash-20260224";
     private static final int MAX_RETRIES = 3;
 
     private final VocabularyMemoryService vocabularyMemoryService;
+    private final LlmProperties llmProperties;
     private final UserPreferenceService userPreferenceService;
     private final VocabularyCardGenerationPromptBuilder vocabularyCardGenerationPromptBuilder;
     private final VocabularyMemoryPromptBuilder memoryPromptBuilder;
@@ -115,7 +116,7 @@ public class VocabularyRegenerateNodeActions {
 
             category = (category == null || category.isBlank()) ? DEFAULT_VOCABULARY_CATEGORY : category.toLowerCase();
             difficulty = (difficulty == null || difficulty.isBlank()) ? DEFAULT_VOCABULARY_DIFFICULTY : difficulty.toLowerCase();
-            model = (model == null || model.isBlank()) ? DEFAULT_MODEL : model.toLowerCase();
+            model = (model == null || model.isBlank()) ? llmProperties.getModel() : model.toLowerCase();
 
             updates.put("category", category);
             updates.put("difficulty", difficulty);

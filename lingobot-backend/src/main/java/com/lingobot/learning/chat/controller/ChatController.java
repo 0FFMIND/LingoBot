@@ -5,6 +5,7 @@ import com.lingobot.learning.chat.dto.ChatRequest;
 import com.lingobot.learning.chat.dto.EditMessageRequest;
 import com.lingobot.learning.chat.dto.RetryMessageRequest;
 import com.lingobot.infrastructure.common.response.ApiResponse;
+import com.lingobot.infrastructure.common.response.PageResponseDTO;
 import com.lingobot.core.conversation.dto.MessageDTO;
 import com.lingobot.learning.chat.service.ChatService;
 import lombok.RequiredArgsConstructor;
@@ -12,8 +13,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -86,6 +85,18 @@ public class ChatController {
         MessageDTO response = chatService.sendMessage(request);
         return ResponseEntity.ok(ApiResponse.success("词汇消息发送成功", response));
     }
+
+    @PostMapping("/vocabulary/sentence")
+    public ResponseEntity<ApiResponse<MessageDTO>> sendVocabularySentenceMessage(@RequestBody ChatRequest request) {
+        resolveAndSetConversationId(request);
+        request.setMessageType(ChatRequest.MESSAGE_TYPE_VOCABULARY_SENTENCE);
+        request.setExecutionMode(ChatRequest.EXECUTION_MODE_ONETIME);
+        if (request.getLearningMode() == null) {
+            request.setLearningMode("vocabulary");
+        }
+        MessageDTO response = chatService.sendMessage(request);
+        return ResponseEntity.ok(ApiResponse.success("句子练习消息发送成功", response));
+    }
     
     @PostMapping(value = "/vocabulary/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendVocabularyMessageStream(@RequestBody ChatRequest request) {
@@ -97,12 +108,26 @@ public class ChatController {
         }
         return chatService.sendMessageStream(request);
     }
+
+    @PostMapping(value = "/vocabulary/sentence/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter sendVocabularySentenceMessageStream(@RequestBody ChatRequest request) {
+        resolveAndSetConversationId(request);
+        request.setMessageType(ChatRequest.MESSAGE_TYPE_VOCABULARY_SENTENCE);
+        request.setExecutionMode(ChatRequest.EXECUTION_MODE_ONETIME);
+        if (request.getLearningMode() == null) {
+            request.setLearningMode("vocabulary");
+        }
+        return chatService.sendMessageStream(request);
+    }
     
     @GetMapping("/conversations/{conversationPublicId}/messages")
-    public ResponseEntity<ApiResponse<List<MessageDTO>>> getMessages(@PathVariable String conversationPublicId) {
+    public ResponseEntity<ApiResponse<PageResponseDTO<MessageDTO>>> getMessages(
+            @PathVariable String conversationPublicId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         Long conversationId = conversationService.resolvePublicIdToId(conversationPublicId);
-        List<MessageDTO> messages = chatService.getMessagesByConversationId(conversationId);
-        return ResponseEntity.ok(ApiResponse.success(messages));
+        PageResponseDTO<MessageDTO> pageResult = chatService.getMessagesByConversationId(conversationId, page, size);
+        return ResponseEntity.ok(ApiResponse.success(pageResult));
     }
     
     @PostMapping("/retry/{conversationPublicId}/{assistantMessageId}")

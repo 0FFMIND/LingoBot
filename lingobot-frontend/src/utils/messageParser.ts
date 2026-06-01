@@ -20,10 +20,8 @@ export interface VocabularyData {
   example?: string;
   exampleTranslation?: string;
   synonyms?: string[];
-  antonyms?: string[];
   vocabularyCategory?: string;
   vocabularyDifficulty?: string;
-  level?: string;
   message?: string;
   correct?: boolean;
   user_answer?: string;
@@ -109,7 +107,13 @@ export const parseMessageContent = (content: string): ParsedMessage => {
 export const isVocabularyJson = (content: string): VocabularyData | null => {
   try {
     const parsed = JSON.parse(content);
-    if (parsed.action && parsed.word && parsed.phonetic) {
+    if (parsed.action === 'check_meaning_accuracy' && parsed.word) {
+      return parsed as VocabularyData;
+    }
+    if (parsed.action === 'analyze_sentence' && parsed.current_word) {
+      return parsed as VocabularyData;
+    }
+    if (parsed.action && (parsed.word || parsed.current_word)) {
       return parsed as VocabularyData;
     }
     return null;

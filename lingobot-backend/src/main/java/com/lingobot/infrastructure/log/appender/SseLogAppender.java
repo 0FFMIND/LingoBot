@@ -5,11 +5,10 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.ThrowableProxy;
 import ch.qos.logback.core.AppenderBase;
 import com.lingobot.infrastructure.log.service.LogPushService;
+import org.slf4j.MDC;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * 自定义 Logback Appender，将日志通过 SSE 推送到前端。
@@ -101,24 +100,17 @@ public class SseLogAppender extends AppenderBase<ILoggingEvent> implements Appli
 
     /**
      * 获取当前用户标识。
+     * 从 MDC 中读取用户名（由 JwtAuthenticationFilter 在认证时设置）。
      * 如果用户已登录，返回格式为 "[USER 邮箱]"；
      * 如果未登录或获取失败，返回 "[SYSTEM]"。
      */
     private String getUserIdentifier() {
         try {
-            // 从 SecurityContext 中获取认证信息
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication == null
-                    || !authentication.isAuthenticated()
-                    || "anonymousUser".equals(authentication.getPrincipal())) {
-                return "[SYSTEM]";
-            }
-            
-            String username = authentication.getName();
+            // 从 MDC 中获取用户名（MDC 会被 Logback 复制到日志线程中）
+            String username = MDC.get("username");
             if (username == null || username.isBlank()) {
                 return "[SYSTEM]";
             }
-
             return "[USER " + username + "]";
         } catch (Exception e) {
             return "[SYSTEM]";

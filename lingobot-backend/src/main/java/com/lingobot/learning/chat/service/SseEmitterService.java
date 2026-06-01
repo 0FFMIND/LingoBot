@@ -5,7 +5,6 @@ import com.lingobot.learning.chat.service.ToolLoopService.ToolLoopResult;
 import com.lingobot.infrastructure.common.exception.ChatException;
 import com.lingobot.core.conversation.dto.MessageDTO;
 import com.lingobot.core.conversation.dto.TokenUsageDTO;
-import com.lingobot.core.conversation.entity.Conversation;
 import com.lingobot.core.conversation.service.ConversationService;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiTool;
@@ -16,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
@@ -36,19 +36,22 @@ public class SseEmitterService {
     private final ToolLoopService toolLoopService;
     private final ObjectMapper objectMapper;
     private final Executor sseExecutor;
+    private final TransactionTemplate transactionTemplate;
     
     public SseEmitterService(ConversationService conversationService,
                               LlmService llmService,
                               ToolService toolService,
                               ToolLoopService toolLoopService,
                               ObjectMapper objectMapper,
-                              @Qualifier("sseExecutor") Executor sseExecutor) {
+                              @Qualifier("sseExecutor") Executor sseExecutor,
+                              TransactionTemplate transactionTemplate) {
         this.conversationService = conversationService;
         this.llmService = llmService;
         this.toolService = toolService;
         this.toolLoopService = toolLoopService;
         this.objectMapper = objectMapper;
         this.sseExecutor = sseExecutor;
+        this.transactionTemplate = transactionTemplate;
     }
     
     private static final long SSE_TIMEOUT = 180000L;
@@ -70,16 +73,16 @@ public class SseEmitterService {
                                                    Runnable onSuccessCallback) {
         if (tools != null && !tools.isEmpty()) {
             if ("agent".equals(mode)) {
-                return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, conversationRef, fullResponse, disposableRef, cancelled) -> {
+                return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, convId, fullResponse, disposableRef, cancelled) -> {
                     log.info("Agent mode: executing full tool loop with SSE events, model: {}", model);
                     setupEmitterCallbacks(emitter, disposableRef, cancelled);
                     sseExecutor.execute(() -> {
                         executeAgentToolLoopWithSse(conversationId, messages, tools, emitter,
-                                fullResponse, disposableRef, conversationRef.get(), model, cancelled, onSuccessCallback);
+                                fullResponse, disposableRef, model, cancelled, onSuccessCallback);
                     });
                 });
             } else {
-                return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, conversationRef, fullResponse, disposableRef, cancelled) -> {
+                return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, convId, fullResponse, disposableRef, cancelled) -> {
                     log.info("Chat mode: executing single tool call (one-time, max 3 retries), model: {}", model);
                     setupEmitterCallbacks(emitter, disposableRef, cancelled);
                     sseExecutor.execute(() -> {
@@ -88,13 +91,13 @@ public class SseEmitterService {
 
                             if (toolLoopResult.hasToolCalls()) {
                                 log.info("Tool calls were executed, returning tool results directly");
-                                sendContentAndDone(emitter, conversationRef.get(), toolLoopResult.getToolResultText(), toolLoopResult.getTokenUsage(), fullResponse, onSuccessCallback);
+                                sendContentAndDone(emitter, conversationId, toolLoopResult.getToolResultText(), toolLoopResult.getTokenUsage(), fullResponse, onSuccessCallback);
                             } else if (toolLoopResult.hasTextResponse()) {
                                 log.info("AI returned text response directly, using cached response");
-                                sendContentAndDone(emitter, conversationRef.get(), toolLoopResult.getTextResponse(), toolLoopResult.getTokenUsage(), fullResponse, onSuccessCallback);
+                                sendContentAndDone(emitter, conversationId, toolLoopResult.getTextResponse(), toolLoopResult.getTokenUsage(), fullResponse, onSuccessCallback);
                             } else {
                                 log.warn("One-time tool call returned no result, completing emitter with empty response");
-                                sendContentAndDone(emitter, conversationRef.get(), "", toolLoopResult.getTokenUsage(), fullResponse, onSuccessCallback);
+                                sendContentAndDone(emitter, conversationId, "", toolLoopResult.getTokenUsage(), fullResponse, onSuccessCallback);
                             }
                         } catch (Exception e) {
                             log.error("One-time tool call failed", e);
@@ -105,9 +108,9 @@ public class SseEmitterService {
             }
         }
 
-        return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, conversationRef, fullResponse, disposableRef, cancelled) -> {
+        return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, convId, fullResponse, disposableRef, cancelled) -> {
             Flux<String> responseFlux = llmService.chatStream(model, messages);
-            subscribeFluxToEmitter(responseFlux, emitter, conversationRef, fullResponse, disposableRef, "", cancelled, onSuccessCallback);
+            subscribeFluxToEmitter(responseFlux, emitter, conversationId, fullResponse, disposableRef, "", cancelled, onSuccessCallback);
         });
     }
     
@@ -129,10 +132,10 @@ public class SseEmitterService {
                                                    String audioData,
                                                    String audioFormat,
                                                    Runnable onSuccessCallback) {
-        return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, conversationRef, fullResponse, disposableRef, cancelled) -> {
+        return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, convId, fullResponse, disposableRef, cancelled) -> {
             log.info("开始音频流式处理，使用 Qwen-Omni 模型");
             Flux<String> responseFlux = llmService.chatStreamWithAudio(messages, audioData, audioFormat, model);
-            subscribeFluxToEmitter(responseFlux, emitter, conversationRef, fullResponse, disposableRef, "音频", cancelled, onSuccessCallback);
+            subscribeFluxToEmitter(responseFlux, emitter, conversationId, fullResponse, disposableRef, "音频", cancelled, onSuccessCallback);
         });
     }
     
@@ -154,16 +157,16 @@ public class SseEmitterService {
                                                    String imageData,
                                                    String imageFormat,
                                                    Runnable onSuccessCallback) {
-        return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, conversationRef, fullResponse, disposableRef, cancelled) -> {
+        return createEmitterWithConversation(conversationId, onSuccessCallback, (emitter, convId, fullResponse, disposableRef, cancelled) -> {
             log.info("开始图片流式处理，使用支持图片的多模态模型");
             Flux<String> responseFlux = llmService.chatStreamWithImage(messages, imageData, imageFormat, model);
-            subscribeFluxToEmitter(responseFlux, emitter, conversationRef, fullResponse, disposableRef, "图片", cancelled, onSuccessCallback);
+            subscribeFluxToEmitter(responseFlux, emitter, conversationId, fullResponse, disposableRef, "图片", cancelled, onSuccessCallback);
         });
     }
 
     @FunctionalInterface
     private interface EmitterInitializer {
-        void initialize(SseEmitter emitter, AtomicReference<Conversation> conversationRef,
+        void initialize(SseEmitter emitter, Long conversationId,
                         AtomicReference<String> fullResponse, AtomicReference<Disposable> disposableRef,
                         java.util.concurrent.atomic.AtomicBoolean cancelled);
     }
@@ -174,9 +177,8 @@ public class SseEmitterService {
         AtomicReference<Disposable> disposableRef = new AtomicReference<>();
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
-        final var conversationRef = new AtomicReference<Conversation>();
         try {
-            conversationRef.set(conversationService.getConversationEntityById(conversationId));
+            conversationService.getConversationEntityById(conversationId);
         } catch (Exception e) {
             log.error("Failed to get conversation: {}", conversationId, e);
             sendErrorAndComplete(emitter, e);
@@ -184,7 +186,7 @@ public class SseEmitterService {
         }
 
         try {
-            initializer.initialize(emitter, conversationRef, fullResponse, disposableRef, cancelled);
+            initializer.initialize(emitter, conversationId, fullResponse, disposableRef, cancelled);
         } catch (Exception e) {
             log.error("Emitter initialization failed", e);
             sendErrorAndComplete(emitter, e);
@@ -195,7 +197,7 @@ public class SseEmitterService {
 
     private void subscribeFluxToEmitter(Flux<String> responseFlux,
                                          SseEmitter emitter,
-                                         AtomicReference<Conversation> conversationRef,
+                                         Long conversationId,
                                          AtomicReference<String> fullResponse,
                                          AtomicReference<Disposable> disposableRef,
                                          String label,
@@ -211,18 +213,22 @@ public class SseEmitterService {
                         String json = objectMapper.writeValueAsString(event);
                         emitter.send(SseEmitter.event().data(json));
                     } catch (IOException e) {
-                        log.warn("发送SSE 事件失败: {}", e.getMessage());
-                        throw ChatException.badRequest("发送SSE事件失败: " + e.getMessage());
+                        log.warn("发送SSE事件失败，客户端可能已断开连接: {}", e.getMessage());
+                        if (disposableRef.get() != null) {
+                            disposableRef.get().dispose();
+                        }
+                        cancelled.set(true);
                     }
                 })
                 .doOnComplete(() -> {
                     try {
                         log.info("{}流式响应完成，总长度 {}", label.isEmpty() ? "" : label, fullResponse.get().length());
-                        if (onSuccessCallback != null) {
-                            onSuccessCallback.run();
-                        }
-                        MessageDTO finalMessage = conversationService.addAssistantMessage(
-                                conversationRef.get(), fullResponse.get());
+                        MessageDTO finalMessage = transactionTemplate.execute(status -> {
+                            if (onSuccessCallback != null) {
+                                onSuccessCallback.run();
+                            }
+                            return conversationService.addAssistantMessage(conversationId, fullResponse.get());
+                        });
                         sendDoneEvent(emitter, finalMessage);
                         emitter.complete();
                         log.info("{}流式处理完成", label.isEmpty() ? "" : label);
@@ -240,13 +246,13 @@ public class SseEmitterService {
         disposableRef.set(disposable);
     }
 
-    private void sendContentAndDone(SseEmitter emitter, Conversation conversation,
+    private void sendContentAndDone(SseEmitter emitter, Long conversationId,
                                      String text, TokenUsageDTO tokenUsage,
                                      AtomicReference<String> fullResponse) {
-        sendContentAndDone(emitter, conversation, text, tokenUsage, fullResponse, null);
+        sendContentAndDone(emitter, conversationId, text, tokenUsage, fullResponse, null);
     }
 
-    private void sendContentAndDone(SseEmitter emitter, Conversation conversation,
+    private void sendContentAndDone(SseEmitter emitter, Long conversationId,
                                      String text, TokenUsageDTO tokenUsage,
                                      AtomicReference<String> fullResponse,
                                      Runnable onSuccessCallback) {
@@ -256,10 +262,12 @@ public class SseEmitterService {
             String contentJson = objectMapper.writeValueAsString(contentEvent);
             emitter.send(SseEmitter.event().data(contentJson));
 
-            if (onSuccessCallback != null) {
-                onSuccessCallback.run();
-            }
-            MessageDTO finalMessage = conversationService.addAssistantMessage(conversation, text, tokenUsage);
+            MessageDTO finalMessage = transactionTemplate.execute(status -> {
+                if (onSuccessCallback != null) {
+                    onSuccessCallback.run();
+                }
+                return conversationService.addAssistantMessage(conversationId, text, tokenUsage);
+            });
             sendDoneEvent(emitter, finalMessage);
             emitter.complete();
         } catch (Exception e) {
@@ -301,7 +309,6 @@ public class SseEmitterService {
                                               SseEmitter emitter,
                                               AtomicReference<String> fullResponse,
                                               AtomicReference<Disposable> disposableRef,
-                                              Conversation conversation,
                                               String model,
                                               java.util.concurrent.atomic.AtomicBoolean cancelled,
                                               Runnable onSuccessCallback) {
@@ -402,7 +409,7 @@ public class SseEmitterService {
                             .totalTokens(totalTokens > 0 ? totalTokens : null)
                             .build();
 
-                    sendContentAndDone(emitter, conversation, textContent, tokenUsage, fullResponse, onSuccessCallback);
+                    sendContentAndDone(emitter, conversationId, textContent, tokenUsage, fullResponse, onSuccessCallback);
                     return;
                 } else {
                     log.warn("AI returned empty response with no tool calls");

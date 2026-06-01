@@ -33,15 +33,34 @@ public class ToolLoopService {
     private static final int MAX_TOOL_CALLS = 10;
     private static final int MAX_ONE_TIME_TOOL_CALLS = 3;
     
-    public String executeToolLoop(Long conversationId, List<OpenAiChatMessage> messages, 
-                                   List<OpenAiTool> tools, String mode, String model) {
+    public ToolLoopResult executeToolLoop(Long conversationId, List<OpenAiChatMessage> messages, 
+                                           List<OpenAiTool> tools, String mode, String model) {
         int toolCallCount = 0;
         List<OpenAiChatMessage> currentMessages = new ArrayList<>(messages);
+        int totalPromptTokens = 0;
+        int totalCompletionTokens = 0;
+        int totalTokens = 0;
 
         while (toolCallCount < MAX_TOOL_CALLS) {
             log.info("=== Chat iteration {} with model {} ===", toolCallCount, model);
 
             OpenAiChatResponse response = llmService.chatWithTools(model, currentMessages, tools);
+
+            if (response.getUsage() != null) {
+                if (response.getUsage().getPromptTokens() != null) {
+                    totalPromptTokens += response.getUsage().getPromptTokens();
+                }
+                if (response.getUsage().getCompletionTokens() != null) {
+                    totalCompletionTokens += response.getUsage().getCompletionTokens();
+                }
+                if (response.getUsage().getTotalTokens() != null) {
+                    totalTokens += response.getUsage().getTotalTokens();
+                }
+                log.info("LLM Response token usage: prompt={}, completion={}, total={}",
+                        response.getUsage().getPromptTokens(),
+                        response.getUsage().getCompletionTokens(),
+                        response.getUsage().getTotalTokens());
+            }
 
             if (response.getChoices() == null || response.getChoices().isEmpty()) {
                 throw ChatException.badRequest("AI 返回空响应");
@@ -77,7 +96,12 @@ public class ToolLoopService {
                 log.info("Tool call count: {}, continuing loop", toolCallCount);
             } else if (textContent != null && !textContent.isEmpty()) {
                 log.info("AI returned text response, ending loop");
-                return textContent;
+                TokenUsageDTO usage = TokenUsageDTO.builder()
+                        .promptTokens(totalPromptTokens > 0 ? totalPromptTokens : null)
+                        .completionTokens(totalCompletionTokens > 0 ? totalCompletionTokens : null)
+                        .totalTokens(totalTokens > 0 ? totalTokens : null)
+                        .build();
+                return new ToolLoopResult(false, null, currentMessages, textContent, usage);
             } else {
                 log.warn("AI returned empty response with no tool calls");
                 throw ChatException.badRequest("AI 返回空响应");

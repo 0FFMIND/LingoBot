@@ -1,21 +1,19 @@
 package com.lingobot.learning.chat.dto;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ChatRequest {
+@EqualsAndHashCode(callSuper = true)
+public class ChatRequest extends BaseChatRequest {
     
-    private Long conversationId;
-    private String conversationPublicId;
     private String content;
-    private String mode;
-    private String model;
     private String messageType;
     private String executionMode;
     private String audioData;
@@ -23,35 +21,17 @@ public class ChatRequest {
     private Integer audioDuration;
     private String imageData;
     private String imageFormat;
-    private String learningMode;
     private String intent;
     private String currentWord;
-    private String vocabularyCategory;
-    private String vocabularyDifficulty;
     
     public static final String EXECUTION_MODE_LOOP = "loop";
     public static final String EXECUTION_MODE_ONETIME = "onetime";
     
     public static final String MESSAGE_TYPE_CHAT = "chat";
     public static final String MESSAGE_TYPE_VOCABULARY = "vocabulary";
+    public static final String MESSAGE_TYPE_VOCABULARY_SENTENCE = "vocabulary_sentence";
     public static final String MESSAGE_TYPE_AUDIO = "audio";
     public static final String MESSAGE_TYPE_IMAGE = "image";
-    
-    public String getModelOrDefault() {
-        return model != null ? model : "qwen/qwen3.5-flash-20260224";
-    }
-    
-    public String getLearningModeOrDefault() {
-        return learningMode != null ? learningMode : "chat";
-    }
-    
-    public String getVocabularyCategoryOrDefault() {
-        return vocabularyCategory != null ? vocabularyCategory : "cefr";
-    }
-    
-    public String getVocabularyDifficultyOrDefault() {
-        return vocabularyDifficulty != null ? vocabularyDifficulty : "b2";
-    }
     
     public String getExecutionModeOrDefault() {
         return executionMode != null ? executionMode : EXECUTION_MODE_LOOP;

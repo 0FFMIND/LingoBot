@@ -643,7 +643,30 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
     }
 
     private void upsertL1Record(String key, VocabularyMemoryRecord record, long ttlDays) {
+        String lockKey = key + ":lock";
+        boolean lockAcquired = false;
+        int maxRetries = 3;
+        int retryCount = 0;
+
         try {
+            // 重试获取锁，避免并发更新被静默丢弃
+            while (!lockAcquired && retryCount < maxRetries) {
+                lockAcquired = Boolean.TRUE.equals(
+                        stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "locked", 10, TimeUnit.SECONDS)
+                );
+                if (!lockAcquired) {
+                    retryCount++;
+                    if (retryCount < maxRetries) {
+                        Thread.sleep(50);
+                    }
+                }
+            }
+
+            if (!lockAcquired) {
+                log.warn("Failed to acquire lock for L1 memory update after {} retries, key={}", maxRetries, key);
+                return;
+            }
+
             List<VocabularyMemoryRecord> records = getL1Records(key, ttlDays);
             String normalizedWord = normalize(record.getWord());
             records.stream()
@@ -656,10 +679,14 @@ public class VocabularyMemoryServiceImpl implements VocabularyMemoryService {
 
             String json = objectMapper.writeValueAsString(records);
             stringRedisTemplate.opsForValue().set(key, json, ttlDays, TimeUnit.DAYS);
-            log.debug("Updated L1 vocabulary memory: key={}, eventType={}, word={}",
-                    key, record.getEventType(), record.getWord());
+            log.debug("Updated L1 vocabulary memory: key={}, eventType={}, word={}, retries={}",
+                    key, record.getEventType(), record.getWord(), retryCount);
         } catch (Exception e) {
             log.warn("Failed to update L1 vocabulary memory: key={}, word={}", key, record.getWord(), e);
+        } finally {
+            if (lockAcquired) {
+                stringRedisTemplate.delete(lockKey);
+            }
         }
     }
 

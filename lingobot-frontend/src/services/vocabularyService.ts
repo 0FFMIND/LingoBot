@@ -15,7 +15,7 @@ import {
 
 export type AIModifyVocabularyRequest = Partial<Pick<
   UserVocabularyDTO,
-  'word' | 'phonetic' | 'partOfSpeech' | 'meaning' | 'example' | 'exampleTranslation' | 'synonyms' | 'category' | 'difficulty'
+  'word' | 'phonetic' | 'partOfSpeech' | 'meaning' | 'synonyms' | 'category' | 'difficulty'
 >> & { id: number };
 
 type MeaningCheckStatus = {
@@ -264,7 +264,7 @@ export const vocabularyService = {
 
   updateUserVocabulary: async (
     id: number,
-    request: Partial<Pick<UserVocabularyDTO, 'word' | 'phonetic' | 'partOfSpeech' | 'meaning' | 'example' | 'exampleTranslation' | 'synonyms' | 'category' | 'difficulty'>>
+    request: Partial<Pick<UserVocabularyDTO, 'word' | 'phonetic' | 'partOfSpeech' | 'meaning' | 'synonyms' | 'category' | 'difficulty'>>
   ): Promise<UserVocabularyDTO> => {
     return httpClient.put<UserVocabularyDTO>(`/user-vocabulary/${id}`, request);
   },

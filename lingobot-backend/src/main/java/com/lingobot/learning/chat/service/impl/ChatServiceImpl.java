@@ -1,7 +1,9 @@
 package com.lingobot.learning.chat.service.impl;
 
+import com.lingobot.infrastructure.common.config.LlmProperties;
 import com.lingobot.learning.chat.dto.ChatRequest;
 import com.lingobot.learning.chat.dto.EditMessageRequest;
+import com.lingobot.learning.chat.dto.HistoryBuildRequest;
 import com.lingobot.learning.chat.dto.RetryMessageRequest;
 import com.lingobot.learning.chat.service.ChatService;
 import com.lingobot.learning.chat.service.ContextManagerService;
@@ -11,6 +13,7 @@ import com.lingobot.learning.chat.service.SseEmitterService;
 import com.lingobot.learning.chat.service.ToolLoopService;
 import com.lingobot.learning.conversation.vocabulary.service.VocabularyConversationDataService;
 import com.lingobot.infrastructure.common.exception.ChatException;
+import com.lingobot.infrastructure.common.response.PageResponseDTO;
 import com.lingobot.core.conversation.dto.MessageDTO;
 import com.lingobot.core.conversation.dto.TokenUsageDTO;
 import com.lingobot.core.conversation.entity.Message;
@@ -25,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,6 +46,7 @@ public class ChatServiceImpl implements ChatService {
     private final ContextManagerService contextManagerService;
     private final MemoryCompactService memoryCompactService;
     private final VocabularyConversationDataService vocabularyConversationDataService;
+    private final LlmProperties llmProperties;
     
     private static final String DEFAULT_MODE = "chat";
     
@@ -68,6 +73,118 @@ public class ChatServiceImpl implements ChatService {
             this.tools = tools;
         }
     }
+
+    private static class ValidatedRetryContext {
+        final List<Message> allMessages;
+        final int assistantIndex;
+
+        ValidatedRetryContext(List<Message> allMessages, int assistantIndex) {
+            this.allMessages = allMessages;
+            this.assistantIndex = assistantIndex;
+        }
+    }
+
+    private static class ValidatedEditContext {
+        final Message userMessage;
+        final List<Message> allMessages;
+        final int userMessageIndex;
+
+        ValidatedEditContext(Message userMessage, List<Message> allMessages, int userMessageIndex) {
+            this.userMessage = userMessage;
+            this.allMessages = allMessages;
+            this.userMessageIndex = userMessageIndex;
+        }
+    }
+
+    private ValidatedRetryContext validateRetryRequest(Long conversationId, Long assistantMessageId) {
+        Optional<Message> assistantMessageOpt = messageRepository.findById(assistantMessageId);
+
+        if (assistantMessageOpt.isEmpty()) {
+            throw ChatException.badRequest("要重试的消息不存在: " + assistantMessageId);
+        }
+
+        Message assistantMessage = assistantMessageOpt.get();
+
+        if (!"assistant".equals(assistantMessage.getRole())) {
+            throw ChatException.badRequest("只能重试AI助手的消息");
+        }
+
+        if (!assistantMessage.getConversation().getId().equals(conversationId)) {
+            throw ChatException.badRequest("消息不属于该对话");
+        }
+
+        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
+        int assistantIndex = -1;
+
+        for (int i = 0; i < allMessages.size(); i++) {
+            if (allMessages.get(i).getId().equals(assistantMessageId)) {
+                assistantIndex = i;
+                break;
+            }
+        }
+
+        if (assistantIndex == -1) {
+            throw ChatException.badRequest("在对话中未找到该消息");
+        }
+
+        if (assistantIndex == 0) {
+            throw ChatException.badRequest("该消息是第一条消息，无法重试");
+        }
+
+        Message userMessage = allMessages.get(assistantIndex - 1);
+
+        if (!"user".equals(userMessage.getRole())) {
+            throw ChatException.badRequest("前一条消息不是用户消息");
+        }
+
+        return new ValidatedRetryContext(allMessages, assistantIndex);
+    }
+
+    private ValidatedEditContext validateEditRequest(EditMessageRequest request) {
+        if (request.getNewContent() == null || request.getNewContent().trim().isEmpty()) {
+            throw ChatException.badRequest("消息内容不能为空");
+        }
+
+        Optional<Message> userMessageOpt = messageRepository.findById(request.getUserMessageId());
+
+        if (userMessageOpt.isEmpty()) {
+            throw ChatException.badRequest("要编辑的消息不存在: " + request.getUserMessageId());
+        }
+
+        Message userMessage = userMessageOpt.get();
+
+        if (!"user".equals(userMessage.getRole())) {
+            throw ChatException.badRequest("只能编辑用户消息");
+        }
+
+        if (!userMessage.getConversation().getId().equals(request.getConversationId())) {
+            throw ChatException.badRequest("消息不属于该对话");
+        }
+
+        boolean contentChanged = !userMessage.getContent().trim().equals(request.getNewContent().trim());
+        boolean audioChanged = request.hasAudio() && !request.getAudioData().equals(userMessage.getAudioData());
+        boolean imageChanged = request.hasImage() && !request.getImageData().equals(userMessage.getImageData());
+
+        if (!contentChanged && !audioChanged && !imageChanged) {
+            throw ChatException.badRequest("消息内容没有变化");
+        }
+
+        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
+        int userMessageIndex = -1;
+
+        for (int i = 0; i < allMessages.size(); i++) {
+            if (allMessages.get(i).getId().equals(request.getUserMessageId())) {
+                userMessageIndex = i;
+                break;
+            }
+        }
+
+        if (userMessageIndex == -1) {
+            throw ChatException.badRequest("在对话中未找到该消息");
+        }
+
+        return new ValidatedEditContext(userMessage, allMessages, userMessageIndex);
+    }
     
     private FlowContext buildFlowContext(ChatRequest request, String forceMode, String forceLearningMode) {
         String mode = forceMode != null ? forceMode : 
@@ -79,8 +196,13 @@ public class ChatServiceImpl implements ChatService {
         
         checkAndExecuteCompactIfNeeded(request.getConversationId());
         
-        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryWithMode(
-                request.getConversationId(), learningMode, vocabularyCategory, vocabularyDifficulty);
+        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistory(
+                HistoryBuildRequest.builder()
+                        .conversationId(request.getConversationId())
+                        .learningMode(learningMode)
+                        .vocabularyCategory(vocabularyCategory)
+                        .vocabularyDifficulty(vocabularyDifficulty)
+                        .build());
         
         List<OpenAiTool> tools;
         if (forceMode != null) {
@@ -92,7 +214,7 @@ public class ChatServiceImpl implements ChatService {
         return new FlowContext(
                 request.getConversationId(),
                 mode,
-                request.getModelOrDefault(),
+                resolveModel(request.getModel()),
                 learningMode,
                 vocabularyCategory,
                 vocabularyDifficulty,
@@ -123,7 +245,14 @@ public class ChatServiceImpl implements ChatService {
             }
         } else {
             log.info("Executing loop tool call");
-            aiResponse = toolLoopService.executeToolLoop(ctx.conversationId, ctx.messages, ctx.tools, ctx.mode, ctx.model);
+            ToolLoopService.ToolLoopResult result = toolLoopService.executeToolLoop(
+                    ctx.conversationId, ctx.messages, ctx.tools, ctx.mode, ctx.model);
+            aiResponse = result.getTextResponse();
+            if (result.hasTokenUsage()) {
+                tokenUsage = result.getTokenUsage();
+                log.info("Token usage from tool loop: prompt={}, completion={}, total={}",
+                        tokenUsage.getPromptTokens(), tokenUsage.getCompletionTokens(), tokenUsage.getTotalTokens());
+            }
         }
         
         return conversationService.addAssistantMessage(ctx.conversationId, aiResponse, tokenUsage);
@@ -169,7 +298,6 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    @Transactional
     public SseEmitter sendMessageStream(ChatRequest request) {
         log.info("=== 执行流式消息流程 ===");
         log.info("messageType: {}, executionMode: {}, learningMode: {}", 
@@ -177,33 +305,53 @@ public class ChatServiceImpl implements ChatService {
                 request.getExecutionModeOrDefault(),
                 request.getLearningModeOrDefault());
         
-        validateChatRequestStream(request);
-        
-        addUserMessageToConversation(request);
+        validateChatRequest(request);
         
         String forceLearningMode = request.isMessageTypeVocabulary() ? "vocabulary" : null;
+        String mode = request.getModeOrDefault();
+        String learningMode = forceLearningMode != null ? forceLearningMode : request.getLearningModeOrDefault();
+        String vocabularyCategory = request.getVocabularyCategoryOrDefault();
+        String vocabularyDifficulty = request.getVocabularyDifficultyOrDefault();
         
-        return executeFlowStreamInternal(request, null, forceLearningMode);
+        checkAndExecuteCompactIfNeeded(request.getConversationId());
+        
+        List<Message> historyMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
+        Message tempUserMessage = createTempUserMessage(request);
+        List<Message> allMessages = new ArrayList<>(historyMessages);
+        allMessages.add(tempUserMessage);
+        
+        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistory(
+                HistoryBuildRequest.builder()
+                        .messages(allMessages)
+                        .conversationId(request.getConversationId())
+                        .learningMode(learningMode)
+                        .vocabularyCategory(vocabularyCategory)
+                        .vocabularyDifficulty(vocabularyDifficulty)
+                        .build());
+        
+        List<OpenAiTool> tools = getToolsForRequest(request, mode);
+        String model = resolveModel(request.getModel());
+        
+        Runnable onSuccessCallback = () -> addUserMessageToConversation(request);
+        
+        log.info("Stream flow - conversationId: {}, mode: {}, model: {}, learningMode: {}, isAudio: {}, isImage: {}",
+                request.getConversationId(), mode, model, learningMode,
+                request.isAudioMessage(), request.isImageMessage());
+        
+        if (request.isAudioMessage()) {
+            return sseEmitterService.createStreamEmitterWithAudio(request.getConversationId(), messages, tools, mode, model,
+                    request.getAudioData(), request.getAudioFormat(), onSuccessCallback);
+        }
+        
+        if (request.isImageMessage()) {
+            return sseEmitterService.createStreamEmitterWithImage(request.getConversationId(), messages, tools, mode, model,
+                    request.getImageData(), request.getImageFormat(), onSuccessCallback);
+        }
+        
+        return sseEmitterService.createStreamEmitterWithTools(request.getConversationId(), messages, tools, mode, model, onSuccessCallback);
     }
     
     private void validateChatRequest(ChatRequest request) {
-        boolean isAudioMessage = request.isAudioMessage();
-        boolean isAudioType = ChatRequest.MESSAGE_TYPE_AUDIO.equals(request.getMessageType());
-        
-        if (isAudioType && !isAudioMessage) {
-            throw ChatException.badRequest("音频数据不能为空或无效，请重新录制");
-        }
-
-        if (!isAudioMessage && (request.getContent() == null || request.getContent().trim().isEmpty())) {
-            throw ChatException.badRequest("消息内容不能为空");
-        }
-
-        if (request.getConversationId() == null) {
-            throw ChatException.badRequest("需要指定conversationId");
-        }
-    }
-
-    private void validateChatRequestStream(ChatRequest request) {
         if (request.getConversationId() == null) {
             throw ChatException.badRequest("需要指定conversationId");
         }
@@ -220,9 +368,9 @@ public class ChatServiceImpl implements ChatService {
         if (isImageType && !isImageMessage) {
             throw ChatException.badRequest("图片数据不能为空或无效，请重新上传");
         }
-        
-        if (!isAudioMessage && !isImageMessage && 
-                (request.getContent() == null || request.getContent().trim().isEmpty())) {
+
+        if (!isAudioMessage && !isImageMessage 
+                && (request.getContent() == null || request.getContent().trim().isEmpty())) {
             throw ChatException.badRequest("消息内容不能为空");
         }
     }
@@ -251,7 +399,23 @@ public class ChatServiceImpl implements ChatService {
         }
     }
     
-
+    private Message createTempUserMessage(ChatRequest request) {
+        Message.MessageBuilder builder = Message.builder()
+                .role("user")
+                .content(request.getContent());
+        
+        if (request.isAudioMessage()) {
+            builder.messageType(Message.MESSAGE_TYPE_AUDIO)
+                    .audioData(request.getAudioData())
+                    .audioFormat(request.getAudioFormat());
+        } else if (request.isImageMessage()) {
+            builder.messageType(Message.MESSAGE_TYPE_IMAGE)
+                    .imageData(request.getImageData())
+                    .imageFormat(request.getImageFormat());
+        }
+        
+        return builder.build();
+    }
     
     private List<OpenAiTool> getToolsForRequest(ChatRequest request, String mode) {
         if (request.isMessageTypeVocabulary()) {
@@ -261,69 +425,35 @@ public class ChatServiceImpl implements ChatService {
     }
     
     @Override
-    public List<MessageDTO> getMessagesByConversationId(Long conversationId) {
-        return messageHistoryService.getMessagesByConversationId(conversationId);
+    public PageResponseDTO<MessageDTO> getMessagesByConversationId(Long conversationId, int page, int size) {
+        return messageHistoryService.getMessagesByConversationId(conversationId, page, size);
     }
     
     @Override
     @Transactional
     public MessageDTO retryMessage(Long conversationId, Long assistantMessageId) {
-        Optional<Message> assistantMessageOpt = messageRepository.findById(assistantMessageId);
-        
-        if (assistantMessageOpt.isEmpty()) {
-            throw ChatException.badRequest("要重试的消息不存在: " + assistantMessageId);
-        }
+        ValidatedRetryContext ctx = validateRetryRequest(conversationId, assistantMessageId);
 
-        Message assistantMessage = assistantMessageOpt.get();
-
-        if (!"assistant".equals(assistantMessage.getRole())) {
-            throw ChatException.badRequest("只能重试AI助手的消息");
-        }
-
-        if (!assistantMessage.getConversation().getId().equals(conversationId)) {
-            throw ChatException.badRequest("消息不属于该对话");
-        }
-
-        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
-        int assistantIndex = -1;
-
-        for (int i = 0; i < allMessages.size(); i++) {
-            if (allMessages.get(i).getId().equals(assistantMessageId)) {
-                assistantIndex = i;
-                break;
-            }
-        }
-
-        if (assistantIndex == -1) {
-            throw ChatException.badRequest("在对话中未找到该消息");
-        }
-
-        if (assistantIndex == 0) {
-            throw ChatException.badRequest("该消息是第一条消息，无法重试");
-        }
-
-        Message userMessage = allMessages.get(assistantIndex - 1);
-
-        if (!"user".equals(userMessage.getRole())) {
-            throw ChatException.badRequest("前一条消息不是用户消息");
-        }
-
-        conversationService.deleteMessagesFromIndex(conversationId, assistantIndex);
+        conversationService.deleteMessagesFromIndex(conversationId, ctx.assistantIndex);
 
         String learningMode = resolveLearningMode(conversationId);
         String mode = "vocabulary".equals(learningMode) ? "vocabulary" : DEFAULT_MODE;
         List<Message> remainingMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
-        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryUpToIndexWithMode(
-                remainingMessages, remainingMessages.size(), learningMode);
+        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistory(
+                HistoryBuildRequest.builder()
+                        .messages(remainingMessages)
+                        .endIndex(remainingMessages.size())
+                        .learningMode(learningMode)
+                        .build());
         List<OpenAiTool> tools = toolService.getOpenAiToolsForMode(mode);
 
-        String aiResponse = toolLoopService.executeToolLoop(conversationId, messages, tools, mode, "qwen/qwen3.5-flash-20260224");
+        ToolLoopService.ToolLoopResult result = toolLoopService.executeToolLoop(
+                conversationId, messages, tools, mode, llmProperties.getModel());
 
-        return conversationService.addAssistantMessage(conversationId, aiResponse);
+        return conversationService.addAssistantMessage(conversationId, result.getTextResponse(), result.getTokenUsage());
     }
 
     @Override
-    @Transactional
     public SseEmitter retryMessageStream(Long conversationId, Long assistantMessageId) {
         String learningMode = resolveLearningMode(conversationId);
         String mode = "vocabulary".equals(learningMode) ? "vocabulary" : DEFAULT_MODE;
@@ -339,64 +469,28 @@ public class ChatServiceImpl implements ChatService {
     public SseEmitter retryMessageStream(RetryMessageRequest request) {
         Long conversationId = request.getConversationId();
         Long assistantMessageId = request.getAssistantMessageId();
-        String model = request.getModelOrDefault();
+        String model = resolveModel(request.getModel());
         String mode = request.getModeOrDefault();
         String learningMode = request.getLearningModeOrDefault();
         String vocabularyCategory = request.getVocabularyCategoryOrDefault();
         String vocabularyDifficulty = request.getVocabularyDifficultyOrDefault();
 
-        Optional<Message> assistantMessageOpt = messageRepository.findById(assistantMessageId);
+        ValidatedRetryContext ctx = validateRetryRequest(conversationId, assistantMessageId);
 
-        if (assistantMessageOpt.isEmpty()) {
-            throw ChatException.badRequest("要重试的消息不存在: " + assistantMessageId);
-        }
-
-        Message assistantMessage = assistantMessageOpt.get();
-
-        if (!"assistant".equals(assistantMessage.getRole())) {
-            throw ChatException.badRequest("只能重试AI助手的消息");
-        }
-
-        if (!assistantMessage.getConversation().getId().equals(conversationId)) {
-            throw ChatException.badRequest("消息不属于该对话");
-        }
-
-        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversationId);
-        int assistantIndex = -1;
-
-        for (int i = 0; i < allMessages.size(); i++) {
-            if (allMessages.get(i).getId().equals(assistantMessageId)) {
-                assistantIndex = i;
-                break;
-            }
-        }
-
-        if (assistantIndex == -1) {
-            throw ChatException.badRequest("在对话中未找到该消息");
-        }
-
-        if (assistantIndex == 0) {
-            throw ChatException.badRequest("该消息是第一条消息，无法重试");
-        }
-
-        Message userMessage = allMessages.get(assistantIndex - 1);
-
-        if (!"user".equals(userMessage.getRole())) {
-            throw ChatException.badRequest("前一条消息不是用户消息");
-        }
-
-        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryUpToIndexWithMode(
-                allMessages, assistantIndex, learningMode, vocabularyCategory, vocabularyDifficulty);
+        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistory(
+                HistoryBuildRequest.builder()
+                        .messages(ctx.allMessages)
+                        .endIndex(ctx.assistantIndex)
+                        .learningMode(learningMode)
+                        .vocabularyCategory(vocabularyCategory)
+                        .vocabularyDifficulty(vocabularyDifficulty)
+                        .build());
         List<OpenAiTool> tools = toolService.getOpenAiToolsForMode(mode);
 
-        final int deleteFromIndex = assistantIndex;
+        final int deleteFromIndex = ctx.assistantIndex;
         Runnable onSuccessCallback = () -> {
-            try {
-                conversationService.deleteMessagesFromIndex(conversationId, deleteFromIndex);
-                log.info("重试消息成功，已删除从索引 {} 开始的旧消息，conversationId: {}", deleteFromIndex, conversationId);
-            } catch (Exception e) {
-                log.error("重试成功后删除旧消息失败，conversationId: {}", conversationId, e);
-            }
+            conversationService.deleteMessagesFromIndex(conversationId, deleteFromIndex);
+            log.info("重试消息成功，已删除从索引 {} 开始的旧消息，conversationId: {}", deleteFromIndex, conversationId);
         };
 
         return sseEmitterService.createStreamEmitterWithTools(conversationId, messages, tools, mode, model, onSuccessCallback);
@@ -405,123 +499,53 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional
     public MessageDTO editMessage(EditMessageRequest request) {
-        if (request.getNewContent() == null || request.getNewContent().trim().isEmpty()) {
-            throw ChatException.badRequest("消息内容不能为空");
-        }
-        
-        Optional<Message> userMessageOpt = messageRepository.findById(request.getUserMessageId());
-        
-        if (userMessageOpt.isEmpty()) {
-            throw ChatException.badRequest("要编辑的消息不存在: " + request.getUserMessageId());
-        }
-        
-        Message userMessage = userMessageOpt.get();
-        
-        if (!"user".equals(userMessage.getRole())) {
-            throw ChatException.badRequest("只能编辑用户消息");
-        }
-        
-        if (!userMessage.getConversation().getId().equals(request.getConversationId())) {
-            throw ChatException.badRequest("消息不属于该对话");
-        }
-        
-        boolean contentChanged = !userMessage.getContent().trim().equals(request.getNewContent().trim());
-        boolean audioChanged = request.hasAudio() && !request.getAudioData().equals(userMessage.getAudioData());
-        boolean imageChanged = request.hasImage() && !request.getImageData().equals(userMessage.getImageData());
-        
-        if (!contentChanged && !audioChanged && !imageChanged) {
-            throw ChatException.badRequest("消息内容没有变化");
-        }
-        
-        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
-        int userMessageIndex = -1;
-        
-        for (int i = 0; i < allMessages.size(); i++) {
-            if (allMessages.get(i).getId().equals(request.getUserMessageId())) {
-                userMessageIndex = i;
-                break;
-            }
-        }
-        
-        if (userMessageIndex == -1) {
-            throw ChatException.badRequest("在对话中未找到该消息");
-        }
-        
+        ValidatedEditContext ctx = validateEditRequest(request);
+        int userMessageIndex = ctx.userMessageIndex;
+        Message userMessage = ctx.userMessage;
+        List<Message> allMessages = ctx.allMessages;
+
         int deleteFromIndex = userMessageIndex + 1;
         if (deleteFromIndex < allMessages.size()) {
             conversationService.deleteMessagesFromIndex(request.getConversationId(), deleteFromIndex);
         }
-        
+
         userMessage.setContent(request.getNewContent().trim());
         if (request.hasAudio()) {
             userMessage.setMessageType(Message.MESSAGE_TYPE_AUDIO);
             userMessage.setAudioData(request.getAudioData());
             userMessage.setAudioFormat(request.getAudioFormat());
             userMessage.setAudioDuration(request.getAudioDuration());
-        }
-        if (request.hasImage()) {
+        } else if (request.hasImage()) {
             userMessage.setMessageType(Message.MESSAGE_TYPE_IMAGE);
             userMessage.setImageData(request.getImageData());
             userMessage.setImageFormat(request.getImageFormat());
         }
         messageRepository.save(userMessage);
-        
+
         String learningMode = request.getLearningModeOrDefault();
         String mode = request.getModeOrDefault();
-        String model = request.getModelOrDefault();
+        String model = resolveModel(request.getModel());
         List<Message> remainingMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
-        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryUpToIndexWithMode(
-                remainingMessages, remainingMessages.size(), learningMode);
+        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistory(
+                HistoryBuildRequest.builder()
+                        .messages(remainingMessages)
+                        .endIndex(remainingMessages.size())
+                        .learningMode(learningMode)
+                        .build());
         List<OpenAiTool> tools = toolService.getOpenAiToolsForMode(mode);
-        
-        String aiResponse = toolLoopService.executeToolLoop(request.getConversationId(), messages, tools, mode, model);
-        
-        return conversationService.addAssistantMessage(request.getConversationId(), aiResponse);
+
+        ToolLoopService.ToolLoopResult result = toolLoopService.executeToolLoop(
+                request.getConversationId(), messages, tools, mode, model);
+
+        return conversationService.addAssistantMessage(request.getConversationId(), result.getTextResponse(), result.getTokenUsage());
     }
     
     @Override
     public SseEmitter editMessageStream(EditMessageRequest request) {
-        if (request.getNewContent() == null || request.getNewContent().trim().isEmpty()) {
-            throw ChatException.badRequest("消息内容不能为空");
-        }
-
-        Optional<Message> userMessageOpt = messageRepository.findById(request.getUserMessageId());
-
-        if (userMessageOpt.isEmpty()) {
-            throw ChatException.badRequest("要编辑的消息不存在: " + request.getUserMessageId());
-        }
-
-        Message userMessage = userMessageOpt.get();
-
-        if (!"user".equals(userMessage.getRole())) {
-            throw ChatException.badRequest("只能编辑用户消息");
-        }
-
-        if (!userMessage.getConversation().getId().equals(request.getConversationId())) {
-            throw ChatException.badRequest("消息不属于该对话");
-        }
-
-        boolean contentChanged = !userMessage.getContent().trim().equals(request.getNewContent().trim());
-        boolean audioChanged = request.hasAudio() && !request.getAudioData().equals(userMessage.getAudioData());
-        boolean imageChanged = request.hasImage() && !request.getImageData().equals(userMessage.getImageData());
-
-        if (!contentChanged && !audioChanged && !imageChanged) {
-            throw ChatException.badRequest("消息内容没有变化");
-        }
-
-        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(request.getConversationId());
-        int userMessageIndex = -1;
-
-        for (int i = 0; i < allMessages.size(); i++) {
-            if (allMessages.get(i).getId().equals(request.getUserMessageId())) {
-                userMessageIndex = i;
-                break;
-            }
-        }
-
-        if (userMessageIndex == -1) {
-            throw ChatException.badRequest("在对话中未找到该消息");
-        }
+        ValidatedEditContext ctx = validateEditRequest(request);
+        int userMessageIndex = ctx.userMessageIndex;
+        Message userMessage = ctx.userMessage;
+        List<Message> allMessages = ctx.allMessages;
 
         List<Message> messagesUpToUser = allMessages.subList(0, userMessageIndex + 1);
         Message editMessage = new Message();
@@ -544,11 +568,17 @@ public class ChatServiceImpl implements ChatService {
 
         String learningMode = request.getLearningModeOrDefault();
         String mode = request.getModeOrDefault();
-        String model = request.getModelOrDefault();
+        String model = resolveModel(request.getModel());
         String vocabularyCategory = request.getVocabularyCategoryOrDefault();
         String vocabularyDifficulty = request.getVocabularyDifficultyOrDefault();
-        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistoryUpToIndexWithMode(
-                messagesUpToUser, messagesUpToUser.size(), learningMode, vocabularyCategory, vocabularyDifficulty);
+        List<OpenAiChatMessage> messages = messageHistoryService.buildConversationHistory(
+                HistoryBuildRequest.builder()
+                        .messages(messagesUpToUser)
+                        .endIndex(messagesUpToUser.size())
+                        .learningMode(learningMode)
+                        .vocabularyCategory(vocabularyCategory)
+                        .vocabularyDifficulty(vocabularyDifficulty)
+                        .build());
         List<OpenAiTool> tools = toolService.getOpenAiToolsForMode(mode);
 
         final Long conversationId = request.getConversationId();
@@ -563,30 +593,24 @@ public class ChatServiceImpl implements ChatService {
         final String imageData = request.getImageData();
         final String imageFormat = request.getImageFormat();
         Runnable onSuccessCallback = () -> {
-            try {
-                if (deleteFromIndex < allMessages.size()) {
-                    conversationService.deleteMessagesFromIndex(conversationId, deleteFromIndex);
-                }
-                Message msgToUpdate = messageRepository.findById(userMessageId).orElse(null);
-                if (msgToUpdate != null) {
-                    msgToUpdate.setContent(newContent);
-                    if (hasAudio) {
-                        msgToUpdate.setMessageType(Message.MESSAGE_TYPE_AUDIO);
-                        msgToUpdate.setAudioData(audioData);
-                        msgToUpdate.setAudioFormat(audioFormat);
-                        msgToUpdate.setAudioDuration(audioDuration);
-                    }
-                    if (hasImage) {
-                        msgToUpdate.setMessageType(Message.MESSAGE_TYPE_IMAGE);
-                        msgToUpdate.setImageData(imageData);
-                        msgToUpdate.setImageFormat(imageFormat);
-                    }
-                    messageRepository.save(msgToUpdate);
-                }
-                log.info("编辑消息成功，已更新用户消息并删除旧回复，conversationId: {}", conversationId);
-            } catch (Exception e) {
-                log.error("编辑成功后更新消息失败，conversationId: {}", conversationId, e);
+            if (deleteFromIndex < allMessages.size()) {
+                conversationService.deleteMessagesFromIndex(conversationId, deleteFromIndex);
             }
+            Message msgToUpdate = messageRepository.findById(userMessageId)
+                    .orElseThrow(() -> ChatException.messageNotFound("要编辑的消息不存在: " + userMessageId));
+            msgToUpdate.setContent(newContent);
+            if (hasAudio) {
+                msgToUpdate.setMessageType(Message.MESSAGE_TYPE_AUDIO);
+                msgToUpdate.setAudioData(audioData);
+                msgToUpdate.setAudioFormat(audioFormat);
+                msgToUpdate.setAudioDuration(audioDuration);
+            } else if (hasImage) {
+                msgToUpdate.setMessageType(Message.MESSAGE_TYPE_IMAGE);
+                msgToUpdate.setImageData(imageData);
+                msgToUpdate.setImageFormat(imageFormat);
+            }
+            messageRepository.save(msgToUpdate);
+            log.info("编辑消息成功，已更新用户消息并删除旧回复，conversationId: {}", conversationId);
         };
 
         if (request.hasAudio()) {
@@ -641,5 +665,9 @@ public class ChatServiceImpl implements ChatService {
         return vocabularyConversationDataService.getByConversationId(conversationId)
                 .map(data -> "vocabulary")
                 .orElse("chat");
+    }
+
+    private String resolveModel(String model) {
+        return model != null ? model : llmProperties.getModel();
     }
 }

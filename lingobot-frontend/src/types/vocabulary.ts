@@ -26,12 +26,9 @@ export interface UserVocabularyDTO {
   phonetic?: string;
   partOfSpeech?: string;
   meaning?: string;
-  example?: string;
-  exampleTranslation?: string;
   synonyms?: string[];
   category?: string;
   difficulty?: string;
-  level?: string;
   status: VocabularyStatus;
   masteryScore: number;
   seenCount: number;
@@ -63,10 +60,8 @@ export interface VocabularyCardDTO {
   sentenceHasNewWord?: boolean;
   sentenceMeaningMatches?: boolean;
   synonyms?: string[];
-  antonyms?: string[];
   category?: string;
   difficulty?: string;
-  level?: string;
   position: number;
   userMeaningGuess?: string;
   meaningCheckResult?: string;
@@ -99,8 +94,6 @@ export interface CreateVocabularyCardRequest {
   example?: string;
   exampleTranslation?: string;
   synonyms?: string[];
-  antonyms?: string[];
-  level?: string;
 }
 
 export interface LearningModeConfig {

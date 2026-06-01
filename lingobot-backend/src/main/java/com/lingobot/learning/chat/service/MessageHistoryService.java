@@ -6,9 +6,12 @@ import com.lingobot.core.conversation.repository.MessageRepository;
 import com.lingobot.learning.chat.dto.HistoryBuildRequest;
 import com.lingobot.learning.conversation.vocabulary.service.VocabularyConversationDataService;
 import com.lingobot.learning.prompt.chat.ChatPromptBuilder;
+import com.lingobot.infrastructure.common.response.PageResponseDTO;
 import com.lingobot.infrastructure.llm.dto.openai.OpenAiChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -151,16 +154,32 @@ public class MessageHistoryService {
         return totalLength;
     }
     
-    public List<MessageDTO> getMessagesByConversationId(Long conversationId) {
-        List<Message> latestMessagesDesc = messageRepository.findTop10ByConversationIdOrderByTimestampDesc(conversationId);
-        List<Message> messagesAsc = new ArrayList<>(latestMessagesDesc);
+    public PageResponseDTO<MessageDTO> getMessagesByConversationId(Long conversationId, int page, int size) {
+        int totalElements = messageRepository.countByConversationId(conversationId);
+        
+        int totalPages = size > 0 ? (int) Math.ceil((double) totalElements / size) : 0;
+        
+        Pageable pageable = PageRequest.of(page, size);
+        List<Message> messagesDesc = messageRepository.findByConversationIdOrderByTimestampDesc(conversationId, pageable);
+        List<Message> messagesAsc = new ArrayList<>(messagesDesc);
         java.util.Collections.reverse(messagesAsc);
         
-        log.info("获取对话消息列表（最近10条），conversationId: {}, 消息数: {}", conversationId, messagesAsc.size());
+        log.info("分页获取对话消息列表，conversationId: {}, page: {}, size: {}, total: {}, 本页消息数: {}", 
+                conversationId, page, size, totalElements, messagesAsc.size());
         
-        return messagesAsc.stream()
+        List<MessageDTO> content = messagesAsc.stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
+        
+        return PageResponseDTO.<MessageDTO>builder()
+                .content(content)
+                .page(page)
+                .size(size)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .hasNext(page + 1 < totalPages)
+                .hasPrevious(page > 0)
+                .build();
     }
     
     public MessageDTO toDTO(Message message) {

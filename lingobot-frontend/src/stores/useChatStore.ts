@@ -1,8 +1,9 @@
 import { create } from 'zustand'
-import { MessageDTO, ChatRequest, RetryMessageRequest, EditMessageRequest } from '../types'
+import { MessageDTO, ChatRequest, RetryMessageRequest, EditMessageRequest, MessagePageResponse } from '../types'
 import { chatApi, conversationApi } from '../api'
 
 const COMPACT_COOLDOWN_MS = 5000
+const MESSAGE_PAGE_SIZE = 20
 
 interface AgentStatus {
   thinking: string
@@ -29,6 +30,9 @@ interface CompactResultState {
 interface ChatStore {
   messages: MessageDTO[]
   loading: boolean
+  loadingMore: boolean
+  hasMoreMessages: boolean
+  nextPageToLoad: number
   streamingContent: string
   agentStatus: AgentStatus
   mode: 'chat' | 'agent'
@@ -40,13 +44,14 @@ interface ChatStore {
   compactCooldownTimers: Record<string, number | null>
 
   loadMessages: (conversationPublicId: string) => Promise<void>
-  sendMessage: (request: ChatRequest) => Promise<void>
-  sendAudioMessage: (request: ChatRequest) => Promise<void>
-  sendImageMessage: (request: ChatRequest) => Promise<void>
+  loadMoreMessages: (conversationPublicId: string) => Promise<void>
+  sendMessage: (request: ChatRequest) => void
+  sendAudioMessage: (request: ChatRequest) => void
+  sendImageMessage: (request: ChatRequest) => void
   sendVocabularyMessage: (request: ChatRequest) => Promise<any>
-  retryMessage: (request: RetryMessageRequest) => Promise<void>
-  retryMessageWithModel: (request: RetryMessageRequest) => Promise<void>
-  editMessage: (request: EditMessageRequest) => Promise<void>
+  retryMessage: (request: RetryMessageRequest) => void
+  retryMessageWithModel: (request: RetryMessageRequest) => void
+  editMessage: (request: EditMessageRequest) => void
   setMode: (mode: 'chat' | 'agent') => void
   manualCompact: (conversationPublicId: string) => Promise<void>
   clearCompactResult: (conversationPublicId: string) => void
@@ -90,6 +95,9 @@ const makeStreamCallbacks = (get: () => ChatStore, set: (partial: Partial<ChatSt
 export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
   loading: false,
+  loadingMore: false,
+  hasMoreMessages: true,
+  nextPageToLoad: 0,
   streamingContent: '',
   agentStatus: { thinking: '', toolCalls: [] },
   mode: 'chat',
@@ -102,14 +110,37 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   loadMessages: async (conversationPublicId: string) => {
     try {
-      const data = await chatApi.getMessages(conversationPublicId)
-      set({ messages: data })
+      const pageResult = await chatApi.getMessages(conversationPublicId, 0, MESSAGE_PAGE_SIZE)
+      set({ 
+        messages: pageResult.content, 
+        hasMoreMessages: pageResult.hasNext,
+        nextPageToLoad: 1 
+      })
     } catch (error) {
       console.error('加载消息失败:', error)
     }
   },
 
-  sendMessage: async (request: ChatRequest) => {
+  loadMoreMessages: async (conversationPublicId: string) => {
+    const { loadingMore, hasMoreMessages, nextPageToLoad } = get()
+    if (loadingMore || !hasMoreMessages) return
+
+    set({ loadingMore: true })
+    try {
+      const pageResult = await chatApi.getMessages(conversationPublicId, nextPageToLoad, MESSAGE_PAGE_SIZE)
+      set((s) => ({
+        messages: [...pageResult.content, ...s.messages],
+        hasMoreMessages: pageResult.hasNext,
+        nextPageToLoad: s.nextPageToLoad + 1,
+      }))
+    } catch (error) {
+      console.error('加载更多消息失败:', error)
+    } finally {
+      set({ loadingMore: false })
+    }
+  },
+
+  sendMessage: (request: ChatRequest) => {
     const { messages } = get()
     set({ loading: true, streamingContent: '', agentStatus: { thinking: '', toolCalls: [] } })
 
@@ -127,15 +158,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     try {
-      await chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
+      chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
     } catch (error) {
       console.error('发送消息失败:', error)
-      set({ messages, streamingContent: '', loading: false })
+      set({ messages, streamingContent: '', loading: false, agentStatus: { thinking: '', toolCalls: [] } })
       alert('发送消息失败')
     }
   },
 
-  sendAudioMessage: async (request: ChatRequest) => {
+  sendAudioMessage: (request: ChatRequest) => {
     const { messages } = get()
     set({ loading: true, streamingContent: '', agentStatus: { thinking: '', toolCalls: [] } })
 
@@ -156,15 +187,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     try {
-      await chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
+      chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
     } catch (error) {
       console.error('发送语音消息失败:', error)
-      set({ messages, streamingContent: '', loading: false })
+      set({ messages, streamingContent: '', loading: false, agentStatus: { thinking: '', toolCalls: [] } })
       alert('发送消息失败')
     }
   },
 
-  sendImageMessage: async (request: ChatRequest) => {
+  sendImageMessage: (request: ChatRequest) => {
     const { messages } = get()
     set({ loading: true, streamingContent: '', agentStatus: { thinking: '', toolCalls: [] } })
 
@@ -184,10 +215,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       makeStreamCallbacks(get, set, request.conversationPublicId!, messages)
 
     try {
-      await chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
+      chatApi.sendMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
     } catch (error) {
       console.error('发送图片消息失败:', error)
-      set({ messages, streamingContent: '', loading: false })
+      set({ messages, streamingContent: '', loading: false, agentStatus: { thinking: '', toolCalls: [] } })
       alert('发送消息失败')
     }
   },
@@ -219,7 +250,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  retryMessage: async (request: RetryMessageRequest) => {
+  retryMessage: (request: RetryMessageRequest) => {
     const { messages } = get()
     const assistantMessageIndex = messages.findIndex(m => m.id === request.assistantMessageId)
 
@@ -250,15 +281,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     try {
-      await chatApi.retryMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
+      chatApi.retryMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
     } catch (error) {
       console.error('重试消息失败:', error)
-      set({ messages, streamingContent: '', loading: false })
+      set({ messages, streamingContent: '', loading: false, agentStatus: { thinking: '', toolCalls: [] } })
       alert('重试消息失败')
     }
   },
 
-  retryMessageWithModel: async (request: RetryMessageRequest) => {
+  retryMessageWithModel: (request: RetryMessageRequest) => {
     const { messages } = get()
     const assistantMessageIndex = messages.findIndex(m => m.id === request.assistantMessageId)
 
@@ -289,15 +320,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     try {
-      await chatApi.retryMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
+      chatApi.retryMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
     } catch (error) {
       console.error('重试消息失败:', error)
-      set({ messages, streamingContent: '', loading: false })
+      set({ messages, streamingContent: '', loading: false, agentStatus: { thinking: '', toolCalls: [] } })
       alert('重试消息失败')
     }
   },
 
-  editMessage: async (request: EditMessageRequest) => {
+  editMessage: (request: EditMessageRequest) => {
     const { messages } = get()
     const userMessageIndex = messages.findIndex(m => m.id === request.userMessageId)
 
@@ -337,10 +368,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     try {
-      await chatApi.editMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
+      chatApi.editMessageStream(request, onChunk, onFinal, onError, onThinking, onToolCall, onToolResult)
     } catch (error) {
       console.error('编辑消息失败:', error)
-      set({ messages, streamingContent: '', loading: false })
+      set({ messages, streamingContent: '', loading: false, agentStatus: { thinking: '', toolCalls: [] } })
       alert('编辑消息失败')
     }
   },
@@ -497,6 +528,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({
       messages: [],
       loading: false,
+      loadingMore: false,
+      hasMoreMessages: true,
+      nextPageToLoad: 0,
       streamingContent: '',
       agentStatus: { thinking: '', toolCalls: [] },
       isCompacting: false,

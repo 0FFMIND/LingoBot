@@ -1,3 +1,5 @@
+import { MessageDTO } from './message';
+
 export interface ContextStatusDTO {
   currentTokens: number;
   maxTokens: number;
@@ -39,3 +41,5 @@ export interface PageResponseDTO<T> {
 }
 
 export interface ConversationPageResponse extends PageResponseDTO<ConversationDTO> {}
+
+export interface MessagePageResponse extends PageResponseDTO<MessageDTO> {}

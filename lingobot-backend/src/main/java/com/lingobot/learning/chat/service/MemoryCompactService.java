@@ -12,6 +12,11 @@ public interface MemoryCompactService {
         private final String reason;
         private final int beforeTokens;
         private final int afterTokens;
+        private final int compactedCardCount;
+        private final int compactedCardsCount;
+        private final int recentCardsCount;
+        private final int totalCompactedCards;
+        private final int compactBatch;
 
         public int getSavedTokens() {
             return beforeTokens - afterTokens;

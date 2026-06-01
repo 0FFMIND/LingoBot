@@ -4,9 +4,8 @@ import com.lingobot.learning.chat.dto.ChatRequest;
 import com.lingobot.learning.chat.dto.EditMessageRequest;
 import com.lingobot.learning.chat.dto.RetryMessageRequest;
 import com.lingobot.core.conversation.dto.MessageDTO;
+import com.lingobot.infrastructure.common.response.PageResponseDTO;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-
-import java.util.List;
 
 public interface ChatService {
     
@@ -14,7 +13,7 @@ public interface ChatService {
     
     SseEmitter sendMessageStream(ChatRequest request);
     
-    List<MessageDTO> getMessagesByConversationId(Long conversationId);
+    PageResponseDTO<MessageDTO> getMessagesByConversationId(Long conversationId, int page, int size);
     
     MessageDTO retryMessage(Long conversationId, Long assistantMessageId);
     

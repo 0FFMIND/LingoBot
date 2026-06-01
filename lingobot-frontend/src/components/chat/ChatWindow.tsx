@@ -53,6 +53,8 @@ const ChatWindow: React.FC = () => {
   const {
     messages,
     loading,
+    loadingMore,
+    hasMoreMessages,
     streamingContent,
     agentStatus,
     mode,
@@ -63,6 +65,7 @@ const ChatWindow: React.FC = () => {
     retryMessage,
     retryMessageWithModel,
     editMessage,
+    loadMoreMessages,
   } = useChatStore()
   const {
     currentVocabularyCard,
@@ -109,11 +112,13 @@ const ChatWindow: React.FC = () => {
   const [editAudioFormat, setEditAudioFormat] = useState<string | null>(null)
   const [editAudioDuration, setEditAudioDuration] = useState<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const modeMenuRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const previousConversationPublicIdRef = useRef<string | null>(null)
   const vocabularyAutoLoadAttemptRef = useRef<string | null>(null)
+  const isAutoScrollingRef = useRef(false)
 
   const learningConfig = LEARNING_MODES[learningMode]
 
@@ -291,7 +296,6 @@ const ChatWindow: React.FC = () => {
         exampleTranslation: currentVocabularyCard.exampleTranslation,
         chineseSentenceForTranslation: currentVocabularyCard.chineseSentenceForTranslation || currentVocabularyCard.exampleTranslation,
         synonyms: currentVocabularyCard.synonyms || [],
-        antonyms: currentVocabularyCard.antonyms || [],
         vocabularyCategory: currentVocabularyCard.category,
         vocabularyDifficulty: currentVocabularyCard.difficulty,
       }
@@ -420,9 +424,42 @@ const ChatWindow: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    if (container.scrollTop <= 5 && hasMoreMessages && !loadingMore && currentConversation) {
+      loadMoreMessages(currentConversation.publicId)
+    }
+  }, [hasMoreMessages, loadingMore, currentConversation, loadMoreMessages])
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (isAutoScrollingRef.current) {
+      isAutoScrollingRef.current = false
+      return
+    }
+
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages, streamingContent, agentStatus])
+
+  useEffect(() => {
+    if (loadingMore && messagesContainerRef.current) {
+      const container = messagesContainerRef.current
+      const prevScrollHeight = container.scrollHeight
+      
+      requestAnimationFrame(() => {
+        const newScrollHeight = container.scrollHeight
+        container.scrollTop = newScrollHeight - prevScrollHeight
+        isAutoScrollingRef.current = true
+      })
+    }
+  }, [loadingMore, messages])
 
   // 从聊天消息中提取 check_meaning_accuracy 结果并更新词汇卡状态
   useEffect(() => {
@@ -1027,7 +1064,17 @@ const ChatWindow: React.FC = () => {
         </div>
       </div>
 
-      <div className="chat-messages-english">
+      <div className="chat-messages-english" ref={messagesContainerRef} onScroll={handleScroll}>
+        {loadingMore && (
+          <div style={{ textAlign: 'center', padding: '12px', color: '#666', fontSize: '14px' }}>
+            <span className="typing-english">加载历史消息中...</span>
+          </div>
+        )}
+        {!loadingMore && hasMoreMessages && messages.length > 0 && (
+          <div style={{ textAlign: 'center', padding: '8px', color: '#999', fontSize: '12px' }}>
+            ↑ 滚动加载更多历史消息
+          </div>
+        )}
         {messages.length === 0 ? (
           <WelcomeMessage username="" learningConfig={learningConfig} />
         ) : (
